@@ -87,14 +87,35 @@ def init_token_usage() -> dict:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True, help="Input JSONL with retrieve_top20")
+    parser.add_argument(
+        "--input", required=True, help="Input JSONL with retrieve_top20"
+    )
     parser.add_argument("--output", required=True, help="Filtered output JSONL")
-    parser.add_argument("--reviews-output", default=None, help="Optional candidate review JSONL")
+    parser.add_argument(
+        "--reviews-output", default=None, help="Optional candidate review JSONL"
+    )
     parser.add_argument("--summary-output", default=None, help="Optional summary JSON")
-    parser.add_argument("--offset", type=int, default=0, help="Skip this many input rows before processing")
-    parser.add_argument("--limit", type=int, default=0, help="Max examples to process (0=all)")
-    parser.add_argument("--candidate-k", type=int, default=10, help="Max non-positive candidates to inspect")
-    parser.add_argument("--num-hard-negatives", type=int, default=2, help="Number of HNs to keep per example")
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Skip this many input rows before processing",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=0, help="Max examples to process (0=all)"
+    )
+    parser.add_argument(
+        "--candidate-k",
+        type=int,
+        default=10,
+        help="Max non-positive candidates to inspect",
+    )
+    parser.add_argument(
+        "--num-hard-negatives",
+        type=int,
+        default=2,
+        help="Number of HNs to keep per example",
+    )
     parser.add_argument("--model", default="gpt-4.1-mini")
     parser.add_argument(
         "--provider",
@@ -159,7 +180,9 @@ def encode_image_base64(path: str) -> str:
     return base64.b64encode(raw).decode("ascii")
 
 
-def update_usage(client_ctx: dict, prompt_tokens: int = 0, completion_tokens: int = 0) -> None:
+def update_usage(
+    client_ctx: dict, prompt_tokens: int = 0, completion_tokens: int = 0
+) -> None:
     with client_ctx["usage_lock"]:
         client_ctx["usage"]["prompt_tokens"] += int(prompt_tokens or 0)
         client_ctx["usage"]["completion_tokens"] += int(completion_tokens or 0)
@@ -194,7 +217,9 @@ def build_vlm_client(args: argparse.Namespace) -> dict:
     }
 
 
-def call_openai_chat_completions(client_ctx: dict, model: str, prompt: str, image_path: str, max_retries: int) -> str:
+def call_openai_chat_completions(
+    client_ctx: dict, model: str, prompt: str, image_path: str, max_retries: int
+) -> str:
     headers = {
         "Authorization": f"Bearer {client_ctx['api_key']}",
         "Content-Type": "application/json",
@@ -202,17 +227,24 @@ def call_openai_chat_completions(client_ctx: dict, model: str, prompt: str, imag
     payload = {
         "model": model,
         "temperature": 0,
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": encode_image_as_data_url(image_path)}},
-            ],
-        }],
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": encode_image_as_data_url(image_path)},
+                    },
+                ],
+            }
+        ],
     }
     for attempt in range(1, max_retries + 1):
         try:
-            resp = requests.post(CHAT_COMPLETIONS_URL, headers=headers, json=payload, timeout=180)
+            resp = requests.post(
+                CHAT_COMPLETIONS_URL, headers=headers, json=payload, timeout=180
+            )
             resp.raise_for_status()
             data = resp.json()
             usage = data.get("usage", {})
@@ -229,21 +261,25 @@ def call_openai_chat_completions(client_ctx: dict, model: str, prompt: str, imag
     raise RuntimeError("Unreachable")
 
 
-def call_gemini_generate_content(client_ctx: dict, model: str, prompt: str, image_path: str, max_retries: int) -> str:
+def call_gemini_generate_content(
+    client_ctx: dict, model: str, prompt: str, image_path: str, max_retries: int
+) -> str:
     from google.genai.types import GenerateContentConfig
 
-    contents = [{
-        "role": "user",
-        "parts": [
-            {"text": prompt},
-            {
-                "inline_data": {
-                    "mime_type": infer_image_mime(image_path),
-                    "data": encode_image_base64(image_path),
-                }
-            },
-        ],
-    }]
+    contents = [
+        {
+            "role": "user",
+            "parts": [
+                {"text": prompt},
+                {
+                    "inline_data": {
+                        "mime_type": infer_image_mime(image_path),
+                        "data": encode_image_base64(image_path),
+                    }
+                },
+            ],
+        }
+    ]
     config = GenerateContentConfig(temperature=0, max_output_tokens=128)
     for attempt in range(1, max_retries + 1):
         try:
@@ -284,20 +320,33 @@ def call_gemini_generate_content(client_ctx: dict, model: str, prompt: str, imag
     raise RuntimeError("Unreachable")
 
 
-def call_vlm(client_ctx: dict, model: str, prompt: str, image_path: str, max_retries: int) -> str:
+def call_vlm(
+    client_ctx: dict, model: str, prompt: str, image_path: str, max_retries: int
+) -> str:
     if client_ctx["provider"] == "openai":
-        return call_openai_chat_completions(client_ctx, model, prompt, image_path, max_retries)
+        return call_openai_chat_completions(
+            client_ctx, model, prompt, image_path, max_retries
+        )
     return call_gemini_generate_content(
         client_ctx, model, prompt, image_path, max_retries
     )
 
 
-def answer_question(client_ctx: dict, model: str, question: str, image_path: str, max_retries: int) -> str:
+def answer_question(
+    client_ctx: dict, model: str, question: str, image_path: str, max_retries: int
+) -> str:
     prompt = ANSWER_PROMPT_TEMPLATE.format(tile_count=1, question=question)
     return call_vlm(client_ctx, model, prompt, image_path, max_retries)
 
 
-def judge_answer(client_ctx: dict, model: str, question: str, image_path: str, answer: str, max_retries: int) -> str:
+def judge_answer(
+    client_ctx: dict,
+    model: str,
+    question: str,
+    image_path: str,
+    answer: str,
+    max_retries: int,
+) -> str:
     prompt = JUDGE_PROMPT_TEMPLATE.format(question=question, candidate_answer=answer)
     verdict = call_vlm(client_ctx, model, prompt, image_path, max_retries)
     verdict = verdict.strip().upper().replace('"', "").replace("`", "")
@@ -410,18 +459,20 @@ def process_example(
         counts["path_stats"]["positive_paths_missing"] += 1
         counts["path_stats"]["all_paths_missing"] += 1
         counts["skip_reasons"]["positive_path_missing"] += 1
-        review_rows.append({
-            "example_index": example_index,
-            "query": query,
-            "positive_path": positive_path,
-            "candidate_rank": None,
-            "candidate_path": positive_path,
-            "candidate_score": None,
-            "answer": None,
-            "verdict": "MISSING_FILE",
-            "path_role": "positive",
-            "skip_reason": "positive_path_missing",
-        })
+        review_rows.append(
+            {
+                "example_index": example_index,
+                "query": query,
+                "positive_path": positive_path,
+                "candidate_rank": None,
+                "candidate_path": positive_path,
+                "candidate_score": None,
+                "answer": None,
+                "verdict": "MISSING_FILE",
+                "path_role": "positive",
+                "skip_reason": "positive_path_missing",
+            }
+        )
         return {
             "kept_row": None,
             "review_rows": review_rows,
@@ -430,22 +481,26 @@ def process_example(
         }
 
     try:
-        positive_answer = answer_question(client_ctx, args.model, query, positive_path, args.max_retries)
+        positive_answer = answer_question(
+            client_ctx, args.model, query, positive_path, args.max_retries
+        )
     except ApiRequestError as exc:
         counts["skip_reasons"]["api_error"] += 1
-        review_rows.append({
-            "example_index": example_index,
-            "query": query,
-            "positive_path": positive_path,
-            "candidate_rank": None,
-            "candidate_path": positive_path,
-            "candidate_score": None,
-            "answer": None,
-            "verdict": "API_ERROR",
-            "path_role": "positive",
-            "skip_reason": "api_error",
-            "error": str(exc),
-        })
+        review_rows.append(
+            {
+                "example_index": example_index,
+                "query": query,
+                "positive_path": positive_path,
+                "candidate_rank": None,
+                "candidate_path": positive_path,
+                "candidate_score": None,
+                "answer": None,
+                "verdict": "API_ERROR",
+                "path_role": "positive",
+                "skip_reason": "api_error",
+                "error": str(exc),
+            }
+        )
         return {
             "kept_row": None,
             "review_rows": review_rows,
@@ -460,23 +515,30 @@ def process_example(
     else:
         try:
             positive_verdict = judge_answer(
-                client_ctx, args.model, query, positive_path, positive_answer, args.max_retries
+                client_ctx,
+                args.model,
+                query,
+                positive_path,
+                positive_answer,
+                args.max_retries,
             )
         except ApiRequestError as exc:
             counts["skip_reasons"]["api_error"] += 1
-            review_rows.append({
-                "example_index": example_index,
-                "query": query,
-                "positive_path": positive_path,
-                "candidate_rank": None,
-                "candidate_path": positive_path,
-                "candidate_score": None,
-                "answer": positive_answer,
-                "verdict": "API_ERROR",
-                "path_role": "positive",
-                "skip_reason": "api_error",
-                "error": str(exc),
-            })
+            review_rows.append(
+                {
+                    "example_index": example_index,
+                    "query": query,
+                    "positive_path": positive_path,
+                    "candidate_rank": None,
+                    "candidate_path": positive_path,
+                    "candidate_score": None,
+                    "answer": positive_answer,
+                    "verdict": "API_ERROR",
+                    "path_role": "positive",
+                    "skip_reason": "api_error",
+                    "error": str(exc),
+                }
+            )
             return {
                 "kept_row": None,
                 "review_rows": review_rows,
@@ -485,17 +547,19 @@ def process_example(
             }
         time.sleep(args.sleep_seconds)
 
-    review_rows.append({
-        "example_index": example_index,
-        "query": query,
-        "positive_path": positive_path,
-        "candidate_rank": None,
-        "candidate_path": positive_path,
-        "candidate_score": None,
-        "answer": positive_answer,
-        "verdict": positive_verdict,
-        "path_role": "positive",
-    })
+    review_rows.append(
+        {
+            "example_index": example_index,
+            "query": query,
+            "positive_path": positive_path,
+            "candidate_rank": None,
+            "candidate_path": positive_path,
+            "candidate_score": None,
+            "answer": positive_answer,
+            "verdict": positive_verdict,
+            "path_role": "positive",
+        }
+    )
     if positive_verdict != "CORRECT":
         counts["skip_reasons"]["positive_not_correct"] += 1
         return {
@@ -514,54 +578,62 @@ def process_example(
             counts["path_stats"]["candidate_paths_missing"] += 1
             counts["path_stats"]["all_paths_missing"] += 1
             saw_missing_candidate = True
-            review_rows.append({
-                "example_index": example_index,
-                "query": query,
-                "positive_path": item["chunk_path"],
-                "candidate_rank": candidate["rank"],
-                "candidate_path": image_path,
-                "candidate_score": candidate.get("score"),
-                "answer": None,
-                "verdict": "MISSING_FILE",
-                "path_role": "candidate",
-                "skip_reason": "candidate_path_missing",
-            })
+            review_rows.append(
+                {
+                    "example_index": example_index,
+                    "query": query,
+                    "positive_path": item["chunk_path"],
+                    "candidate_rank": candidate["rank"],
+                    "candidate_path": image_path,
+                    "candidate_score": candidate.get("score"),
+                    "answer": None,
+                    "verdict": "MISSING_FILE",
+                    "path_role": "candidate",
+                    "skip_reason": "candidate_path_missing",
+                }
+            )
             continue
         print(f"[{example_index:03d}] rank={candidate['rank']} answering", flush=True)
         try:
-            answer = answer_question(client_ctx, args.model, query, image_path, args.max_retries)
+            answer = answer_question(
+                client_ctx, args.model, query, image_path, args.max_retries
+            )
         except MissingImageError:
             counts["path_stats"]["candidate_paths_missing"] += 1
             counts["path_stats"]["all_paths_missing"] += 1
             saw_missing_candidate = True
-            review_rows.append({
-                "example_index": example_index,
-                "query": query,
-                "positive_path": item["chunk_path"],
-                "candidate_rank": candidate["rank"],
-                "candidate_path": image_path,
-                "candidate_score": candidate.get("score"),
-                "answer": None,
-                "verdict": "MISSING_FILE",
-                "path_role": "candidate",
-                "skip_reason": "candidate_path_missing_race",
-            })
+            review_rows.append(
+                {
+                    "example_index": example_index,
+                    "query": query,
+                    "positive_path": item["chunk_path"],
+                    "candidate_rank": candidate["rank"],
+                    "candidate_path": image_path,
+                    "candidate_score": candidate.get("score"),
+                    "answer": None,
+                    "verdict": "MISSING_FILE",
+                    "path_role": "candidate",
+                    "skip_reason": "candidate_path_missing_race",
+                }
+            )
             continue
         except ApiRequestError as exc:
             counts["skip_reasons"]["api_error"] += 1
-            review_rows.append({
-                "example_index": example_index,
-                "query": query,
-                "positive_path": item["chunk_path"],
-                "candidate_rank": candidate["rank"],
-                "candidate_path": image_path,
-                "candidate_score": candidate.get("score"),
-                "answer": None,
-                "verdict": "API_ERROR",
-                "path_role": "candidate",
-                "skip_reason": "api_error",
-                "error": str(exc),
-            })
+            review_rows.append(
+                {
+                    "example_index": example_index,
+                    "query": query,
+                    "positive_path": item["chunk_path"],
+                    "candidate_rank": candidate["rank"],
+                    "candidate_path": image_path,
+                    "candidate_score": candidate.get("score"),
+                    "answer": None,
+                    "verdict": "API_ERROR",
+                    "path_role": "candidate",
+                    "skip_reason": "api_error",
+                    "error": str(exc),
+                }
+            )
             return {
                 "kept_row": None,
                 "review_rows": review_rows,
@@ -576,39 +648,45 @@ def process_example(
         else:
             print(f"[{example_index:03d}] rank={candidate['rank']} judging", flush=True)
             try:
-                verdict = judge_answer(client_ctx, args.model, query, image_path, answer, args.max_retries)
+                verdict = judge_answer(
+                    client_ctx, args.model, query, image_path, answer, args.max_retries
+                )
             except MissingImageError:
                 counts["path_stats"]["candidate_paths_missing"] += 1
                 counts["path_stats"]["all_paths_missing"] += 1
                 saw_missing_candidate = True
-                review_rows.append({
-                    "example_index": example_index,
-                    "query": query,
-                    "positive_path": item["chunk_path"],
-                    "candidate_rank": candidate["rank"],
-                    "candidate_path": image_path,
-                    "candidate_score": candidate.get("score"),
-                    "answer": answer,
-                    "verdict": "MISSING_FILE",
-                    "path_role": "candidate",
-                    "skip_reason": "candidate_path_missing_race",
-                })
+                review_rows.append(
+                    {
+                        "example_index": example_index,
+                        "query": query,
+                        "positive_path": item["chunk_path"],
+                        "candidate_rank": candidate["rank"],
+                        "candidate_path": image_path,
+                        "candidate_score": candidate.get("score"),
+                        "answer": answer,
+                        "verdict": "MISSING_FILE",
+                        "path_role": "candidate",
+                        "skip_reason": "candidate_path_missing_race",
+                    }
+                )
                 continue
             except ApiRequestError as exc:
                 counts["skip_reasons"]["api_error"] += 1
-                review_rows.append({
-                    "example_index": example_index,
-                    "query": query,
-                    "positive_path": item["chunk_path"],
-                    "candidate_rank": candidate["rank"],
-                    "candidate_path": image_path,
-                    "candidate_score": candidate.get("score"),
-                    "answer": answer,
-                    "verdict": "API_ERROR",
-                    "path_role": "candidate",
-                    "skip_reason": "api_error",
-                    "error": str(exc),
-                })
+                review_rows.append(
+                    {
+                        "example_index": example_index,
+                        "query": query,
+                        "positive_path": item["chunk_path"],
+                        "candidate_rank": candidate["rank"],
+                        "candidate_path": image_path,
+                        "candidate_score": candidate.get("score"),
+                        "answer": answer,
+                        "verdict": "API_ERROR",
+                        "path_role": "candidate",
+                        "skip_reason": "api_error",
+                        "error": str(exc),
+                    }
+                )
                 return {
                     "kept_row": None,
                     "review_rows": review_rows,
@@ -618,17 +696,19 @@ def process_example(
             time.sleep(args.sleep_seconds)
 
         counts["candidate_verdicts"][verdict] += 1
-        review_rows.append({
-            "example_index": example_index,
-            "query": query,
-            "positive_path": item["chunk_path"],
-            "candidate_rank": candidate["rank"],
-            "candidate_path": image_path,
-            "candidate_score": candidate.get("score"),
-            "answer": answer,
-            "verdict": verdict,
-            "path_role": "candidate",
-        })
+        review_rows.append(
+            {
+                "example_index": example_index,
+                "query": query,
+                "positive_path": item["chunk_path"],
+                "candidate_rank": candidate["rank"],
+                "candidate_path": image_path,
+                "candidate_score": candidate.get("score"),
+                "answer": answer,
+                "verdict": verdict,
+                "path_role": "candidate",
+            }
+        )
 
         if verdict != "CORRECT":
             selected_hns.append(image_path)
@@ -666,7 +746,9 @@ def merge_counts(summary: dict, counts: dict) -> None:
         summary["path_stats"][key] += count
     for key, count in counts["skip_reasons"].items():
         summary["skip_reasons"][key] += count
-    summary["examples_with_missing_candidate_paths"] += counts["examples_with_missing_candidate_paths"]
+    summary["examples_with_missing_candidate_paths"] += counts[
+        "examples_with_missing_candidate_paths"
+    ]
 
 
 def build_usage_summary(client_ctx: dict, model: str) -> dict:
@@ -738,9 +820,12 @@ def main() -> int:
     max_workers = max(1, args.concurrency)
     max_pending = max_workers * 2
 
-    with output_path.open("w") as output_handle, (
-        reviews_path.open("w") if reviews_path else open(os.devnull, "w")
-    ) as reviews_handle:
+    with (
+        output_path.open("w") as output_handle,
+        (
+            reviews_path.open("w") if reviews_path else open(os.devnull, "w")
+        ) as reviews_handle,
+    ):
 
         def handle_result(result: dict) -> None:
             kept_row = result["kept_row"]
@@ -761,11 +846,13 @@ def main() -> int:
                 )
             if path_stats["positive_paths_checked"] > 0:
                 path_stats["positive_missing_ratio"] = (
-                    path_stats["positive_paths_missing"] / path_stats["positive_paths_checked"]
+                    path_stats["positive_paths_missing"]
+                    / path_stats["positive_paths_checked"]
                 )
             if path_stats["candidate_paths_checked"] > 0:
                 path_stats["candidate_missing_ratio"] = (
-                    path_stats["candidate_paths_missing"] / path_stats["candidate_paths_checked"]
+                    path_stats["candidate_paths_missing"]
+                    / path_stats["candidate_paths_checked"]
                 )
             if summary_path:
                 summary["token_usage"] = build_usage_summary(client_ctx, args.model)
@@ -781,7 +868,9 @@ def main() -> int:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             pending = set()
-            for i, item in enumerate(iter_jsonl(input_path, args.offset, args.limit), start=1):
+            for i, item in enumerate(
+                iter_jsonl(input_path, args.offset, args.limit), start=1
+            ):
                 summary["input_examples"] += 1
                 pending.add(
                     executor.submit(

@@ -54,15 +54,17 @@ def main():
     compressed_dir.mkdir(parents=True, exist_ok=True)
 
     scale_factor = 1.0 / math.sqrt(args.compress_ratio)
-    print(f"Compress ratio={args.compress_ratio}, "
-          f"downscale={scale_factor:.4f}/dim THEN upscale back to original.")
+    print(
+        f"Compress ratio={args.compress_ratio}, "
+        f"downscale={scale_factor:.4f}/dim THEN upscale back to original."
+    )
     print(f"Dataset: {dataset_dir}")
     print(f"Output:  {output_dir}")
 
     splits = {
         "train": "train_hn_with_answer.jsonl",
-        "eval":  "eval_hn_with_answer.jsonl",
-        "test":  "test_hn_with_answer.jsonl",
+        "eval": "eval_hn_with_answer.jsonl",
+        "test": "test_hn_with_answer.jsonl",
     }
 
     for split_name, jsonl_name in splits.items():
@@ -75,7 +77,7 @@ def main():
 
         examples = [json.loads(line) for line in open(jsonl_path)]
         if args.max_examples > 0:
-            examples = examples[:args.max_examples]
+            examples = examples[: args.max_examples]
         print(f"  Loaded {len(examples)} examples")
 
         unique_images = {}
@@ -88,27 +90,35 @@ def main():
 
         print(f"  Unique images: {len(unique_images)}")
 
-        to_compress = [info for info in unique_images.values()
-                       if not os.path.exists(info["dst"])]
+        to_compress = [
+            info for info in unique_images.values() if not os.path.exists(info["dst"])
+        ]
         for info in to_compress:
             os.makedirs(os.path.dirname(info["dst"]), exist_ok=True)
 
         if to_compress:
-            print(f"  Processing {len(to_compress)} new images "
-                  f"({len(unique_images) - len(to_compress)} cached)...")
+            print(
+                f"  Processing {len(to_compress)} new images "
+                f"({len(unique_images) - len(to_compress)} cached)..."
+            )
             ok = fail = 0
             with ThreadPoolExecutor(max_workers=args.workers) as pool:
-                futures = {pool.submit(compress_then_upscale,
-                                       info["src"], info["dst"], scale_factor): info
-                           for info in to_compress}
-                for fut in tqdm(as_completed(futures), total=len(futures), desc=f"  {split_name}"):
+                futures = {
+                    pool.submit(
+                        compress_then_upscale, info["src"], info["dst"], scale_factor
+                    ): info
+                    for info in to_compress
+                }
+                for fut in tqdm(
+                    as_completed(futures), total=len(futures), desc=f"  {split_name}"
+                ):
                     if fut.result():
                         ok += 1
                     else:
                         fail += 1
             print(f"  Done: {ok} ok, {fail} failed")
         else:
-            print(f"  All images cached")
+            print("  All images cached")
 
         sharegpt = []
         skipped = 0
@@ -117,13 +127,15 @@ def main():
             if not os.path.exists(info["dst"]):
                 skipped += 1
                 continue
-            sharegpt.append({
-                "messages": [
-                    {"role": "user", "content": "<image>\n" + ex["query"]},
-                    {"role": "assistant", "content": ex["answer"]},
-                ],
-                "images": [info["dst"]],
-            })
+            sharegpt.append(
+                {
+                    "messages": [
+                        {"role": "user", "content": "<image>\n" + ex["query"]},
+                        {"role": "assistant", "content": ex["answer"]},
+                    ],
+                    "images": [info["dst"]],
+                }
+            )
         out_json = output_dir / f"{split_name}.json"
         with open(out_json, "w") as f:
             json.dump(sharegpt, f, ensure_ascii=False)
@@ -137,8 +149,12 @@ def main():
                 "file_name": str(out_json),
                 "formatting": "sharegpt",
                 "columns": {"messages": "messages", "images": "images"},
-                "tags": {"role_tag": "role", "content_tag": "content",
-                         "user_tag": "user", "assistant_tag": "assistant"},
+                "tags": {
+                    "role_tag": "role",
+                    "content_tag": "content",
+                    "user_tag": "user",
+                    "assistant_tag": "assistant",
+                },
             }
 
     info_path = output_dir / "dataset_info.json"

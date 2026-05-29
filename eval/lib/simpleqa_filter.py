@@ -11,18 +11,18 @@ logger = logging.getLogger(__name__)
 
 def _get_urls_from_metadata(example: dict) -> list[str]:
     """Extract all URLs from example metadata.
-    
+
     Supports both SimpleQA format (metadata as string) and SimpleQA Verified format (metadata as dict or string).
     """
     meta = example.get("metadata")
-    
+
     # If metadata is already a dict (SimpleQA Verified format)
     if isinstance(meta, dict):
         urls = meta.get("urls", [])
         if isinstance(urls, list):
             return urls
         return []
-    
+
     # If metadata is a string (SimpleQA format or SimpleQA Verified string format)
     if isinstance(meta, str):
         try:
@@ -40,7 +40,11 @@ def _get_urls_from_metadata(example: dict) -> list[str]:
     return []
 
 
-def load_simpleqa_wikipedia(num_examples: int | None = None, verified: bool = False, no_wiki_filter: bool = False) -> list[dict]:
+def load_simpleqa_wikipedia(
+    num_examples: int | None = None,
+    verified: bool = False,
+    no_wiki_filter: bool = False,
+) -> list[dict]:
     """Load SimpleQA examples that have Wikipedia URLs.
 
     Args:
@@ -59,7 +63,9 @@ def load_simpleqa_wikipedia(num_examples: int | None = None, verified: bool = Fa
 
     if no_wiki_filter:
         wikipedia_examples = list(all_data)
-        logger.info(f"Skipping Wikipedia URL filter: returning all {len(wikipedia_examples)} examples")
+        logger.info(
+            f"Skipping Wikipedia URL filter: returning all {len(wikipedia_examples)} examples"
+        )
     else:
         # Filter for Wikipedia URLs, preserving original order
         # Exclude non-English Wikipedia and Category pages (e.g. de.wikipedia.org, Category:...)

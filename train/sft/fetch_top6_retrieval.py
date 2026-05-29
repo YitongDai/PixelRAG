@@ -38,8 +38,9 @@ def shard_suffix(p: str) -> str:
     return p
 
 
-def search_batch(api_url: str, queries: list[str], n_docs: int, timeout: int = 300,
-                 retries: int = 5) -> list[dict]:
+def search_batch(
+    api_url: str, queries: list[str], n_docs: int, timeout: int = 300, retries: int = 5
+) -> list[dict]:
     payload = {"queries": [{"text": q} for q in queries], "n_docs": n_docs}
     body = json.dumps(payload).encode()
     last_err = None
@@ -55,15 +56,23 @@ def search_batch(api_url: str, queries: list[str], n_docs: int, timeout: int = 3
                 return json.loads(resp.read())["results"]
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last_err = e
-            wait = 2 ** attempt
-            print(f"  search_batch attempt {attempt+1}/{retries} failed: {e}; retry in {wait}s",
-                  file=sys.stderr)
+            wait = 2**attempt
+            print(
+                f"  search_batch attempt {attempt + 1}/{retries} failed: {e}; retry in {wait}s",
+                file=sys.stderr,
+            )
             time.sleep(wait)
     raise RuntimeError(f"search_batch failed after {retries}: {last_err}")
 
 
-def process_split(split_name: str, jsonl_path: Path, out_path: Path,
-                  api_url: str, batch_size: int, n_docs: int) -> dict:
+def process_split(
+    split_name: str,
+    jsonl_path: Path,
+    out_path: Path,
+    api_url: str,
+    batch_size: int,
+    n_docs: int,
+) -> dict:
     # Resume: count existing lines
     existing = 0
     if out_path.exists():
@@ -104,7 +113,7 @@ def process_split(split_name: str, jsonl_path: Path, out_path: Path,
 
     with open(out_path, "a") as out_f:
         for i in range(0, len(examples), batch_size):
-            batch = examples[i:i + batch_size]
+            batch = examples[i : i + batch_size]
             queries = [ex["query"] for ex in batch]
             try:
                 results = search_batch(api_url, queries, n_docs=n_docs)
@@ -130,12 +139,15 @@ def process_split(split_name: str, jsonl_path: Path, out_path: Path,
                             gold_in_topk[k] += 1
 
                 # Keep only fields we need per hit
-                trimmed = [{
-                    "path": h["path"],
-                    "score": h.get("score"),
-                    "article_id": h.get("article_id"),
-                    "url": h.get("url"),
-                } for h in hits]
+                trimmed = [
+                    {
+                        "path": h["path"],
+                        "score": h.get("score"),
+                        "article_id": h.get("article_id"),
+                        "url": h.get("url"),
+                    }
+                    for h in hits
+                ]
 
                 row = {
                     "query": ex["query"],
@@ -154,12 +166,14 @@ def process_split(split_name: str, jsonl_path: Path, out_path: Path,
                 el = time.time() - t0
                 rate = (n_done - existing) / max(el, 1e-9)
                 eta = (total - n_done) / max(rate, 1e-9) / 60
-                print(f"  [{split_name}] {n_done}/{total} "
-                      f"({rate:.1f} q/s, eta {eta:.1f} min) "
-                      f"gold@1={gold_in_topk[1]/max(1,n_done)*100:.1f}% "
-                      f"gold@3={gold_in_topk[3]/max(1,n_done)*100:.1f}% "
-                      f"gold@6={gold_in_topk[6]/max(1,n_done)*100:.1f}% "
-                      f"miss={gold_miss/max(1,n_done)*100:.1f}%")
+                print(
+                    f"  [{split_name}] {n_done}/{total} "
+                    f"({rate:.1f} q/s, eta {eta:.1f} min) "
+                    f"gold@1={gold_in_topk[1] / max(1, n_done) * 100:.1f}% "
+                    f"gold@3={gold_in_topk[3] / max(1, n_done) * 100:.1f}% "
+                    f"gold@6={gold_in_topk[6] / max(1, n_done) * 100:.1f}% "
+                    f"miss={gold_miss / max(1, n_done) * 100:.1f}%"
+                )
 
     return {
         "split": split_name,
@@ -199,13 +213,23 @@ def _collect_stats(path: Path) -> dict:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--dataset-dir", default="/scratch/users/zwcolin/cxr_embeds/external_data/screenshot-training-natural-filtered-v2")
-    p.add_argument("--output-dir", default="/scratch/users/zwcolin/cxr_embeds/sft_data/retrieval_raw")
+    p.add_argument(
+        "--dataset-dir",
+        default="/scratch/users/zwcolin/cxr_embeds/external_data/screenshot-training-natural-filtered-v2",
+    )
+    p.add_argument(
+        "--output-dir",
+        default="/scratch/users/zwcolin/cxr_embeds/sft_data/retrieval_raw",
+    )
     p.add_argument("--api-url", default="http://localhost:30895")
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--n-docs", type=int, default=6)
-    p.add_argument("--splits", nargs="+", default=["test", "eval", "train"],
-                   help="Splits to run; order = processing order")
+    p.add_argument(
+        "--splits",
+        nargs="+",
+        default=["test", "eval", "train"],
+        help="Splits to run; order = processing order",
+    )
     args = p.parse_args()
 
     dataset_dir = Path(args.dataset_dir)
@@ -232,7 +256,9 @@ def main():
             print(f"  SKIP {split}: {jsonl} missing")
             continue
         print(f"=== {split} ===")
-        stats = process_split(split, jsonl, out, args.api_url, args.batch_size, args.n_docs)
+        stats = process_split(
+            split, jsonl, out, args.api_url, args.batch_size, args.n_docs
+        )
         all_stats.append(stats)
 
     summary = {
@@ -247,11 +273,13 @@ def main():
     print(f"\nSummary: {summary_path}")
     for s in all_stats:
         n = max(1, s["total"])
-        print(f"  {s['split']:5s} n={s['total']} "
-              f"gold@1={s['gold_in_top1']/n*100:5.1f}% "
-              f"gold@3={s['gold_in_top3']/n*100:5.1f}% "
-              f"gold@6={s['gold_in_top6']/n*100:5.1f}% "
-              f"miss={s['gold_miss']/n*100:5.1f}%")
+        print(
+            f"  {s['split']:5s} n={s['total']} "
+            f"gold@1={s['gold_in_top1'] / n * 100:5.1f}% "
+            f"gold@3={s['gold_in_top3'] / n * 100:5.1f}% "
+            f"gold@6={s['gold_in_top6'] / n * 100:5.1f}% "
+            f"miss={s['gold_miss'] / n * 100:5.1f}%"
+        )
 
 
 if __name__ == "__main__":

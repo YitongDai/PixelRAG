@@ -14,12 +14,10 @@ Usage:
 import json
 import os
 import sys
-import tempfile
 
 # Ensure the training root is on sys.path so `models` and `train_contrastors` resolve
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import numpy as np
 import torch
 
 # ---------------------------------------------------------------------------
@@ -54,6 +52,7 @@ def find_test_image():
 # Test 1: Tokenization equivalence
 # ---------------------------------------------------------------------------
 
+
 def test_tokenization():
     """Verify that contrastors and swift produce the same token IDs for queries."""
     print("\n=== Test 1: Tokenization equivalence ===")
@@ -71,8 +70,11 @@ def test_tokenization():
         {"role": "user", "content": [{"type": "text", "text": query}]},
     ]
     contrastors_text = processor.apply_chat_template(
-        q_msgs, tokenize=False, add_generation_prompt=True)
-    contrastors_ids = processor(text=[contrastors_text], return_tensors="pt")["input_ids"][0]
+        q_msgs, tokenize=False, add_generation_prompt=True
+    )
+    contrastors_ids = processor(text=[contrastors_text], return_tensors="pt")[
+        "input_ids"
+    ][0]
 
     # --- Swift path: messages format ---
     # Swift uses the same processor but constructs messages differently.
@@ -83,18 +85,21 @@ def test_tokenization():
         {"role": "user", "content": [{"type": "text", "text": query}]},
     ]
     swift_text = processor.apply_chat_template(
-        s_msgs, tokenize=False, add_generation_prompt=True)
+        s_msgs, tokenize=False, add_generation_prompt=True
+    )
     swift_ids = processor(text=[swift_text], return_tensors="pt")["input_ids"][0]
 
     match = torch.equal(contrastors_ids, swift_ids)
-    print(f"  Contrastors tokens: {contrastors_ids.shape} → {contrastors_ids[:10].tolist()}...")
+    print(
+        f"  Contrastors tokens: {contrastors_ids.shape} → {contrastors_ids[:10].tolist()}..."
+    )
     print(f"  Swift tokens:       {swift_ids.shape} → {swift_ids[:10].tolist()}...")
     print(f"  Text match: {contrastors_text == swift_text}")
     print(f"  Token match: {match}")
 
     # Also check the actual template strings
     if contrastors_text != swift_text:
-        print(f"  DIFF in template text!")
+        print("  DIFF in template text!")
         print(f"    Contrastors: {repr(contrastors_text[:200])}")
         print(f"    Swift:       {repr(swift_text[:200])}")
 
@@ -106,6 +111,7 @@ def test_tokenization():
 # ---------------------------------------------------------------------------
 # Test 2: Embedding equivalence
 # ---------------------------------------------------------------------------
+
 
 def test_embedding():
     """Verify BiQwen3 and swift's patched model produce the same embeddings."""
@@ -125,14 +131,19 @@ def test_embedding():
 
     # --- Contrastors path: BiQwen3 ---
     from models.biqwen3 import BiQwen3
-    contrastors_model = BiQwen3.from_pretrained(MODEL_NAME, dtype=torch.bfloat16).cuda().eval()
+
+    contrastors_model = (
+        BiQwen3.from_pretrained(MODEL_NAME, dtype=torch.bfloat16).cuda().eval()
+    )
 
     # Query embedding
     q_msgs = [
         {"role": "system", "content": [{"type": "text", "text": QUERY_INSTRUCTION}]},
         {"role": "user", "content": [{"type": "text", "text": query}]},
     ]
-    q_text = processor.apply_chat_template(q_msgs, tokenize=False, add_generation_prompt=True)
+    q_text = processor.apply_chat_template(
+        q_msgs, tokenize=False, add_generation_prompt=True
+    )
     q_inputs = processor(text=[q_text], return_tensors="pt", padding="longest")
     q_inputs = {k: v.cuda() for k, v in q_inputs.items()}
 
@@ -144,8 +155,12 @@ def test_embedding():
         {"role": "system", "content": [{"type": "text", "text": DOC_INSTRUCTION}]},
         {"role": "user", "content": [{"type": "image"}]},
     ]
-    d_text = processor.apply_chat_template(d_msgs, tokenize=False, add_generation_prompt=True)
-    d_inputs = processor(text=[d_text], images=[image], return_tensors="pt", padding="longest")
+    d_text = processor.apply_chat_template(
+        d_msgs, tokenize=False, add_generation_prompt=True
+    )
+    d_inputs = processor(
+        text=[d_text], images=[image], return_tensors="pt", padding="longest"
+    )
     d_inputs = {k: v.cuda() for k, v in d_inputs.items()}
 
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
@@ -156,34 +171,60 @@ def test_embedding():
 
     # --- Swift path: Qwen3VLForConditionalGeneration + patch ---
     from transformers import Qwen3VLForConditionalGeneration
-    swift_model = Qwen3VLForConditionalGeneration.from_pretrained(
-        MODEL_NAME, torch_dtype=torch.bfloat16).cuda().eval()
+
+    swift_model = (
+        Qwen3VLForConditionalGeneration.from_pretrained(
+            MODEL_NAME, torch_dtype=torch.bfloat16
+        )
+        .cuda()
+        .eval()
+    )
 
     # Replicate swift's embedding patch: use model.model (base Qwen3VLModel),
     # last-token pooling + L2 norm
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
         # Query
-        q_inputs_swift = processor(text=[q_text], return_tensors="pt", padding="longest")
+        q_inputs_swift = processor(
+            text=[q_text], return_tensors="pt", padding="longest"
+        )
         q_inputs_swift = {k: v.cuda() for k, v in q_inputs_swift.items()}
         q_out = swift_model.model(
-            **q_inputs_swift, use_cache=False, output_hidden_states=True, return_dict=True)
+            **q_inputs_swift,
+            use_cache=False,
+            output_hidden_states=True,
+            return_dict=True,
+        )
         swift_q_emb = q_out.last_hidden_state[:, -1]
-        swift_q_emb = (swift_q_emb / swift_q_emb.norm(dim=-1, keepdim=True)).cpu().float()
+        swift_q_emb = (
+            (swift_q_emb / swift_q_emb.norm(dim=-1, keepdim=True)).cpu().float()
+        )
 
         # Doc
-        d_inputs_swift = processor(text=[d_text], images=[image], return_tensors="pt", padding="longest")
+        d_inputs_swift = processor(
+            text=[d_text], images=[image], return_tensors="pt", padding="longest"
+        )
         d_inputs_swift = {k: v.cuda() for k, v in d_inputs_swift.items()}
         d_out = swift_model.model(
-            **d_inputs_swift, use_cache=False, output_hidden_states=True, return_dict=True)
+            **d_inputs_swift,
+            use_cache=False,
+            output_hidden_states=True,
+            return_dict=True,
+        )
         swift_d_emb = d_out.last_hidden_state[:, -1]
-        swift_d_emb = (swift_d_emb / swift_d_emb.norm(dim=-1, keepdim=True)).cpu().float()
+        swift_d_emb = (
+            (swift_d_emb / swift_d_emb.norm(dim=-1, keepdim=True)).cpu().float()
+        )
 
     del swift_model
     torch.cuda.empty_cache()
 
     # Compare
-    q_cosine = torch.nn.functional.cosine_similarity(contrastors_q_emb, swift_q_emb).item()
-    d_cosine = torch.nn.functional.cosine_similarity(contrastors_d_emb, swift_d_emb).item()
+    q_cosine = torch.nn.functional.cosine_similarity(
+        contrastors_q_emb, swift_q_emb
+    ).item()
+    d_cosine = torch.nn.functional.cosine_similarity(
+        contrastors_d_emb, swift_d_emb
+    ).item()
     q_maxdiff = (contrastors_q_emb - swift_q_emb).abs().max().item()
     d_maxdiff = (contrastors_d_emb - swift_d_emb).abs().max().item()
 
@@ -201,6 +242,7 @@ def test_embedding():
 # ---------------------------------------------------------------------------
 # Test 3: Loss equivalence
 # ---------------------------------------------------------------------------
+
 
 def test_loss():
     """Verify InfoNCE loss computation is equivalent."""
@@ -246,6 +288,7 @@ def test_loss():
 # Test 4: LoRA target equivalence
 # ---------------------------------------------------------------------------
 
+
 def test_lora_targets():
     """Verify LoRA is applied to the same parameters."""
     print("\n=== Test 4: LoRA target equivalence ===")
@@ -255,16 +298,17 @@ def test_lora_targets():
 
     model = BiQwen3.from_pretrained(MODEL_NAME, dtype=torch.bfloat16)
     lora_config = LoraConfig(
-        r=32, lora_alpha=32,
+        r=32,
+        lora_alpha=32,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         lora_dropout=0.05,
         task_type="FEATURE_EXTRACTION",
     )
     peft_model = get_peft_model(model, lora_config)
 
-    contrastors_trainable = sorted([
-        n for n, p in peft_model.named_parameters() if p.requires_grad
-    ])
+    contrastors_trainable = sorted(
+        [n for n, p in peft_model.named_parameters() if p.requires_grad]
+    )
 
     del peft_model, model
     torch.cuda.empty_cache()
@@ -273,18 +317,20 @@ def test_lora_targets():
     from transformers import Qwen3VLForConditionalGeneration
 
     swift_model = Qwen3VLForConditionalGeneration.from_pretrained(
-        MODEL_NAME, torch_dtype=torch.bfloat16)
+        MODEL_NAME, torch_dtype=torch.bfloat16
+    )
     swift_lora_config = LoraConfig(
-        r=32, lora_alpha=32,
+        r=32,
+        lora_alpha=32,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         lora_dropout=0.05,
         task_type="FEATURE_EXTRACTION",
     )
     swift_peft = get_peft_model(swift_model, swift_lora_config)
 
-    swift_trainable = sorted([
-        n for n, p in swift_peft.named_parameters() if p.requires_grad
-    ])
+    swift_trainable = sorted(
+        [n for n, p in swift_peft.named_parameters() if p.requires_grad]
+    )
 
     del swift_peft, swift_model
 
@@ -295,10 +341,12 @@ def test_lora_targets():
         n = n.replace("base_model.model.", "")
         # Remove the extra "model." from ConditionalGeneration
         if n.startswith("model."):
-            n = n[len("model."):]
+            n = n[len("model.") :]
         return n
 
-    contrastors_normalized = sorted(set(normalize_name(n) for n in contrastors_trainable))
+    contrastors_normalized = sorted(
+        set(normalize_name(n) for n in contrastors_trainable)
+    )
     swift_normalized = sorted(set(normalize_name(n) for n in swift_trainable))
 
     # Check for lm_head LoRA in swift (shouldn't be there since q/k/v/o only)
@@ -330,6 +378,7 @@ def test_lora_targets():
 # ---------------------------------------------------------------------------
 # Test 5: Hard negative label construction equivalence
 # ---------------------------------------------------------------------------
+
 
 def test_hard_negative_labels():
     """Verify that hard negative interleaving produces equivalent loss.
@@ -375,10 +424,13 @@ def test_hard_negative_labels():
     # Reconstruct swift's format: [B, neg+2, D] where dim1 = [query, pos, neg1, neg2]
     sentences = []
     for i in range(batch_size):
-        group = torch.cat([
-            query_embs[i:i+1],
-            all_doc_embs[i * docs_per_query:(i + 1) * docs_per_query],
-        ], dim=0)  # [neg+2, D]
+        group = torch.cat(
+            [
+                query_embs[i : i + 1],
+                all_doc_embs[i * docs_per_query : (i + 1) * docs_per_query],
+            ],
+            dim=0,
+        )  # [neg+2, D]
         sentences.append(group)
     sentences = torch.stack(sentences, dim=0)  # [B, neg+2, D]
 
@@ -404,6 +456,7 @@ def test_hard_negative_labels():
 # Test 6: End-to-end data pipeline equivalence
 # ---------------------------------------------------------------------------
 
+
 def test_data_pipeline():
     """Verify that the full data pipeline (load image → process → embed) is equivalent.
 
@@ -423,7 +476,11 @@ def test_data_pipeline():
         samples = [json.loads(f.readline()) for _ in range(2)]
 
     # --- Contrastors collate path ---
-    from train_contrastors import init_chat_templates, process_queries, process_doc_images
+    from train_contrastors import (
+        init_chat_templates,
+        process_queries,
+        process_doc_images,
+    )
 
     init_chat_templates(processor)
 
@@ -444,10 +501,17 @@ def test_data_pipeline():
     swift_q_texts = []
     for q in queries:
         msgs = [
-            {"role": "system", "content": [{"type": "text", "text": QUERY_INSTRUCTION}]},
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": QUERY_INSTRUCTION}],
+            },
             {"role": "user", "content": [{"type": "text", "text": q}]},
         ]
-        swift_q_texts.append(processor.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True))
+        swift_q_texts.append(
+            processor.apply_chat_template(
+                msgs, tokenize=False, add_generation_prompt=True
+            )
+        )
     swift_q = processor(text=swift_q_texts, return_tensors="pt", padding="longest")
 
     # Doc images: same images, same template
@@ -457,18 +521,28 @@ def test_data_pipeline():
             {"role": "system", "content": [{"type": "text", "text": DOC_INSTRUCTION}]},
             {"role": "user", "content": [{"type": "image"}]},
         ]
-        swift_d_texts.append(processor.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True))
-    swift_d = processor(text=swift_d_texts, images=doc_images, return_tensors="pt", padding="longest")
+        swift_d_texts.append(
+            processor.apply_chat_template(
+                msgs, tokenize=False, add_generation_prompt=True
+            )
+        )
+    swift_d = processor(
+        text=swift_d_texts, images=doc_images, return_tensors="pt", padding="longest"
+    )
 
     # Compare query tokens
     q_match = torch.equal(contrastors_q["input_ids"], swift_q["input_ids"])
-    q_attn_match = torch.equal(contrastors_q["attention_mask"], swift_q["attention_mask"])
+    q_attn_match = torch.equal(
+        contrastors_q["attention_mask"], swift_q["attention_mask"]
+    )
     print(f"  Query input_ids match:      {q_match}")
     print(f"  Query attention_mask match: {q_attn_match}")
 
     # Compare doc tokens
     d_ids_match = torch.equal(contrastors_d["input_ids"], swift_d["input_ids"])
-    d_attn_match = torch.equal(contrastors_d["attention_mask"], swift_d["attention_mask"])
+    d_attn_match = torch.equal(
+        contrastors_d["attention_mask"], swift_d["attention_mask"]
+    )
     print(f"  Doc input_ids match:        {d_ids_match}")
     print(f"  Doc attention_mask match:   {d_attn_match}")
 
@@ -479,16 +553,27 @@ def test_data_pipeline():
         s_pv = swift_d["pixel_values"]
         # Contrastors: (B, max_patches, dim) → flatten valid patches
         c_offsets = contrastors_d["image_grid_thw"].prod(dim=1).tolist()
-        c_flat = torch.cat([c_pv[i, :c_offsets[i]] for i in range(len(c_offsets))], dim=0)
+        c_flat = torch.cat(
+            [c_pv[i, : c_offsets[i]] for i in range(len(c_offsets))], dim=0
+        )
         # Swift: already flat (total_patches, dim)
-        s_flat = s_pv if s_pv.dim() == 2 else torch.cat(
-            [s_pv[i, :c_offsets[i]] for i in range(len(c_offsets))], dim=0)
+        s_flat = (
+            s_pv
+            if s_pv.dim() == 2
+            else torch.cat(
+                [s_pv[i, : c_offsets[i]] for i in range(len(c_offsets))], dim=0
+            )
+        )
         pv_match = torch.equal(c_flat, s_flat)
-        pv_maxdiff = (c_flat.float() - s_flat.float()).abs().max().item() if not pv_match else 0.0
+        pv_maxdiff = (
+            (c_flat.float() - s_flat.float()).abs().max().item()
+            if not pv_match
+            else 0.0
+        )
         print(f"  Pixel values match:         {pv_match} (max_diff={pv_maxdiff:.6e})")
     else:
         pv_match = True
-        print(f"  Pixel values: skipped (not present)")
+        print("  Pixel values: skipped (not present)")
 
     for img in doc_images:
         img.close()
@@ -504,6 +589,7 @@ def test_data_pipeline():
 # Test 7: Single training step equivalence (end-to-end)
 # ---------------------------------------------------------------------------
 
+
 def test_training_step():
     """Run one training step through both pipelines and compare loss.
 
@@ -516,8 +602,12 @@ def test_training_step():
     from transformers import AutoProcessor
     from models.biqwen3 import BiQwen3
     from train_contrastors import (
-        init_chat_templates, process_queries, process_doc_images,
-        LogitScale, clip_loss, _clear_rope_deltas,
+        init_chat_templates,
+        process_queries,
+        process_doc_images,
+        LogitScale,
+        clip_loss,
+        _clear_rope_deltas,
     )
 
     temperature = 0.07
@@ -582,33 +672,42 @@ def test_training_step():
     swift_sentences = []
     swift_labels = []
     for i in range(batch_size):
-        swift_sentences.append(q_emb_np[i])       # anchor (not in labels)
+        swift_sentences.append(q_emb_np[i])  # anchor (not in labels)
         swift_sentences.append(d_emb_np[i * docs_per_query])  # positive
         swift_labels.append(1.0)
-        for j in range(1, docs_per_query):         # negatives
+        for j in range(1, docs_per_query):  # negatives
             swift_sentences.append(d_emb_np[i * docs_per_query + j])
             swift_labels.append(0.0)
 
     swift_sentences = torch.stack(swift_sentences, dim=0)  # [B*(1+1+num_neg), D]
-    swift_labels = torch.tensor(swift_labels)              # [B*(1+num_neg)]
+    swift_labels = torch.tensor(swift_labels)  # [B*(1+num_neg)]
 
     # Run swift's parsing + InfoNCE logic (batched path, use_batch=True)
     from swift.loss.embedding import _parse_multi_negative_sentences
-    split_tensors = _parse_multi_negative_sentences(swift_sentences, swift_labels, hard_negatives=num_hard_neg)
+
+    split_tensors = _parse_multi_negative_sentences(
+        swift_sentences, swift_labels, hard_negatives=num_hard_neg
+    )
 
     # Each split_tensor = [anchor, pos, neg1, neg2] shape [neg+2, D]
     sentences_stacked = torch.stack(split_tensors, dim=0)  # [B, neg+2, D]
     swift_queries = sentences_stacked[:, 0]  # [B, D]
-    docs_all = sentences_stacked[:, 1:].reshape(-1, sentences_stacked.size(2))  # [B*(neg+1), D]
+    docs_all = sentences_stacked[:, 1:].reshape(
+        -1, sentences_stacked.size(2)
+    )  # [B*(neg+1), D]
     swift_label_indices = torch.arange(0, batch_size * docs_per_query, docs_per_query)
     similarity = torch.matmul(swift_queries, docs_all.T) / temperature
-    swift_loss = torch.nn.functional.cross_entropy(similarity, swift_label_indices).item()
+    swift_loss = torch.nn.functional.cross_entropy(
+        similarity, swift_label_indices
+    ).item()
 
     diff = abs(contrastors_loss - swift_loss)
     print(f"  Contrastors loss: {contrastors_loss:.6f}  acc: {contrastors_acc:.4f}")
     print(f"  Swift loss:       {swift_loss:.6f}")
     print(f"  Absolute diff:    {diff:.6e}")
-    print(f"  Batch: {batch_size} queries, {len(doc_images)} docs ({num_hard_neg} hard neg/query)")
+    print(
+        f"  Batch: {batch_size} queries, {len(doc_images)} docs ({num_hard_neg} hard neg/query)"
+    )
 
     for img in doc_images:
         img.close()
@@ -622,6 +721,7 @@ def test_training_step():
 # ---------------------------------------------------------------------------
 # Test 8: Cross-GPU gather semantics (single-GPU simulation)
 # ---------------------------------------------------------------------------
+
 
 def test_gather_semantics():
     """Verify that gather_with_grad and gather_object produce the same
@@ -676,8 +776,10 @@ def test_gather_semantics():
     print(f"  swift (/ temperature):    {loss_swift.item():.6f}")
     print(f"  Diff (no gather vs gather):       {diff_cg:.6e}")
     print(f"  Diff (contrastors vs swift):      {diff_cs:.6e}")
-    print(f"  NOTE: Multi-GPU gradient difference (gather_with_grad vs detached gather)")
-    print(f"         cannot be tested without multiple GPUs. This is a KNOWN difference.")
+    print("  NOTE: Multi-GPU gradient difference (gather_with_grad vs detached gather)")
+    print(
+        "         cannot be tested without multiple GPUs. This is a KNOWN difference."
+    )
 
     assert diff_cg < 1e-6, f"gather_with_grad changed loss on single GPU: {diff_cg}"
     assert diff_cs < 1e-5, f"Loss diverged: {diff_cs}"
@@ -688,6 +790,7 @@ def test_gather_semantics():
 # ---------------------------------------------------------------------------
 # Test 9: Multi-GPU gather gradient difference (requires torchrun)
 # ---------------------------------------------------------------------------
+
 
 def test_multi_gpu_gather():
     """Compare gradients from gather_with_grad vs detached gather on 2 GPUs.
@@ -766,9 +869,11 @@ def test_multi_gpu_gather():
     # Compare
     loss_diff = abs(loss_a.item() - loss_b.item())
     q_grad_cosine = torch.nn.functional.cosine_similarity(
-        grad_a_q.flatten().unsqueeze(0), grad_b_q.flatten().unsqueeze(0)).item()
+        grad_a_q.flatten().unsqueeze(0), grad_b_q.flatten().unsqueeze(0)
+    ).item()
     d_grad_cosine = torch.nn.functional.cosine_similarity(
-        grad_a_d.flatten().unsqueeze(0), grad_b_d.flatten().unsqueeze(0)).item()
+        grad_a_d.flatten().unsqueeze(0), grad_b_d.flatten().unsqueeze(0)
+    ).item()
     q_grad_diff = (grad_a_q - grad_b_q).abs().max().item()
     d_grad_diff = (grad_a_d - grad_b_d).abs().max().item()
 
@@ -778,22 +883,24 @@ def test_multi_gpu_gather():
         print(f"  Doc grad cosine:                    {d_grad_cosine:.6f}")
         print(f"  Query grad max diff:                {q_grad_diff:.6e}")
         print(f"  Doc grad max diff:                  {d_grad_diff:.6e}")
-        print(f"  NOTE: Gradient difference is EXPECTED and KNOWN.")
-        print(f"         gather_with_grad propagates grad to all ranks' embeddings;")
-        print(f"         detached gather only propagates to local rank.")
+        print("  NOTE: Gradient difference is EXPECTED and KNOWN.")
+        print("         gather_with_grad propagates grad to all ranks' embeddings;")
+        print("         detached gather only propagates to local rank.")
 
         # Loss should be identical (same forward)
         assert loss_diff < 1e-5, f"Loss should be identical: {loss_diff}"
 
         # Query grads should be identical (query is always local)
-        assert q_grad_cosine > 0.999, f"Query grads diverged unexpectedly: {q_grad_cosine}"
+        assert q_grad_cosine > 0.999, (
+            f"Query grads diverged unexpectedly: {q_grad_cosine}"
+        )
 
         # Doc grads WILL differ — this is the known semantic difference
         # gather_with_grad: d gets gradient from all ranks' CE losses
         # detached gather: d only gets gradient from local rank's CE loss
         # We just document how much they differ
-        print(f"\n  Doc grad difference quantifies the gather_with_grad vs detach gap.")
-        print(f"  This is the ONLY non-equivalent component between the two pipelines.")
+        print("\n  Doc grad difference quantifies the gather_with_grad vs detach gap.")
+        print("  This is the ONLY non-equivalent component between the two pipelines.")
 
     dist.barrier()
     if rank == 0:
@@ -806,6 +913,7 @@ def test_multi_gpu_gather():
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     results = {}
 
@@ -816,10 +924,12 @@ def main():
         except Exception as e:
             print(f"  FAILED ✗: {e}")
             import traceback
+
             traceback.print_exc()
             results["multi_gpu_gather"] = False
         # Print summary and exit
         import torch.distributed as dist
+
         rank = dist.get_rank() if dist.is_initialized() else 0
         if rank == 0:
             print("\n" + "=" * 50)
@@ -844,6 +954,7 @@ def main():
         except Exception as e:
             print(f"  FAILED ✗: {e}")
             import traceback
+
             traceback.print_exc()
             results[name] = False
 

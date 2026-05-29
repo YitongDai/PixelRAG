@@ -17,7 +17,6 @@ import json
 import logging
 import random
 import re
-import sys
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -73,10 +72,16 @@ def generate_queries(title: str) -> list[str]:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate fake training data")
-    parser.add_argument("--tiles-dir", type=Path,
-                        default=Path("/opt/dlami/nvme/kiwix_tiles"))
-    parser.add_argument("--articles-json", type=Path,
-                        default=Path("/opt/dlami/nvme/kiwix/wikipedia_en_all_maxi_2025-08.zim.articles.json"))
+    parser.add_argument(
+        "--tiles-dir", type=Path, default=Path("/opt/dlami/nvme/kiwix_tiles")
+    )
+    parser.add_argument(
+        "--articles-json",
+        type=Path,
+        default=Path(
+            "/opt/dlami/nvme/kiwix/wikipedia_en_all_maxi_2025-08.zim.articles.json"
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("training/data"))
     parser.add_argument("--num-articles", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=42)
@@ -114,7 +119,9 @@ def main():
             pairs.append({"query": query, "chunk_path": chunk_path})
 
         if len(pairs) % 300 == 0:
-            logger.info(f"Generated {len(pairs)} pairs from {sampled} sampled articles...")
+            logger.info(
+                f"Generated {len(pairs)} pairs from {sampled} sampled articles..."
+            )
 
     random.shuffle(pairs)
     logger.info(f"Total pairs: {len(pairs)} from {sampled} sampled articles")

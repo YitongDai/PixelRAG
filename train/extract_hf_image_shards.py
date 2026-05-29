@@ -29,8 +29,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     dataset_dir = args.dataset_dir.resolve()
-    shards_dir = (args.shards_dir.resolve() if args.shards_dir else dataset_dir / "image_shards")
-    output_dir = (args.output_dir.resolve() if args.output_dir else dataset_dir / "images")
+    shards_dir = (
+        args.shards_dir.resolve() if args.shards_dir else dataset_dir / "image_shards"
+    )
+    output_dir = (
+        args.output_dir.resolve() if args.output_dir else dataset_dir / "images"
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     shard_paths = sorted(shards_dir.glob("*.tar"))

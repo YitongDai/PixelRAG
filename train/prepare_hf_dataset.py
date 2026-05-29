@@ -32,7 +32,9 @@ DEFAULT_SPLIT_DIR = Path(
     "lite-query-v2-full-filtered-hn-v2-chunks/split"
 )
 DEFAULT_IMAGE_ROOT = Path("/opt/dlami/nvme/kiwix_tiles")
-DEFAULT_OUTPUT_DIR = Path("/home/user/wiki-screenshot-training/hf_dataset_export/screenshot-training")
+DEFAULT_OUTPUT_DIR = Path(
+    "/home/user/wiki-screenshot-training/hf_dataset_export/screenshot-training"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,8 +90,13 @@ def materialize_image(src: Path, dst: Path, link_mode: str) -> None:
     shutil.copy2(src, dst)
 
 
-def transform_rows(split_name: str, rows: list[dict], image_root: Path, images_dir: Path,
-                   link_mode: str) -> tuple[list[dict], dict]:
+def transform_rows(
+    split_name: str,
+    rows: list[dict],
+    image_root: Path,
+    images_dir: Path,
+    link_mode: str,
+) -> tuple[list[dict], dict]:
     out_rows = []
     unique_images = set()
     total_negatives = 0
@@ -108,12 +115,14 @@ def transform_rows(split_name: str, rows: list[dict], image_root: Path, images_d
             neg_rel_paths.append(f"images/{neg_rel}")
         total_negatives += len(neg_rel_paths)
 
-        out_rows.append({
-            "query": row["query"],
-            "chunk_path": f"images/{pos_rel}",
-            "neg_chunk_paths": neg_rel_paths,
-            "split": split_name,
-        })
+        out_rows.append(
+            {
+                "query": row["query"],
+                "chunk_path": f"images/{pos_rel}",
+                "neg_chunk_paths": neg_rel_paths,
+                "split": split_name,
+            }
+        )
 
     stats = {
         "rows": len(out_rows),
@@ -200,7 +209,9 @@ def main() -> int:
 
     all_unique_images = set()
     for split_name, rows in split_rows.items():
-        transformed, stats = transform_rows(split_name, rows, image_root, images_dir, args.link_mode)
+        transformed, stats = transform_rows(
+            split_name, rows, image_root, images_dir, args.link_mode
+        )
         write_jsonl(output_dir / f"{split_name}.jsonl", transformed)
         write_jsonl(output_dir / f"{split_name}_hn.jsonl", transformed)
         summary["splits"][split_name] = stats
@@ -211,7 +222,9 @@ def main() -> int:
     summary["total_rows"] = sum(info["rows"] for info in summary["splits"].values())
     summary["total_unique_images"] = len(all_unique_images)
 
-    (output_dir / "dataset_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
+    (output_dir / "dataset_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True)
+    )
     (output_dir / "README.md").write_text(build_readme(args.repo_id, summary))
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0

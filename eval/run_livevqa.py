@@ -64,7 +64,6 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-import aiohttp
 import requests
 
 # Add eval root to path so simpleqa imports work
@@ -88,7 +87,10 @@ LIVEVQA_IMAGES_DIR = "/opt/dlami/nvme/livevqa"
 # Default v4 JSON (canonical LiveVQA dataset with question/options/GT/img_path)
 DEFAULT_V4_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "..", "pixelrag-src", "wiki-screenshot", "eval",
+    "..",
+    "pixelrag-src",
+    "wiki-screenshot",
+    "eval",
     "livevqa_retrieval_results_v4_multimodal.json",
 )
 
@@ -175,9 +177,7 @@ def encode_image_base64(path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def build_naive_prompt(
-    question: str, options: list[str], has_photo: bool
-) -> str:
+def build_naive_prompt(question: str, options: list[str], has_photo: bool) -> str:
     opts_str = "\n".join(options)
     if has_photo:
         return (
@@ -191,9 +191,7 @@ def build_naive_prompt(
     )
 
 
-def build_pixel_prompt(
-    question: str, options: list[str], has_photo: bool
-) -> str:
+def build_pixel_prompt(question: str, options: list[str], has_photo: bool) -> str:
     opts_str = "\n".join(options)
     if has_photo:
         ctx = "Based on the editorial photo and the article screenshot(s) above"
@@ -226,7 +224,10 @@ def build_text_prompt(
 
 
 def build_hybrid_prompt(
-    question: str, options: list[str], n_tiles: int, n_chunks: int,
+    question: str,
+    options: list[str],
+    n_tiles: int,
+    n_chunks: int,
     has_photo: bool,
 ) -> str:
     opts_str = "\n".join(options)
@@ -262,10 +263,12 @@ def build_messages_for_livevqa(
     content: list[dict] = []
     if image_paths:
         for p in image_paths:
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": image_to_base64_url(p)},
-            })
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_to_base64_url(p)},
+                }
+            )
     if text_chunks:
         ctx = "\n\n---\n\n".join(text_chunks)
         content.append({"type": "text", "text": ctx})
@@ -308,7 +311,7 @@ def batch_retrieve_pixel(
     t_all = time.time()
 
     for bi in range(0, len(queries), batch_size):
-        batch_q = queries[bi:bi + batch_size]
+        batch_q = queries[bi : bi + batch_size]
         payload: dict = {"queries": batch_q, "n_docs": search_k}
         if nprobe is not None:
             payload["nprobe"] = nprobe
@@ -327,13 +330,15 @@ def batch_retrieve_pixel(
                     continue
                 if len(items) >= top_k:
                     break
-                items.append({
-                    "hex": hex_id,
-                    "file": os.path.basename(hit.get("path", "")),
-                    "tile": int(hit.get("tile_index", 0)),
-                    "chunk": int(hit.get("chunk_index", 0)),
-                    "score": float(hit.get("score", 0.0)),
-                })
+                items.append(
+                    {
+                        "hex": hex_id,
+                        "file": os.path.basename(hit.get("path", "")),
+                        "tile": int(hit.get("tile_index", 0)),
+                        "chunk": int(hit.get("chunk_index", 0)),
+                        "score": float(hit.get("score", 0.0)),
+                    }
+                )
             all_results[bi + qi] = items
 
         batch_num = bi // batch_size + 1
@@ -344,7 +349,12 @@ def batch_retrieve_pixel(
             eta = (len(queries) - done) / qps if qps > 0 else 0
             logger.info(
                 "Pixel retrieval batch %d/%d  done=%d  %.1f q/s  last=%.2fs  ETA=%.0fs",
-                batch_num, n_batches, done, qps, dt, eta,
+                batch_num,
+                n_batches,
+                done,
+                qps,
+                dt,
+                eta,
             )
 
     return all_results
@@ -369,7 +379,7 @@ def batch_retrieve_text(
     t_all = time.time()
 
     for bi in range(0, len(queries), batch_size):
-        batch_q = queries[bi:bi + batch_size]
+        batch_q = queries[bi : bi + batch_size]
         payload: dict = {"queries": batch_q, "n_docs": search_k}
         if nprobe is not None:
             payload["nprobe"] = nprobe
@@ -387,12 +397,14 @@ def batch_retrieve_text(
                     continue
                 if len(items) >= top_k:
                     break
-                items.append({
-                    "url": url,
-                    "chunk_index": int(hit.get("chunk_index", 0)),
-                    "text": hit.get("text", ""),
-                    "score": float(hit.get("score", 0.0)),
-                })
+                items.append(
+                    {
+                        "url": url,
+                        "chunk_index": int(hit.get("chunk_index", 0)),
+                        "text": hit.get("text", ""),
+                        "score": float(hit.get("score", 0.0)),
+                    }
+                )
             all_results[bi + qi] = items
 
         batch_num = bi // batch_size + 1
@@ -403,7 +415,12 @@ def batch_retrieve_text(
             eta = (len(queries) - done) / qps if qps > 0 else 0
             logger.info(
                 "Text retrieval batch %d/%d  done=%d  %.1f q/s  last=%.2fs  ETA=%.0fs",
-                batch_num, n_batches, done, qps, dt, eta,
+                batch_num,
+                n_batches,
+                done,
+                qps,
+                dt,
+                eta,
             )
 
     return all_results
@@ -414,7 +431,9 @@ def batch_retrieve_text(
 # ---------------------------------------------------------------------------
 
 
-def resolve_strip_path(hex_id: str, strip_file: str, tiles_dir: str = NEWS_TILES_DIR) -> str | None:
+def resolve_strip_path(
+    hex_id: str, strip_file: str, tiles_dir: str = NEWS_TILES_DIR
+) -> str | None:
     """Resolve a pixel tile to an absolute path on disk."""
     tile_dir = Path(tiles_dir) / f"{hex_id}.tiles"
     path = tile_dir / strip_file
@@ -438,8 +457,12 @@ def resolve_editorial_photo(
 
 
 def resolve_pixel_context(
-    row: dict, retrieved_items: list[dict], top_k: int,
-    include_photo: bool, livevqa_images: str, tiles_dir: str,
+    row: dict,
+    retrieved_items: list[dict],
+    top_k: int,
+    include_photo: bool,
+    livevqa_images: str,
+    tiles_dir: str,
 ) -> tuple[list[str], str]:
     """Build image paths and prompt for pixel reader mode.
 
@@ -458,9 +481,13 @@ def resolve_pixel_context(
 
 
 def resolve_text_context(
-    row: dict, retrieved_items: list[dict], top_k: int,
-    include_photo: bool, livevqa_images: str,
-    chunks_db: str | None = None, hex_to_int: dict | None = None,
+    row: dict,
+    retrieved_items: list[dict],
+    top_k: int,
+    include_photo: bool,
+    livevqa_images: str,
+    chunks_db: str | None = None,
+    hex_to_int: dict | None = None,
     url_to_hex: dict | None = None,
 ) -> tuple[list[str] | None, list[str], str]:
     """Build text passages and prompt for text reader mode.
@@ -490,7 +517,9 @@ def resolve_text_context(
                     passages.append(text)
 
     imgs = [photo] if photo else None
-    prompt = build_text_prompt(row["question"], row["options"], passages, has_photo=bool(photo))
+    prompt = build_text_prompt(
+        row["question"], row["options"], passages, has_photo=bool(photo)
+    )
     return imgs, passages, prompt
 
 
@@ -564,36 +593,65 @@ async def evaluate_one(
         try:
             if mode == "naive":
                 # No retrieval: editorial photo + question only
-                photo = resolve_editorial_photo(row, args.livevqa_images) if args.include_editorial_photo else None
+                photo = (
+                    resolve_editorial_photo(row, args.livevqa_images)
+                    if args.include_editorial_photo
+                    else None
+                )
                 images = [photo] if photo else []
-                prompt = build_naive_prompt(row["question"], row["options"], has_photo=bool(photo))
-                messages = build_messages_for_livevqa(prompt, image_paths=images if images else None)
+                prompt = build_naive_prompt(
+                    row["question"], row["options"], has_photo=bool(photo)
+                )
+                messages = build_messages_for_livevqa(
+                    prompt, image_paths=images if images else None
+                )
                 n_images = len(images)
 
             elif mode == "pixel":
                 items = pixel_items or []
                 images, prompt = resolve_pixel_context(
-                    row, items, args.top_k,
-                    args.include_editorial_photo, args.livevqa_images, args.tiles_dir,
+                    row,
+                    items,
+                    args.top_k,
+                    args.include_editorial_photo,
+                    args.livevqa_images,
+                    args.tiles_dir,
                 )
                 # Check if we have any retrieved tiles (beyond just the editorial photo)
-                has_photo = args.include_editorial_photo and resolve_editorial_photo(row, args.livevqa_images)
+                has_photo = args.include_editorial_photo and resolve_editorial_photo(
+                    row, args.livevqa_images
+                )
                 n_tile_images = len(images) - (1 if has_photo else 0)
                 if n_tile_images <= 0:
                     error = "no_tiles"
-                messages = build_messages_for_livevqa(prompt, image_paths=images) if not error else []
+                messages = (
+                    build_messages_for_livevqa(prompt, image_paths=images)
+                    if not error
+                    else []
+                )
                 n_images = len(images)
 
             elif mode == "text":
                 items = text_items or []
                 imgs, passages, prompt = resolve_text_context(
-                    row, items, args.top_k,
-                    args.include_editorial_photo, args.livevqa_images,
-                    args.chunks_db, hex_to_int, url_to_hex,
+                    row,
+                    items,
+                    args.top_k,
+                    args.include_editorial_photo,
+                    args.livevqa_images,
+                    args.chunks_db,
+                    hex_to_int,
+                    url_to_hex,
                 )
                 if not passages:
                     error = "no_chunks"
-                messages = build_messages_for_livevqa(prompt, image_paths=imgs if imgs else None) if not error else []
+                messages = (
+                    build_messages_for_livevqa(
+                        prompt, image_paths=imgs if imgs else None
+                    )
+                    if not error
+                    else []
+                )
                 n_chunks = len(passages)
                 n_images = len(imgs) if imgs else 0
 
@@ -602,15 +660,19 @@ async def evaluate_one(
                 p_items = pixel_items or []
                 t_items = text_items or []
 
-                photo = resolve_editorial_photo(row, args.livevqa_images) if args.include_editorial_photo else None
+                photo = (
+                    resolve_editorial_photo(row, args.livevqa_images)
+                    if args.include_editorial_photo
+                    else None
+                )
                 tile_paths: list[str] = []
-                for it in p_items[:args.top_k]:
+                for it in p_items[: args.top_k]:
                     p = resolve_strip_path(it["hex"], it["file"], args.tiles_dir)
                     if p:
                         tile_paths.append(p)
 
                 chunks: list[str] = []
-                for it in t_items[:args.top_k]:
+                for it in t_items[: args.top_k]:
                     if "text" in it and it["text"]:
                         chunks.append(it["text"])
 
@@ -619,11 +681,15 @@ async def evaluate_one(
                 else:
                     image_paths = ([photo] if photo else []) + tile_paths
                     prompt = build_hybrid_prompt(
-                        row["question"], row["options"],
-                        len(tile_paths), len(chunks), has_photo=bool(photo),
+                        row["question"],
+                        row["options"],
+                        len(tile_paths),
+                        len(chunks),
+                        has_photo=bool(photo),
                     )
                     messages = build_messages_for_livevqa(
-                        prompt, image_paths=image_paths if image_paths else None,
+                        prompt,
+                        image_paths=image_paths if image_paths else None,
                         text_chunks=chunks if chunks else None,
                     )
                     n_images = len(image_paths)
@@ -674,7 +740,9 @@ async def run_evaluation(args: argparse.Namespace):
     if args.shuffle_seed is not None:
         for i, q in enumerate(rows):
             q["options"], q["ground_truth"] = shuffle_options(
-                q["options"], q["ground_truth"], args.shuffle_seed + i,
+                q["options"],
+                q["ground_truth"],
+                args.shuffle_seed + i,
             )
         logger.info("Shuffled options with seed=%d", args.shuffle_seed)
 
@@ -699,10 +767,14 @@ async def run_evaluation(args: argparse.Namespace):
                         q["image"] = base64.b64encode(f.read()).decode()
             queries.append(q)
         pixel_results = batch_retrieve_pixel(
-            queries, args.pixel_api,
-            search_k=args.search_k, top_k=args.retrieval_top_k,
-            batch_size=args.retrieval_batch_size, nprobe=args.nprobe,
-            timeout=args.retrieval_timeout, db_path=args.pages_db,
+            queries,
+            args.pixel_api,
+            search_k=args.search_k,
+            top_k=args.retrieval_top_k,
+            batch_size=args.retrieval_batch_size,
+            nprobe=args.nprobe,
+            timeout=args.retrieval_timeout,
+            db_path=args.pages_db,
         )
         for i, items in enumerate(pixel_results):
             pixel_results_map[i] = items
@@ -720,9 +792,12 @@ async def run_evaluation(args: argparse.Namespace):
                         q["image"] = base64.b64encode(f.read()).decode()
             queries.append(q)
         text_results = batch_retrieve_text(
-            queries, args.text_api,
-            search_k=args.search_k, top_k=args.retrieval_top_k,
-            batch_size=args.retrieval_batch_size, nprobe=args.nprobe,
+            queries,
+            args.text_api,
+            search_k=args.search_k,
+            top_k=args.retrieval_top_k,
+            batch_size=args.retrieval_batch_size,
+            nprobe=args.nprobe,
             timeout=args.retrieval_timeout,
         )
         for i, items in enumerate(text_results):
@@ -756,18 +831,26 @@ async def run_evaluation(args: argparse.Namespace):
     logger.info("Smoke test on first example...")
     sem = asyncio.Semaphore(args.workers)
     smoke_result = await evaluate_one(
-        0, rows[0], llm_client, mode, args, sem,
+        0,
+        rows[0],
+        llm_client,
+        mode,
+        args,
+        sem,
         pixel_items=pixel_results_map.get(0),
         text_items=text_results_map.get(0),
-        hex_to_int=hex_to_int, url_to_hex=url_to_hex,
+        hex_to_int=hex_to_int,
+        url_to_hex=url_to_hex,
     )
     if smoke_result["error"]:
         logger.warning("Smoke test had error: %s", smoke_result["error"])
     else:
         logger.info(
             "Smoke test OK: pred=%s gt=%s correct=%s latency=%.1fs",
-            smoke_result["predicted"], smoke_result["ground_truth"],
-            smoke_result["correct"], smoke_result["latency"],
+            smoke_result["predicted"],
+            smoke_result["ground_truth"],
+            smoke_result["correct"],
+            smoke_result["latency"],
         )
 
     # Prepare output
@@ -797,10 +880,16 @@ async def run_evaluation(args: argparse.Namespace):
             continue
         tasks.append(
             evaluate_one(
-                i, row, llm_client, mode, args, sem,
+                i,
+                row,
+                llm_client,
+                mode,
+                args,
+                sem,
                 pixel_items=pixel_results_map.get(i),
                 text_items=text_results_map.get(i),
-                hex_to_int=hex_to_int, url_to_hex=url_to_hex,
+                hex_to_int=hex_to_int,
+                url_to_hex=url_to_hex,
             )
         )
 
@@ -863,9 +952,15 @@ async def run_evaluation(args: argparse.Namespace):
             logger.info(
                 "[%d/%d] acc=%.2f%% | %.1f q/s ETA %dm%ds | "
                 "lat p50=%.1fs | err=%d (%s)",
-                total, total_tasks, acc, qps,
-                int(eta) // 60, int(eta) % 60,
-                p50, errors, dict(err_types),
+                total,
+                total_tasks,
+                acc,
+                qps,
+                int(eta) // 60,
+                int(eta) % 60,
+                p50,
+                errors,
+                dict(err_types),
             )
             last_log = now
 
@@ -963,85 +1058,168 @@ def main():
 
     # Mode selection
     parser.add_argument(
-        "--mode", required=True,
+        "--mode",
+        required=True,
         choices=["naive", "pixel", "text", "hybrid"],
         help="Evaluation mode: naive (no retrieval), pixel (screenshot tiles), "
-             "text (text chunks), hybrid (pixel + text combined).",
+        "text (text chunks), hybrid (pixel + text combined).",
     )
 
     # Dataset
-    parser.add_argument("--v4", default=DEFAULT_V4_PATH,
-                        help="Path to LiveVQA v4 JSON with per_query data")
-    parser.add_argument("--max-samples", type=int, default=None,
-                        help="Limit to first N QA pairs (for debugging)")
-    parser.add_argument("--livevqa-images", default=LIVEVQA_IMAGES_DIR,
-                        help="Base directory for LiveVQA editorial photos")
+    parser.add_argument(
+        "--v4",
+        default=DEFAULT_V4_PATH,
+        help="Path to LiveVQA v4 JSON with per_query data",
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Limit to first N QA pairs (for debugging)",
+    )
+    parser.add_argument(
+        "--livevqa-images",
+        default=LIVEVQA_IMAGES_DIR,
+        help="Base directory for LiveVQA editorial photos",
+    )
 
     # Reader (LLM/VLM)
-    parser.add_argument("--api-base", default="http://localhost:8211/v1",
-                        help="OpenAI-compatible API base URL for reader model")
+    parser.add_argument(
+        "--api-base",
+        default="http://localhost:8211/v1",
+        help="OpenAI-compatible API base URL for reader model",
+    )
     parser.add_argument("--api-key", default="dummy")
-    parser.add_argument("--model", default="Qwen/Qwen3-VL-4B-Instruct",
-                        help="Reader model name")
-    parser.add_argument("--max-tokens", type=int, default=16,
-                        help="Max tokens for reader response (just a letter)")
-    parser.add_argument("--reader-timeout", type=float, default=180.0,
-                        help="Per-request timeout for reader calls (seconds)")
-    parser.add_argument("--no-think", action="store_true",
-                        help="Disable thinking via chat_template_kwargs.enable_thinking=False")
-    parser.add_argument("--workers", type=int, default=8,
-                        help="Number of concurrent reader requests")
+    parser.add_argument(
+        "--model", default="Qwen/Qwen3-VL-4B-Instruct", help="Reader model name"
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=16,
+        help="Max tokens for reader response (just a letter)",
+    )
+    parser.add_argument(
+        "--reader-timeout",
+        type=float,
+        default=180.0,
+        help="Per-request timeout for reader calls (seconds)",
+    )
+    parser.add_argument(
+        "--no-think",
+        action="store_true",
+        help="Disable thinking via chat_template_kwargs.enable_thinking=False",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=8, help="Number of concurrent reader requests"
+    )
 
     # Retrieval (shared)
-    parser.add_argument("--top-k", type=int, default=3,
-                        help="Number of retrieved items (chunk-level) to feed the reader")
-    parser.add_argument("--retrieval-top-k", type=int, default=10,
-                        help="Number of items to fetch from search API (before reader top-k slicing)")
-    parser.add_argument("--search-k", type=int, default=50,
-                        help="Number of raw candidates to fetch from FAISS (n_docs)")
-    parser.add_argument("--retrieval-batch-size", type=int, default=16,
-                        help="Batch size for retrieval API calls")
-    parser.add_argument("--nprobe", type=int, default=None,
-                        help="Override FAISS nprobe for retrieval")
-    parser.add_argument("--retrieval-timeout", type=int, default=180,
-                        help="Per-batch timeout for retrieval API calls (seconds)")
-    parser.add_argument("--multimodal-query", action="store_true", default=True,
-                        help="Include editorial photo in retrieval query (default: True)")
-    parser.add_argument("--no-multimodal-query", dest="multimodal_query", action="store_false",
-                        help="Text-only retrieval query (no editorial photo)")
-    parser.add_argument("--query-instruction", default=None,
-                        help="Instruction prefix for pixel retrieval queries")
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=3,
+        help="Number of retrieved items (chunk-level) to feed the reader",
+    )
+    parser.add_argument(
+        "--retrieval-top-k",
+        type=int,
+        default=10,
+        help="Number of items to fetch from search API (before reader top-k slicing)",
+    )
+    parser.add_argument(
+        "--search-k",
+        type=int,
+        default=50,
+        help="Number of raw candidates to fetch from FAISS (n_docs)",
+    )
+    parser.add_argument(
+        "--retrieval-batch-size",
+        type=int,
+        default=16,
+        help="Batch size for retrieval API calls",
+    )
+    parser.add_argument(
+        "--nprobe", type=int, default=None, help="Override FAISS nprobe for retrieval"
+    )
+    parser.add_argument(
+        "--retrieval-timeout",
+        type=int,
+        default=180,
+        help="Per-batch timeout for retrieval API calls (seconds)",
+    )
+    parser.add_argument(
+        "--multimodal-query",
+        action="store_true",
+        default=True,
+        help="Include editorial photo in retrieval query (default: True)",
+    )
+    parser.add_argument(
+        "--no-multimodal-query",
+        dest="multimodal_query",
+        action="store_false",
+        help="Text-only retrieval query (no editorial photo)",
+    )
+    parser.add_argument(
+        "--query-instruction",
+        default=None,
+        help="Instruction prefix for pixel retrieval queries",
+    )
 
     # Pixel retrieval API
-    parser.add_argument("--pixel-api", default="http://localhost:30890/search",
-                        help="News pixel search API endpoint")
-    parser.add_argument("--tiles-dir", default=NEWS_TILES_DIR,
-                        help="Directory containing news article tiles ({hex}.tiles/)")
+    parser.add_argument(
+        "--pixel-api",
+        default="http://localhost:30890/search",
+        help="News pixel search API endpoint",
+    )
+    parser.add_argument(
+        "--tiles-dir",
+        default=NEWS_TILES_DIR,
+        help="Directory containing news article tiles ({hex}.tiles/)",
+    )
 
     # Text retrieval API
-    parser.add_argument("--text-api", default="http://localhost:30892/search",
-                        help="News text search API endpoint")
+    parser.add_argument(
+        "--text-api",
+        default="http://localhost:30892/search",
+        help="News text search API endpoint",
+    )
 
     # DB paths for cross-format lookups
-    parser.add_argument("--pages-db", default="/opt/dlami/nvme/news_pages/state.db",
-                        help="News pages SQLite DB (url<->hex mapping)")
-    parser.add_argument("--chunks-db", default="/opt/dlami/nvme/news_text_embeddings/text_baseline.db",
-                        help="Text chunks SQLite DB (for cross-format text lookups)")
-    parser.add_argument("--hex-to-int-map", default="/opt/dlami/nvme/news_text_embeddings/article_id_map.json",
-                        help="JSON mapping hex article IDs to integer IDs in chunks DB")
+    parser.add_argument(
+        "--pages-db",
+        default="/opt/dlami/nvme/news_pages/state.db",
+        help="News pages SQLite DB (url<->hex mapping)",
+    )
+    parser.add_argument(
+        "--chunks-db",
+        default="/opt/dlami/nvme/news_text_embeddings/text_baseline.db",
+        help="Text chunks SQLite DB (for cross-format text lookups)",
+    )
+    parser.add_argument(
+        "--hex-to-int-map",
+        default="/opt/dlami/nvme/news_text_embeddings/article_id_map.json",
+        help="JSON mapping hex article IDs to integer IDs in chunks DB",
+    )
 
     # Editorial photo handling
-    parser.add_argument("--include-editorial-photo", action=argparse.BooleanOptionalAction,
-                        default=True,
-                        help="Include editorial photo in reader input (default: True)")
+    parser.add_argument(
+        "--include-editorial-photo",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Include editorial photo in reader input (default: True)",
+    )
 
     # Option shuffling
-    parser.add_argument("--shuffle-seed", type=int, default=None,
-                        help="Shuffle option order per question with this seed (seed + idx)")
+    parser.add_argument(
+        "--shuffle-seed",
+        type=int,
+        default=None,
+        help="Shuffle option order per question with this seed (seed + idx)",
+    )
 
     # Output
-    parser.add_argument("--output", required=True,
-                        help="Path for output JSONL file")
+    parser.add_argument("--output", required=True, help="Path for output JSONL file")
 
     args = parser.parse_args()
 

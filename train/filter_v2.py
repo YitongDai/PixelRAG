@@ -119,7 +119,12 @@ async def gpt41_batch(client, queries, batch_idx, semaphore):
                         "model": "gpt-4.1-mini",
                         "messages": [
                             {"role": "system", "content": GPT41_SYSTEM},
-                            {"role": "user", "content": GPT41_USER.format(n=len(queries), block=block)},
+                            {
+                                "role": "user",
+                                "content": GPT41_USER.format(
+                                    n=len(queries), block=block
+                                ),
+                            },
                         ],
                         "temperature": 0,
                         "max_tokens": 300,
@@ -134,13 +139,13 @@ async def gpt41_batch(client, queries, batch_idx, semaphore):
                 if isinstance(labels, list):
                     while len(labels) < len(queries):
                         labels.append(0)
-                    return batch_idx, [int(bool(x)) for x in labels[:len(queries)]]
+                    return batch_idx, [int(bool(x)) for x in labels[: len(queries)]]
                 return batch_idx, [0] * len(queries)
             except Exception as e:
                 if attempt == 2:
                     logger.warning(f"Batch {batch_idx}: {e}")
                     return batch_idx, [0] * len(queries)
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
 
 
 async def main():
@@ -164,9 +169,9 @@ async def main():
     logger.info(f"Loaded {N} records")
 
     # ---- Tier assignments ----
-    tier1_keep = set()   # deep chunks
-    tier2_keep = set()   # keyword-specific in c0-c2
-    tier4_remove = set() # clearly generic
+    tier1_keep = set()  # deep chunks
+    tier2_keep = set()  # keyword-specific in c0-c2
+    tier4_remove = set()  # clearly generic
     tier3_classify = []  # borderline → LLM
 
     for i, r in enumerate(records):
@@ -184,16 +189,24 @@ async def main():
         else:
             tier3_classify.append(i)
 
-    logger.info(f"Tier 1 (deep chunk auto-keep): {len(tier1_keep)} ({len(tier1_keep)/N*100:.1f}%)")
-    logger.info(f"Tier 2 (keyword-specific keep): {len(tier2_keep)} ({len(tier2_keep)/N*100:.1f}%)")
-    logger.info(f"Tier 3 (LLM classify): {len(tier3_classify)} ({len(tier3_classify)/N*100:.1f}%)")
-    logger.info(f"Tier 4 (generic remove): {len(tier4_remove)} ({len(tier4_remove)/N*100:.1f}%)")
+    logger.info(
+        f"Tier 1 (deep chunk auto-keep): {len(tier1_keep)} ({len(tier1_keep) / N * 100:.1f}%)"
+    )
+    logger.info(
+        f"Tier 2 (keyword-specific keep): {len(tier2_keep)} ({len(tier2_keep) / N * 100:.1f}%)"
+    )
+    logger.info(
+        f"Tier 3 (LLM classify): {len(tier3_classify)} ({len(tier3_classify) / N * 100:.1f}%)"
+    )
+    logger.info(
+        f"Tier 4 (generic remove): {len(tier4_remove)} ({len(tier4_remove) / N * 100:.1f}%)"
+    )
 
     # ---- LLM on tier 3 ----
     classify_pairs = [(idx, records[idx]["query"]) for idx in tier3_classify]
     batches = []
     for i in range(0, len(classify_pairs), args.batch_size):
-        batches.append(classify_pairs[i:i + args.batch_size])
+        batches.append(classify_pairs[i : i + args.batch_size])
 
     logger.info(f"Running LLM on {len(batches)} batches...")
     llm_keep = set()
@@ -204,8 +217,10 @@ async def main():
         headers={"Authorization": f"Bearer {api_key}"},
         timeout=90,
     ) as client:
-        tasks = [gpt41_batch(client, [q for _, q in b], bi, semaphore)
-                 for bi, b in enumerate(batches)]
+        tasks = [
+            gpt41_batch(client, [q for _, q in b], bi, semaphore)
+            for bi, b in enumerate(batches)
+        ]
         done = 0
         t0 = time.time()
         for coro in asyncio.as_completed(tasks):
@@ -218,14 +233,16 @@ async def main():
                 elapsed = time.time() - t0
                 rate = done / elapsed if elapsed > 0 else 1
                 eta = (len(tasks) - done) / rate
-                logger.info(f"  LLM: {done}/{len(tasks)}, kept {len(llm_keep)} "
-                           f"({len(llm_keep)/max(1,done*args.batch_size)*100:.0f}%), "
-                           f"ETA {eta:.0f}s")
+                logger.info(
+                    f"  LLM: {done}/{len(tasks)}, kept {len(llm_keep)} "
+                    f"({len(llm_keep) / max(1, done * args.batch_size) * 100:.0f}%), "
+                    f"ETA {eta:.0f}s"
+                )
 
     # ---- Combine ----
     all_keep = tier1_keep | tier2_keep | llm_keep
-    logger.info(f"\n=== FINAL RESULTS ===")
-    logger.info(f"Total kept: {len(all_keep)}/{N} = {len(all_keep)/N*100:.1f}%")
+    logger.info("\n=== FINAL RESULTS ===")
+    logger.info(f"Total kept: {len(all_keep)}/{N} = {len(all_keep) / N * 100:.1f}%")
     logger.info(f"  Tier 1 (deep chunks):    {len(tier1_keep)}")
     logger.info(f"  Tier 2 (keyword):        {len(tier2_keep)}")
     logger.info(f"  Tier 3 (LLM approved):   {len(llm_keep)}")
@@ -233,6 +250,7 @@ async def main():
 
     # Position breakdown
     from collections import Counter
+
     pos = Counter()
     for i in all_keep:
         p, c = parse_chunk_pos(records[i]["chunk_path"])
@@ -253,6 +271,7 @@ async def main():
 
     # Sample for inspection
     import random
+
     random.seed(42)
     sample_file = args.output.replace(".jsonl", "_sample200.jsonl")
     sample = random.sample(sorted(all_keep), min(200, len(all_keep)))

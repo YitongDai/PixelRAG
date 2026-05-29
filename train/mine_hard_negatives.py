@@ -23,18 +23,22 @@ import json
 import logging
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
-                    stream=sys.stdout)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    stream=sys.stdout,
+)
 logger = logging.getLogger(__name__)
 
 SEARCH_URL = "http://localhost:30888/search"
 
 
-def search_batch(queries: list[str], n_docs: int = 20, nprobe: int = 128) -> list[list[dict]]:
+def search_batch(
+    queries: list[str], n_docs: int = 20, nprobe: int = 128
+) -> list[list[dict]]:
     """Query the search API with a batch of text queries."""
     payload = {
         "queries": [{"text": q} for q in queries],
@@ -90,7 +94,7 @@ def mine_from_search(
     n_batches = (len(unique_queries) + batch_size - 1) // batch_size
 
     for i in range(0, len(unique_queries), batch_size):
-        batch_queries = unique_queries[i:i + batch_size]
+        batch_queries = unique_queries[i : i + batch_size]
         batch_idx = i // batch_size + 1
 
         try:
@@ -121,9 +125,16 @@ def mine_from_search(
     # Extract hard negatives per unique query
     query_negatives = {}
     query_metadata = {}
-    stats = {"total": 0, "with_negs": 0, "avg_negs": 0, "avg_pos_rank": 0,
-             "same_article_filtered": 0, "margin_filtered": 0, "skip_top1_filtered": 0,
-             "harder_than_pos": 0}
+    stats = {
+        "total": 0,
+        "with_negs": 0,
+        "avg_negs": 0,
+        "avg_pos_rank": 0,
+        "same_article_filtered": 0,
+        "margin_filtered": 0,
+        "skip_top1_filtered": 0,
+        "harder_than_pos": 0,
+    }
     pos_ranks = []
     pos_rank_distribution = {str(i): 0 for i in range(1, n_docs + 1)}
     pos_rank_distribution[f">{n_docs}"] = 0
@@ -154,7 +165,11 @@ def mine_from_search(
                     if hit.get("article_id") in pos_article_ids:
                         stats["same_article_filtered"] += 1
                         continue
-                elif filter_mode == "margin" and margin is not None and pos_score is not None:
+                elif (
+                    filter_mode == "margin"
+                    and margin is not None
+                    and pos_score is not None
+                ):
                     if hit["score"] > pos_score * margin:
                         stats["margin_filtered"] += 1
                         continue
@@ -198,17 +213,21 @@ def mine_from_search(
     for pair in pairs:
         neg_paths = query_negatives.get(pair["query"], [])
         meta = query_metadata.get(pair["query"], {})
-        output_pairs.append({
-            **pair,
-            "neg_chunk_paths": neg_paths,
-            "retrieve_top20": meta.get("retrieve_top20", []),
-            "positive_score": meta.get("positive_score", 0.0),
-            "positive_rank": meta.get("positive_rank", 0),
-        })
+        output_pairs.append(
+            {
+                **pair,
+                "neg_chunk_paths": neg_paths,
+                "retrieve_top20": meta.get("retrieve_top20", []),
+                "positive_score": meta.get("positive_score", 0.0),
+                "positive_rank": meta.get("positive_rank", 0),
+            }
+        )
 
     # Stats
     total_queries = len(unique_queries)
-    stats["avg_negs"] = sum(len(query_negatives[q]) for q in unique_queries) / total_queries
+    stats["avg_negs"] = (
+        sum(len(query_negatives[q]) for q in unique_queries) / total_queries
+    )
     if pos_ranks:
         stats["avg_pos_rank"] = sum(pos_ranks) / len(pos_ranks)
     stats["pos_found_rate"] = len(pos_ranks) / total_queries
@@ -222,24 +241,50 @@ def mine_from_search(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True, help="Input JSONL with {query, chunk_path}")
-    parser.add_argument("--output", required=True, help="Output JSONL with added neg_chunk_paths")
+    parser.add_argument(
+        "--input", required=True, help="Input JSONL with {query, chunk_path}"
+    )
+    parser.add_argument(
+        "--output", required=True, help="Output JSONL with added neg_chunk_paths"
+    )
     parser.add_argument("--num-negatives", type=int, default=7)
-    parser.add_argument("--n-docs", type=int, default=20,
-                        help="Number of docs to retrieve per query from search API")
-    parser.add_argument("--filter-mode", choices=["article", "margin", "skip_top1", "none"], default="none",
-                        help="False-negative filter: 'article' (skip same article_id), "
-                             "'margin' (skip by score margin), 'none' (no filter)")
-    parser.add_argument("--margin", type=float, default=0.95,
-                        help="Margin threshold (only for --filter-mode margin). Typical: 0.95-0.98")
-    parser.add_argument("--batch-size", type=int, default=64,
-                        help="Batch size for search API queries")
-    parser.add_argument("--chunk-path-prefix", type=str, default="/opt/dlami/nvme/kiwix_tiles/",
-                        help="Prefix to prepend to relative chunk_path for matching search API results")
-    parser.add_argument("--nprobe", type=int, default=128,
-                        help="FAISS nprobe for search API")
-    parser.add_argument("--stats-output", type=str, default=None,
-                        help="Optional JSON path to write mining stats")
+    parser.add_argument(
+        "--n-docs",
+        type=int,
+        default=20,
+        help="Number of docs to retrieve per query from search API",
+    )
+    parser.add_argument(
+        "--filter-mode",
+        choices=["article", "margin", "skip_top1", "none"],
+        default="none",
+        help="False-negative filter: 'article' (skip same article_id), "
+        "'margin' (skip by score margin), 'none' (no filter)",
+    )
+    parser.add_argument(
+        "--margin",
+        type=float,
+        default=0.95,
+        help="Margin threshold (only for --filter-mode margin). Typical: 0.95-0.98",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=64, help="Batch size for search API queries"
+    )
+    parser.add_argument(
+        "--chunk-path-prefix",
+        type=str,
+        default="/opt/dlami/nvme/kiwix_tiles/",
+        help="Prefix to prepend to relative chunk_path for matching search API results",
+    )
+    parser.add_argument(
+        "--nprobe", type=int, default=128, help="FAISS nprobe for search API"
+    )
+    parser.add_argument(
+        "--stats-output",
+        type=str,
+        default=None,
+        help="Optional JSON path to write mining stats",
+    )
     args = parser.parse_args()
 
     # Check search API
@@ -282,10 +327,12 @@ def main():
 
     n_with_negs = sum(1 for p in output_pairs if p["neg_chunk_paths"])
     logger.info(f"Wrote {len(output_pairs)} pairs to {args.output}")
-    logger.info(f"  {n_with_negs} with negatives ({n_with_negs/len(output_pairs):.1%})")
+    logger.info(
+        f"  {n_with_negs} with negatives ({n_with_negs / len(output_pairs):.1%})"
+    )
     logger.info(f"  Avg negatives per query: {stats['avg_negs']:.1f}")
     logger.info(f"  Avg positive rank: {stats.get('avg_pos_rank', 'N/A')}")
-    if 'pos_recall@1' in stats:
+    if "pos_recall@1" in stats:
         logger.info(f"  Search API recall@1: {stats['pos_recall@1']:.3f}")
         logger.info(f"  Search API recall@10: {stats['pos_recall@10']:.3f}")
         logger.info(f"  Search API recall@20: {stats['pos_recall@20']:.3f}")

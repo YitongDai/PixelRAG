@@ -16,7 +16,6 @@ import base64
 import io
 import json
 import logging
-import os
 import signal
 import subprocess
 import time
@@ -31,17 +30,20 @@ VIEWPORT_W = 875
 VIEWPORT_H = 1080
 
 BROWSER_ARGS = [
-    "--disable-dev-shm-usage", "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--no-sandbox",
     "--disable-renderer-backgrounding",
     "--disable-backgrounding-occluded-windows",
     "--disable-background-networking",
     "--disable-features=Translate,MediaRouter,OptimizationHints",
-    "--enable-gpu-rasterization", "--force-gpu-rasterization",
+    "--enable-gpu-rasterization",
+    "--force-gpu-rasterization",
 ]
 
 
 def _find_chrome() -> str:
     from ..chrome import find_chrome
+
     return find_chrome()
 
 
@@ -83,11 +85,18 @@ async def _cdp_send(ws, msg_id_ref: list, method: str, params: dict | None = Non
             return r.get("result", {})
 
 
-async def capture_url(ws, msg_id_ref: list, url: str, tile_dir: Path, *,
-                      tile_h: int = 8192, quality: int = 85,
-                      viewport_w: int = VIEWPORT_W,
-                      image_format: str = "jpeg",
-                      from_surface: bool = True) -> int:
+async def capture_url(
+    ws,
+    msg_id_ref: list,
+    url: str,
+    tile_dir: Path,
+    *,
+    tile_h: int = 8192,
+    quality: int = 85,
+    viewport_w: int = VIEWPORT_W,
+    image_format: str = "jpeg",
+    from_surface: bool = True,
+) -> int:
     """Capture a URL as tiled images via direct CDP websocket.
 
     Returns the number of tiles written.
@@ -97,8 +106,12 @@ async def capture_url(ws, msg_id_ref: list, url: str, tile_dir: Path, *,
     await _cdp_send(ws, msg_id_ref, "Page.navigate", {"url": url})
 
     # Wait for fonts + layout to stabilize, return scrollHeight in one call
-    result = await _cdp_send(ws, msg_id_ref, "Runtime.evaluate", {
-        "expression": """new Promise(resolve => {
+    result = await _cdp_send(
+        ws,
+        msg_id_ref,
+        "Runtime.evaluate",
+        {
+            "expression": """new Promise(resolve => {
             document.fonts.ready.then(() => {
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
@@ -115,9 +128,10 @@ async def capture_url(ws, msg_id_ref: list, url: str, tile_dir: Path, *,
                 });
             });
         })""",
-        "awaitPromise": True,
-        "returnByValue": True,
-    })
+            "awaitPromise": True,
+            "returnByValue": True,
+        },
+    )
     try:
         page_height = result["result"]["value"]
     except (KeyError, TypeError):
@@ -137,8 +151,11 @@ async def capture_url(ws, msg_id_ref: list, url: str, tile_dir: Path, *,
             "fromSurface": from_surface,
             "optimizeForSpeed": True,
             "clip": {
-                "x": 0, "y": y,
-                "width": viewport_w, "height": clip_h, "scale": 1,
+                "x": 0,
+                "y": y,
+                "width": viewport_w,
+                "height": clip_h,
+                "scale": 1,
             },
         }
         if image_format == "jpeg":
@@ -147,15 +164,18 @@ async def capture_url(ws, msg_id_ref: list, url: str, tile_dir: Path, *,
         result = await _cdp_send(ws, msg_id_ref, "Page.captureScreenshot", params)
 
         img_bytes = base64.b64decode(result["data"])
-        tile_path = tile_dir / f"tile_{idx:04d}.{'jpg' if image_format == 'jpeg' else 'png'}"
+        tile_path = (
+            tile_dir / f"tile_{idx:04d}.{'jpg' if image_format == 'jpeg' else 'png'}"
+        )
 
         if clip_h < tile_h:
             img = Image.open(io.BytesIO(img_bytes))
             w, h = img.size
             if h > clip_h:
                 img = img.crop((0, 0, w, clip_h))
-            img.save(tile_path, "JPEG" if image_format == "jpeg" else "PNG",
-                     quality=quality)
+            img.save(
+                tile_path, "JPEG" if image_format == "jpeg" else "PNG", quality=quality
+            )
         else:
             tile_path.write_bytes(img_bytes)
 
@@ -175,15 +195,27 @@ async def capture_url(ws, msg_id_ref: list, url: str, tile_dir: Path, *,
     return len(tiles)
 
 
-async def _worker(chrome_path: str, port: int, work_queue: asyncio.Queue,
-                  output_dir: Path, tile_height: int, quality: int,
-                  viewport_w: int, image_format: str, from_surface: bool,
-                  worker_id: int, stats: dict, results: list):
+async def _worker(
+    chrome_path: str,
+    port: int,
+    work_queue: asyncio.Queue,
+    output_dir: Path,
+    tile_height: int,
+    quality: int,
+    viewport_w: int,
+    image_format: str,
+    from_surface: bool,
+    worker_id: int,
+    stats: dict,
+    results: list,
+):
     """Async worker: owns a Chrome process, pulls URLs from queue."""
     proc = subprocess.Popen(
         [chrome_path, f"--remote-debugging-port={port}", "--headless"]
-        + BROWSER_ARGS + ["about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        + BROWSER_ARGS
+        + ["about:blank"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
     try:
@@ -192,10 +224,17 @@ async def _worker(chrome_path: str, port: int, work_queue: asyncio.Queue,
         msg_id_ref = [0]
 
         await _cdp_send(ws, msg_id_ref, "Page.enable")
-        await _cdp_send(ws, msg_id_ref, "Emulation.setDeviceMetricsOverride", {
-            "width": viewport_w, "height": tile_height,
-            "deviceScaleFactor": 1, "mobile": False,
-        })
+        await _cdp_send(
+            ws,
+            msg_id_ref,
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": viewport_w,
+                "height": tile_height,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+            },
+        )
 
         while True:
             try:
@@ -210,14 +249,21 @@ async def _worker(chrome_path: str, port: int, work_queue: asyncio.Queue,
             t0 = time.monotonic()
             try:
                 n_tiles = await capture_url(
-                    ws, msg_id_ref, url, tile_dir,
-                    tile_h=tile_height, quality=quality,
-                    viewport_w=viewport_w, image_format=image_format,
+                    ws,
+                    msg_id_ref,
+                    url,
+                    tile_dir,
+                    tile_h=tile_height,
+                    quality=quality,
+                    viewport_w=viewport_w,
+                    image_format=image_format,
                     from_surface=from_surface,
                 )
                 stats["done"] += 1
                 elapsed = time.monotonic() - t0
-                logger.info("[w%d] %s → %d tiles (%.1fs)", worker_id, url, n_tiles, elapsed)
+                logger.info(
+                    "[w%d] %s → %d tiles (%.1fs)", worker_id, url, n_tiles, elapsed
+                )
                 results.append(tile_dir)
             except Exception as e:
                 stats["failed"] += 1
@@ -232,10 +278,18 @@ async def _worker(chrome_path: str, port: int, work_queue: asyncio.Queue,
             proc.kill()
 
 
-async def _run_batch(urls: list[str], output_dir: Path, num_workers: int,
-                     tile_height: int, quality: int, viewport_w: int,
-                     image_format: str, from_surface: bool,
-                     stems: list[str] | None, chrome_path: str) -> list[Path]:
+async def _run_batch(
+    urls: list[str],
+    output_dir: Path,
+    num_workers: int,
+    tile_height: int,
+    quality: int,
+    viewport_w: int,
+    image_format: str,
+    from_surface: bool,
+    stems: list[str] | None,
+    chrome_path: str,
+) -> list[Path]:
     work_queue: asyncio.Queue = asyncio.Queue()
     seen_stems: dict[str, int] = {}
     for i, url in enumerate(urls):
@@ -243,9 +297,15 @@ async def _run_batch(urls: list[str], output_dir: Path, num_workers: int,
             stem = str(stems[i])
         else:
             from urllib.parse import urlparse
+
             parsed = urlparse(url)
             raw = (parsed.netloc + parsed.path).rstrip("/")
-            stem = raw.replace("/", "_").replace(":", "_").replace("?", "_").replace("&", "_")
+            stem = (
+                raw.replace("/", "_")
+                .replace(":", "_")
+                .replace("?", "_")
+                .replace("&", "_")
+            )
             stem = stem[:200] or "page"
             count = seen_stems.get(stem, 0)
             seen_stems[stem] = count + 1
@@ -259,9 +319,20 @@ async def _run_batch(urls: list[str], output_dir: Path, num_workers: int,
 
     actual_workers = min(num_workers, len(urls))
     workers = [
-        _worker(chrome_path, base_port + wid, work_queue, output_dir,
-                tile_height, quality, viewport_w, image_format, from_surface,
-                wid, stats, results)
+        _worker(
+            chrome_path,
+            base_port + wid,
+            work_queue,
+            output_dir,
+            tile_height,
+            quality,
+            viewport_w,
+            image_format,
+            from_surface,
+            wid,
+            stats,
+            results,
+        )
         for wid in range(actual_workers)
     ]
     await asyncio.gather(*workers, return_exceptions=True)
@@ -312,7 +383,17 @@ def render_urls(
 
     chrome = chrome_path or _find_chrome()
 
-    return asyncio.run(_run_batch(
-        urls, output_dir, workers, tile_height, quality, viewport_width,
-        image_format, from_surface, stems, chrome,
-    ))
+    return asyncio.run(
+        _run_batch(
+            urls,
+            output_dir,
+            workers,
+            tile_height,
+            quality,
+            viewport_width,
+            image_format,
+            from_surface,
+            stems,
+            chrome,
+        )
+    )

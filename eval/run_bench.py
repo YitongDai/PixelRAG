@@ -40,7 +40,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from lib import (
     # Data
     load_simpleqa_wikipedia,
-    load_text_cache,
     extract_url_from_metadata,
     encode_screenshot,
     make_compressed_encoder,
@@ -52,33 +51,14 @@ from lib import (
     load_commonsenseqa_data,
     load_openbookqa_data,
     load_arc_data,
-    # Retrieval
-    NaiveRetriever,
-    ScreenshotRetriever,
-    TiledScreenshotRetriever,
-    LocalWikiTiledScreenshotRetriever,
-    TextRetriever,
-    JinaReaderRetriever,
-    WikipediaAPIRetriever,
-    VectorRetriever,
-    ColQwenVectorRetriever,
-    TiledVectorRetriever,
-    TiledColQwenVectorRetriever,
-    TiledQwen3VLEmbeddingRetriever,
-    EVQANoRetrievalRetriever,
-    WorldVQANoRetrievalRetriever,
-    TextVectorRetriever,
-    DsServeRetriever,
-    LocalAPIRetriever,
-    TextAPIRetriever,
-    OCRWrappedRetriever,
-    RenderedTextWrapper,
-    HybridRetriever,
-    HTMLDOMLookupRetriever,
 )
 from lib import LLMClient, build_messages, build_react_messages
 from lib.model_config import get_model_config, get_output_filename
-from lib.retrieval import _get_query_image_path_for_example, _save_worldvqa_query_image, _save_task_query_image
+from lib.retrieval import (
+    _get_query_image_path_for_example,
+    _save_worldvqa_query_image,
+    _save_task_query_image,
+)
 from lib.benchmarks import (
     load_encyclopedic_vqa_data,
     load_shortformqa_data,
@@ -124,6 +104,7 @@ def _fetch_status(api_url: str | None, timeout: float = 5.0) -> dict | None:
     if not api_url:
         return None
     import urllib.request
+
     base = api_url.rstrip("/")
     if base.endswith("/search"):
         base = base[: -len("/search")]
@@ -145,13 +126,17 @@ def _build_run_metadata(args, n_loaded: int) -> dict:
     import datetime
     import subprocess
 
-    reader_top_k = args.reader_top_k if args.reader_top_k is not None else args.retrieval_top_k
+    reader_top_k = (
+        args.reader_top_k if args.reader_top_k is not None else args.retrieval_top_k
+    )
     meta = {
         "schema_version": 1,
         "run_started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         # Dataset + split + n
         "task": args.task,
-        "split": getattr(args, "nq_split", None) if args.task == "nq" else _DEFAULT_SPLIT_FOR_TASK.get(args.task, "unknown"),
+        "split": getattr(args, "nq_split", None)
+        if args.task == "nq"
+        else _DEFAULT_SPLIT_FOR_TASK.get(args.task, "unknown"),
         "num_examples_requested": args.num_examples,
         "num_examples_loaded": n_loaded,
         # Reader
@@ -204,9 +189,9 @@ async def process_example(
     """Process a single example: retrieve -> build messages -> call LLM."""
     async with semaphore:
         try:
-            example_id = example.get('id', 'unknown')
+            example_id = example.get("id", "unknown")
             # logger.info(f"Starting processing example {example_id}")
-            
+
             # 1. Retrieve (data preparation happens inside retriever if needed)
             logger.debug(f"Retrieving for example {example_id}")
             retrieval_start_time = time.time()
@@ -219,8 +204,12 @@ async def process_example(
             # 1a. Snapshot the full retrieved set BEFORE reader-side slicing.
             # The JSONL records the full set so downstream grading can re-derive k=1/2/3
             # from a single retrieval-top-k=K_max run without re-querying the index.
-            retrieved_full_images = list(retrieval_result.images) if retrieval_result.images else []
-            retrieved_full_image_urls = list(getattr(retrieval_result, "image_urls", []) or [])
+            retrieved_full_images = (
+                list(retrieval_result.images) if retrieval_result.images else []
+            )
+            retrieved_full_image_urls = list(
+                getattr(retrieval_result, "image_urls", []) or []
+            )
             # 1b. Reader-side top-k (decoupled from retrieval-k). Slice in place so build_messages
             # and the LLM see only the first reader_top_k items.
             reader_top_k = (run_metadata or {}).get("reader_top_k")
@@ -231,7 +220,9 @@ async def process_example(
             ):
                 retrieval_result.images = retrieval_result.images[:reader_top_k]
                 if getattr(retrieval_result, "image_urls", None):
-                    retrieval_result.image_urls = retrieval_result.image_urls[:reader_top_k]
+                    retrieval_result.image_urls = retrieval_result.image_urls[
+                        :reader_top_k
+                    ]
                 urls = []
                 seen_urls = set()
                 for url in getattr(retrieval_result, "image_urls", []) or []:
@@ -252,19 +243,30 @@ async def process_example(
             if not retrieval_result.query_image_path and retrieval_result.has_content:
                 if task_name == "encyclopedic_vqa":
                     tiles_dir = getattr(retriever, "tiles_dir", None) or "tiles/evqa"
-                    img_path = _get_query_image_path_for_example(example, tiles_dir, quiet=True)
+                    img_path = _get_query_image_path_for_example(
+                        example, tiles_dir, quiet=True
+                    )
                     if img_path:
                         retrieval_result.query_image_path = img_path
-                elif task_name in ("worldvqa", "simplevqa", "factualvqa", "mmsearch", "webqa", "multimodalqa"):
-                    img_path = _save_task_query_image(example, task_name, base_dir="tiles")
+                elif task_name in (
+                    "worldvqa",
+                    "simplevqa",
+                    "factualvqa",
+                    "mmsearch",
+                    "webqa",
+                    "multimodalqa",
+                ):
+                    img_path = _save_task_query_image(
+                        example, task_name, base_dir="tiles"
+                    )
                     if img_path:
                         retrieval_result.query_image_path = img_path
 
             # 2. Build messages
-            logger.debug(
-                f"Building messages for example {example_id}"
+            logger.debug(f"Building messages for example {example_id}")
+            _encode_fn = (
+                encode_image_fn if encode_image_fn is not None else encode_screenshot
             )
-            _encode_fn = encode_image_fn if encode_image_fn is not None else encode_screenshot
             messages = build_messages(
                 query=example["problem"],
                 retrieval_result=retrieval_result,
@@ -279,19 +281,19 @@ async def process_example(
             llm_start_time = time.time()
             generated_text, usage = await llm_client.generate(messages)
             llm_time = time.time() - llm_start_time
-            
+
             # Update progress counter
             if progress_counter is not None:
-                progress_counter['completed'] += 1
-                completed = progress_counter['completed']
-                progress_pct = (completed / total_examples * 100) if total_examples > 0 else 0
-                
+                progress_counter["completed"] += 1
+                completed = progress_counter["completed"]
+                ((completed / total_examples * 100) if total_examples > 0 else 0)
+
                 # Accumulate timing stats
-                if 'retrieval_times' not in progress_counter:
-                    progress_counter['retrieval_times'] = []
-                    progress_counter['llm_times'] = []
-                progress_counter['retrieval_times'].append(retrieval_time)
-                progress_counter['llm_times'].append(llm_time)
+                if "retrieval_times" not in progress_counter:
+                    progress_counter["retrieval_times"] = []
+                    progress_counter["llm_times"] = []
+                progress_counter["retrieval_times"].append(retrieval_time)
+                progress_counter["llm_times"].append(llm_time)
 
             # 4. Build result
             result = {
@@ -304,7 +306,11 @@ async def process_example(
                 "problem": example["problem"],
                 "model": llm_client.model,
                 "final_response": generated_text,
-                "original_data": {k: v for k, v in example.items() if not hasattr(v, "save") and not k.startswith("_")},
+                "original_data": {
+                    k: v
+                    for k, v in example.items()
+                    if not hasattr(v, "save") and not k.startswith("_")
+                },
                 "full_traces": {},
                 "dataset_name": task_name,
                 "retrieval_type": retrieval_result.retrieval_type,
@@ -332,35 +338,58 @@ async def process_example(
                 result["retrieved_images"] = []
                 for idx, (path, score) in enumerate(retrieved_full_images):
                     item = {"path": path, "score": score}
-                    if idx < len(retrieved_full_image_urls) and retrieved_full_image_urls[idx]:
+                    if (
+                        idx < len(retrieved_full_image_urls)
+                        and retrieved_full_image_urls[idx]
+                    ):
                         item["url"] = retrieved_full_image_urls[idx]
                     result["retrieved_images"].append(item)
             if retrieval_result.pixel_query_path:
                 result["pixel_query_path"] = retrieval_result.pixel_query_path
 
             # Always include query image path in result for eval analysis
-            query_img_path = retrieval_result.query_image_path or retrieval_result.pixel_query_path
+            query_img_path = (
+                retrieval_result.query_image_path or retrieval_result.pixel_query_path
+            )
             if not query_img_path:
                 if task_name == "encyclopedic_vqa" and tiles_dir:
-                    query_img_path = _get_query_image_path_for_example(example, tiles_dir)
+                    query_img_path = _get_query_image_path_for_example(
+                        example, tiles_dir
+                    )
                 elif task_name == "worldvqa":
-                    query_img_path = _save_worldvqa_query_image(example, base_dir="tiles")
-                elif task_name in ("simplevqa", "factualvqa", "mmsearch", "webqa", "multimodalqa"):
-                    query_img_path = _save_task_query_image(example, task_name, base_dir="tiles")
+                    query_img_path = _save_worldvqa_query_image(
+                        example, base_dir="tiles"
+                    )
+                elif task_name in (
+                    "simplevqa",
+                    "factualvqa",
+                    "mmsearch",
+                    "webqa",
+                    "multimodalqa",
+                ):
+                    query_img_path = _save_task_query_image(
+                        example, task_name, base_dir="tiles"
+                    )
             if query_img_path:
                 result["query_image_path"] = query_img_path
 
             # Record compressed image paths if pixel compression was used
-            if _encode_fn is not None and hasattr(_encode_fn, 'compressed_paths') and retrieval_result.images:
+            if (
+                _encode_fn is not None
+                and hasattr(_encode_fn, "compressed_paths")
+                and retrieval_result.images
+            ):
                 compressed_images = []
                 for orig_path, score in retrieval_result.images:
                     comp_path = _encode_fn.compressed_paths.get(orig_path)
                     if comp_path:
-                        compressed_images.append({
-                            "original_path": orig_path,
-                            "compressed_path": comp_path,
-                            "score": score,
-                        })
+                        compressed_images.append(
+                            {
+                                "original_path": orig_path,
+                                "compressed_path": comp_path,
+                                "score": score,
+                            }
+                        )
                 if compressed_images:
                     result["compressed_images"] = compressed_images
                     result["pixel_compress_ratio"] = _encode_fn.compress_ratio
@@ -377,13 +406,13 @@ async def process_example(
             import traceback
 
             error_trace = traceback.format_exc()
-            example_id = example.get('id', 'unknown')
-            
+            example_id = example.get("id", "unknown")
+
             # Update progress counter even on error
             if progress_counter is not None:
-                progress_counter['completed'] += 1
+                progress_counter["completed"] += 1
                 logger.warning(f"Example {example_id} failed: {e}")
-            
+
             logger.error(f"Error processing {example_id}: {e}")
             logger.error(f"Traceback: {error_trace}")
             result = {
@@ -391,7 +420,11 @@ async def process_example(
                 "problem": example.get("problem"),
                 "model": llm_client.model,
                 "final_response": None,
-                "original_data": {k: v for k, v in example.items() if not hasattr(v, "save") and not k.startswith("_")},
+                "original_data": {
+                    k: v
+                    for k, v in example.items()
+                    if not hasattr(v, "save") and not k.startswith("_")
+                },
                 "dataset_name": task_name,
                 "success": False,
                 "error": str(e),
@@ -413,9 +446,12 @@ import re
 _SEARCH_TAG_RE = re.compile(r"<search>(.*?)</search>", re.DOTALL)
 
 
-async def _local_api_search(api_url: str, query_text: str, top_k: int, nprobe: int | None = None) -> list[dict]:
+async def _local_api_search(
+    api_url: str, query_text: str, top_k: int, nprobe: int | None = None
+) -> list[dict]:
     """Single-query search against local API, returns hits."""
     import aiohttp
+
     payload = {"queries": [{"text": query_text}], "n_docs": top_k}
     if nprobe is not None:
         payload["nprobe"] = nprobe
@@ -436,9 +472,10 @@ async def _local_api_search(api_url: str, query_text: str, top_k: int, nprobe: i
         return []
 
 
-def _hits_to_retrieval_result(hits: list[dict]) -> "RetrievalResult":
+def _hits_to_retrieval_result(hits: list[dict]) -> "RetrievalResult":  # noqa: F821
     """Convert API hits to RetrievalResult (same logic as LocalAPIRetriever)."""
     from lib.retrieval import RetrievalResult
+
     if not hits:
         return RetrievalResult(retrieval_type="local_api_react")
     images = []
@@ -502,10 +539,12 @@ async def process_example_react(
             total_llm_time = 0.0
             turns_used = 1
 
-            _encode_fn = encode_image_fn if encode_image_fn is not None else encode_screenshot
+            _encode_fn = (
+                encode_image_fn if encode_image_fn is not None else encode_screenshot
+            )
 
             for turn in range(max_turns):
-                is_last = (turn == max_turns - 1)
+                is_last = turn == max_turns - 1
                 # Build messages (multi-turn)
                 messages = build_react_messages(
                     query=example["problem"],
@@ -535,11 +574,15 @@ async def process_example_react(
                 search_query = match.group(1).strip()
                 all_search_queries.append(search_query)
                 assistant_responses.append(generated_text)
-                logger.info(f"ReAct [{example_id}] turn {turn+1}: searching '{search_query[:80]}'")
+                logger.info(
+                    f"ReAct [{example_id}] turn {turn + 1}: searching '{search_query[:80]}'"
+                )
 
                 # New retrieval
                 ret_start = time.time()
-                new_hits = await _local_api_search(api_url, search_query, react_top_k, nprobe)
+                new_hits = await _local_api_search(
+                    api_url, search_query, react_top_k, nprobe
+                )
                 total_retrieval_time += time.time() - ret_start
                 retrieval_results.append(_hits_to_retrieval_result(new_hits))
             else:
@@ -580,7 +623,11 @@ async def process_example_react(
                 "problem": example["problem"],
                 "model": llm_client.model,
                 "final_response": final_response,
-                "original_data": {k: v for k, v in example.items() if not hasattr(v, "save") and not k.startswith("_")},
+                "original_data": {
+                    k: v
+                    for k, v in example.items()
+                    if not hasattr(v, "save") and not k.startswith("_")
+                },
                 "full_traces": {},
                 "dataset_name": task_name,
                 "retrieval_type": "local_api_react",
@@ -622,6 +669,7 @@ async def process_example_react(
 
         except Exception as e:
             import traceback
+
             error_trace = traceback.format_exc()
             example_id = example.get("id", "unknown")
 
@@ -636,13 +684,21 @@ async def process_example_react(
                 "problem": example.get("problem"),
                 "model": llm_client.model,
                 "final_response": None,
-                "original_data": {k: v for k, v in example.items() if not hasattr(v, "save") and not k.startswith("_")},
+                "original_data": {
+                    k: v
+                    for k, v in example.items()
+                    if not hasattr(v, "save") and not k.startswith("_")
+                },
                 "dataset_name": task_name,
                 "retrieval_type": "local_api_react",
                 "success": False,
                 "error": str(e),
                 "error_type": type(e).__name__,
-                "timing": {"retrieval_time": None, "llm_time": None, "total_time": None},
+                "timing": {
+                    "retrieval_time": None,
+                    "llm_time": None,
+                    "total_time": None,
+                },
             }
             if output_file:
                 with open(output_file, "a") as f:
@@ -667,29 +723,47 @@ def print_statistics(results: list[dict], args) -> None:
     print(f"  Failed: {failure_count} ({failure_count / total * 100:.1f}%)")
 
     # Timing statistics
-    successful_results = [r for r in results if r.get("success", False) and r.get("timing")]
+    successful_results = [
+        r for r in results if r.get("success", False) and r.get("timing")
+    ]
     if successful_results:
-        retrieval_times = [r["timing"]["retrieval_time"] for r in successful_results if r["timing"].get("retrieval_time") is not None]
-        llm_times = [r["timing"]["llm_time"] for r in successful_results if r["timing"].get("llm_time") is not None]
-        total_times = [r["timing"]["total_time"] for r in successful_results if r["timing"].get("total_time") is not None]
-        
+        retrieval_times = [
+            r["timing"]["retrieval_time"]
+            for r in successful_results
+            if r["timing"].get("retrieval_time") is not None
+        ]
+        llm_times = [
+            r["timing"]["llm_time"]
+            for r in successful_results
+            if r["timing"].get("llm_time") is not None
+        ]
+        total_times = [
+            r["timing"]["total_time"]
+            for r in successful_results
+            if r["timing"].get("total_time") is not None
+        ]
+
         if retrieval_times:
-            print(f"\nTiming Statistics (for {len(successful_results)} successful requests):")
-            print(f"  Jina read time:")
+            print(
+                f"\nTiming Statistics (for {len(successful_results)} successful requests):"
+            )
+            print("  Jina read time:")
             print(f"    Mean: {sum(retrieval_times) / len(retrieval_times):.2f}s")
             print(f"    Min: {min(retrieval_times):.2f}s")
             print(f"    Max: {max(retrieval_times):.2f}s")
-            print(f"    Median: {sorted(retrieval_times)[len(retrieval_times) // 2]:.2f}s")
-        
+            print(
+                f"    Median: {sorted(retrieval_times)[len(retrieval_times) // 2]:.2f}s"
+            )
+
         if llm_times:
-            print(f"  LLM call time:")
+            print("  LLM call time:")
             print(f"    Mean: {sum(llm_times) / len(llm_times):.2f}s")
             print(f"    Min: {min(llm_times):.2f}s")
             print(f"    Max: {max(llm_times):.2f}s")
             print(f"    Median: {sorted(llm_times)[len(llm_times) // 2]:.2f}s")
-        
+
         if total_times:
-            print(f"  Total time:")
+            print("  Total time:")
             print(f"    Mean: {sum(total_times) / len(total_times):.2f}s")
             print(f"    Min: {min(total_times):.2f}s")
             print(f"    Max: {max(total_times):.2f}s")
@@ -703,7 +777,7 @@ def print_statistics(results: list[dict], args) -> None:
             rt = r.get("retrieval_type", "unknown")
             type_counts[rt] = type_counts.get(rt, 0) + 1
 
-        print(f"\nRetrieval types (successful only):")
+        print("\nRetrieval types (successful only):")
         for rt, count in type_counts.items():
             print(f"  {rt}: {count} ({count / len(successful) * 100:.1f}%)")
 
@@ -716,12 +790,14 @@ def print_statistics(results: list[dict], args) -> None:
             for r in retrieval_results:
                 # Try to get ground truth URL from metadata
                 gt_url = extract_url_from_metadata(r.get("original_data", {}))
-                
+
                 if not gt_url:
                     # Fallback: match by example_id in tile filename
                     example_id = r.get("example_id", "")
                     for img_info in r.get("retrieved_images", []):
-                        img_path = img_info.get("original_path") or img_info.get("path", "")
+                        img_path = img_info.get("original_path") or img_info.get(
+                            "path", ""
+                        )
                         img_basename = os.path.basename(img_path)
                         if example_id in img_basename:
                             correct += 1
@@ -734,7 +810,7 @@ def print_statistics(results: list[dict], args) -> None:
                     if gt_url in retrieved_url:
                         correct += 1
 
-            print(f"\nRetrieval Accuracy:")
+            print("\nRetrieval Accuracy:")
             print(
                 f"  Correct (top-{args.retrieval_top_k}): {correct}/{len(retrieval_results)} ({correct / len(retrieval_results) * 100:.1f}%)"
             )
@@ -744,13 +820,18 @@ def print_statistics(results: list[dict], args) -> None:
     if react_results:
         turns = [r["react_turns"] for r in react_results]
         from collections import Counter
+
         turn_counts = Counter(turns)
-        print(f"\nReAct Turn Distribution:")
+        print("\nReAct Turn Distribution:")
         for t in sorted(turn_counts):
-            print(f"  {t} turn(s): {turn_counts[t]} ({turn_counts[t]/len(react_results)*100:.1f}%)")
-        print(f"  Average turns: {sum(turns)/len(turns):.2f}")
+            print(
+                f"  {t} turn(s): {turn_counts[t]} ({turn_counts[t] / len(react_results) * 100:.1f}%)"
+            )
+        print(f"  Average turns: {sum(turns) / len(turns):.2f}")
         multi_turn = sum(1 for t in turns if t > 1)
-        print(f"  Examples needing re-search: {multi_turn}/{len(react_results)} ({multi_turn/len(react_results)*100:.1f}%)")
+        print(
+            f"  Examples needing re-search: {multi_turn}/{len(react_results)} ({multi_turn / len(react_results) * 100:.1f}%)"
+        )
 
     print("-" * 40)
     print(f"Results saved to {args.output}")
@@ -760,7 +841,11 @@ async def run_async(args):
     """Main async entry point."""
     # 1. Load data
     if args.task == "simpleqa":
-        examples = load_simpleqa_wikipedia(args.num_examples, verified=args.verified, no_wiki_filter=getattr(args, "no_wiki_filter", False))
+        examples = load_simpleqa_wikipedia(
+            args.num_examples,
+            verified=args.verified,
+            no_wiki_filter=getattr(args, "no_wiki_filter", False),
+        )
     elif args.task == "encyclopedic_vqa":
         split = args.subset or "val"
         examples = load_encyclopedic_vqa_data(
@@ -774,7 +859,9 @@ async def run_async(args):
             for ex in examples:
                 ex["additional_instructions"] = args.evqa_instruction_override
     elif args.task == "worldvqa":
-        examples = load_worldvqa_data(args.num_examples, language_filter=getattr(args, 'worldvqa_language', None))
+        examples = load_worldvqa_data(
+            args.num_examples, language_filter=getattr(args, "worldvqa_language", None)
+        )
     elif args.task == "2wiki":
         dataset_repo = DATASET_REPOS["2wiki"]
         examples = load_shortformqa_data(dataset_repo, args.num_examples)
@@ -789,7 +876,9 @@ async def run_async(args):
     elif args.task == "multimodalqa":
         examples = load_multimodalqa_data(args.num_examples)
     elif args.task == "nq":
-        examples = load_nq_data(args.num_examples, split=getattr(args, "nq_split", "validation"))
+        examples = load_nq_data(
+            args.num_examples, split=getattr(args, "nq_split", "validation")
+        )
     elif args.task == "triviaqa":
         examples = load_triviaqa_data(args.num_examples)
     elif args.task == "nq_tables":
@@ -820,33 +909,43 @@ async def run_async(args):
     # Build the per-run reproducibility metadata once, after dataset is loaded so
     # we know n_loaded. Stamped on every JSONL record by process_example().
     run_metadata = _build_run_metadata(args, n_loaded=len(examples))
-    print(f"\n[run_metadata] task={run_metadata['task']} split={run_metadata['split']} "
-          f"n_requested={run_metadata['num_examples_requested']} n_loaded={run_metadata['num_examples_loaded']} "
-          f"retrieval_top_k={run_metadata['retrieval_top_k']} reader_top_k={run_metadata['reader_top_k']} "
-          f"reader={run_metadata['reader_model']}")
+    print(
+        f"\n[run_metadata] task={run_metadata['task']} split={run_metadata['split']} "
+        f"n_requested={run_metadata['num_examples_requested']} n_loaded={run_metadata['num_examples_loaded']} "
+        f"retrieval_top_k={run_metadata['retrieval_top_k']} reader_top_k={run_metadata['reader_top_k']} "
+        f"reader={run_metadata['reader_model']}"
+    )
     for api_key in ("local_api_status", "text_api_status"):
         st = run_metadata.get(api_key)
         if st and "_error" not in st:
-            print(f"[run_metadata] {api_key}: vec={st.get('total_vectors')} "
-                  f"built_at={st.get('index_built_at')} model={st.get('model')}")
+            print(
+                f"[run_metadata] {api_key}: vec={st.get('total_vectors')} "
+                f"built_at={st.get('index_built_at')} model={st.get('model')}"
+            )
         elif st:
             print(f"[run_metadata] {api_key}: ERROR {st.get('_error')}")
 
     if args.task in ("nq", "triviaqa", "nq_tables"):
         for ex in examples:
-            ex["additional_instructions"] = "Answer with as few words as possible. Give only the answer, no explanation."
+            ex["additional_instructions"] = (
+                "Answer with as few words as possible. Give only the answer, no explanation."
+            )
 
     if args.reader_extra_instructions:
         for ex in examples:
             base = ex.get("additional_instructions") or ""
-            ex["additional_instructions"] = (base + "\n\n" + args.reader_extra_instructions).strip()
+            ex["additional_instructions"] = (
+                base + "\n\n" + args.reader_extra_instructions
+            ).strip()
 
     if args.reader_few_shot_json:
         with open(args.reader_few_shot_json) as _fsf:
             _demos = json.load(_fsf)
         for ex in examples:
             ex["_reader_few_shot"] = _demos
-        logger.info(f"Loaded {len(_demos)} few-shot demo(s) from {args.reader_few_shot_json}")
+        logger.info(
+            f"Loaded {len(_demos)} few-shot demo(s) from {args.reader_few_shot_json}"
+        )
 
     # Get model configuration
     model_config = get_model_config(args.model)
@@ -859,7 +958,9 @@ async def run_async(args):
         else:
             api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key or api_key == "dummy":
-            raise ValueError("OpenRouter API key required. Set --api-key or OPENROUTER_API_KEY environment variable.")
+            raise ValueError(
+                "OpenRouter API key required. Set --api-key or OPENROUTER_API_KEY environment variable."
+            )
         logger.info(f"Using OpenRouter API with model: {args.model}")
         model = args.model
     elif args.commonstack:
@@ -869,7 +970,9 @@ async def run_async(args):
         else:
             api_key = os.getenv("COMMONSTACK_API_KEY")
         if not api_key or api_key == "dummy":
-            raise ValueError("Commonstack API key required. Set --api-key or COMMONSTACK_API_KEY environment variable.")
+            raise ValueError(
+                "Commonstack API key required. Set --api-key or COMMONSTACK_API_KEY environment variable."
+            )
         logger.info(f"Using Commonstack API with model: {args.model}")
         model = args.model
     else:
@@ -942,7 +1045,7 @@ async def run_async(args):
             if args.task == "2wiki":
                 mode_str = "naive"
 
-        output_dir = f"eval_output"
+        output_dir = "eval_output"
         args.output = get_output_filename(
             output_dir=output_dir,
             model_name=model,
@@ -957,7 +1060,9 @@ async def run_async(args):
     # Check if output file exists
     if os.path.exists(args.output) and os.path.getsize(args.output) > 0:
         if not args.force:
-            print(f"Error: Output file '{args.output}' already exists and is not empty.")
+            print(
+                f"Error: Output file '{args.output}' already exists and is not empty."
+            )
             print("Use --force to overwrite.")
             sys.exit(1)
         else:
@@ -970,7 +1075,6 @@ async def run_async(args):
     # 2. Initialize retriever (each retriever uses data layer internally)
     # Tile width is fixed to 1024 (matches screenshot width)
     TILE_WIDTH = 1024
-    tile_size = (TILE_WIDTH, args.tile_height)
 
     # Set default tiles_dir if not specified
     if args.tiles_dir is None:
@@ -982,12 +1086,17 @@ async def run_async(args):
     BASE_TOKENS_PER_TILE = 1050  # for 1024x1024
     TOKENS_PER_TILE = int(BASE_TOKENS_PER_TILE * args.tile_height / 1024)
     RESERVED_TOKENS = 2000  # For question and response
-    if args.max_tiles is None and (args.url_tiled_screenshot or args.use_tiled_retrieval):
+    if args.max_tiles is None and (
+        args.url_tiled_screenshot or args.use_tiled_retrieval
+    ):
         available_tokens = args.model_context_length - RESERVED_TOKENS
         args.max_tiles = max(1, available_tokens // TOKENS_PER_TILE)
-        logger.info(f"Auto-calculated max_tiles: {args.max_tiles} (context={args.model_context_length}, per_tile={TOKENS_PER_TILE}, tile={TILE_WIDTH}x{args.tile_height})")
+        logger.info(
+            f"Auto-calculated max_tiles: {args.max_tiles} (context={args.model_context_length}, per_tile={TOKENS_PER_TILE}, tile={TILE_WIDTH}x{args.tile_height})"
+        )
 
     from lib.retrievers import build_retriever
+
     retriever, mode = build_retriever(args, examples, model, api_base, api_key)
     # (retriever selection logic moved to simpleqa/retriever_factory.py)
     # 3. Initialize LLM client
@@ -1019,24 +1128,37 @@ async def run_async(args):
     logger.info(
         f"Processing {total_examples} examples (Mode: {mode}, Concurrency: {args.max_concurrent})"
     )
-    print(f"\n{'='*80}")
-    print(f"Starting evaluation: {total_examples} examples with max {args.max_concurrent} concurrent requests")
+    print(f"\n{'=' * 80}")
+    print(
+        f"Starting evaluation: {total_examples} examples with max {args.max_concurrent} concurrent requests"
+    )
     if gen_encode_fn:
-        print(f"Pixel compression for generation: {args.pixel_compress_ratio}x (retrieval at original resolution)")
-    print(f"{'='*80}\n")
-    
-    semaphore = asyncio.Semaphore(args.max_concurrent)
-    
-    # Progress counter (shared dict for async updates)
-    progress_counter = {'completed': 0, 'start_time': time.time()}
+        print(
+            f"Pixel compression for generation: {args.pixel_compress_ratio}x (retrieval at original resolution)"
+        )
+    print(f"{'=' * 80}\n")
 
-    tiles_dir = getattr(retriever, "tiles_dir", None) or (args.tiles_dir if hasattr(args, "tiles_dir") else None)
+    semaphore = asyncio.Semaphore(args.max_concurrent)
+
+    # Progress counter (shared dict for async updates)
+    progress_counter = {"completed": 0, "start_time": time.time()}
+
+    tiles_dir = getattr(retriever, "tiles_dir", None) or (
+        args.tiles_dir if hasattr(args, "tiles_dir") else None
+    )
     if args.react and args.local_api:
         tasks = [
             process_example_react(
-                llm_client, retriever, ex, semaphore, args.output,
-                progress_counter, total_examples, encode_image_fn=gen_encode_fn,
-                task_name=args.task, tiles_dir=tiles_dir,
+                llm_client,
+                retriever,
+                ex,
+                semaphore,
+                args.output,
+                progress_counter,
+                total_examples,
+                encode_image_fn=gen_encode_fn,
+                task_name=args.task,
+                tiles_dir=tiles_dir,
                 max_turns=args.react_max_turns,
                 api_url=args.local_api_url,
                 react_top_k=args.retrieval_top_k,
@@ -1047,18 +1169,34 @@ async def run_async(args):
         ]
     else:
         tasks = [
-            process_example(llm_client, retriever, ex, semaphore, args.output, progress_counter, total_examples, encode_image_fn=gen_encode_fn, task_name=args.task, tiles_dir=tiles_dir, run_metadata=run_metadata)
+            process_example(
+                llm_client,
+                retriever,
+                ex,
+                semaphore,
+                args.output,
+                progress_counter,
+                total_examples,
+                encode_image_fn=gen_encode_fn,
+                task_name=args.task,
+                tiles_dir=tiles_dir,
+                run_metadata=run_metadata,
+            )
             for ex in examples
         ]
 
     results = await tqdm_asyncio.gather(*tasks)
-    
+
     # Print completion summary
-    elapsed_time = time.time() - progress_counter['start_time']
-    print(f"\n{'='*80}")
-    print(f"Evaluation completed: {progress_counter['completed']}/{total_examples} examples in {elapsed_time:.1f}s")
-    print(f"Average time per example: {elapsed_time/max(1, progress_counter['completed']):.2f}s")
-    print(f"{'='*80}\n")
+    elapsed_time = time.time() - progress_counter["start_time"]
+    print(f"\n{'=' * 80}")
+    print(
+        f"Evaluation completed: {progress_counter['completed']}/{total_examples} examples in {elapsed_time:.1f}s"
+    )
+    print(
+        f"Average time per example: {elapsed_time / max(1, progress_counter['completed']):.2f}s"
+    )
+    print(f"{'=' * 80}\n")
 
     # 5. Print statistics
     print_statistics(results, args)
@@ -1074,8 +1212,26 @@ def main():
         "--task",
         type=str,
         default="simpleqa",
-        choices=["simpleqa", "encyclopedic_vqa", "worldvqa", "2wiki", "simplevqa", "factualvqa", "mmsearch", "webqa", "multimodalqa", "nq", "triviaqa", "nq_tables",
-                 "piqa", "hellaswag", "commonsense_qa", "openbookqa", "arc_easy", "arc_challenge"],
+        choices=[
+            "simpleqa",
+            "encyclopedic_vqa",
+            "worldvqa",
+            "2wiki",
+            "simplevqa",
+            "factualvqa",
+            "mmsearch",
+            "webqa",
+            "multimodalqa",
+            "nq",
+            "triviaqa",
+            "nq_tables",
+            "piqa",
+            "hellaswag",
+            "commonsense_qa",
+            "openbookqa",
+            "arc_easy",
+            "arc_challenge",
+        ],
         help="Task/benchmark to run (default: simpleqa)",
     )
     parser.add_argument(
@@ -1103,7 +1259,7 @@ def main():
         type=str,
         default=None,
         help="EVQA only: filter by question_type. Comma-separate to allow multiple "
-             "(e.g. 'automatic,templated'). Valid values: templated, automatic, multi_answer, 2_hop.",
+        "(e.g. 'automatic,templated'). Valid values: templated, automatic, multi_answer, 2_hop.",
     )
     parser.add_argument(
         "--worldvqa-language",
@@ -1123,7 +1279,7 @@ def main():
         type=str,
         default=None,
         help="EVQA only: replace per-example additional_instructions with this string. "
-             "Used to standardize prompt across readers for fair comparison.",
+        "Used to standardize prompt across readers for fair comparison.",
     )
 
     # Required args
@@ -1153,12 +1309,12 @@ def main():
     parser.add_argument(
         "--open-router",
         action="store_true",
-        help="Use OpenRouter API (https://openrouter.ai). Requires --api-key or OPENROUTER_API_KEY env var."
+        help="Use OpenRouter API (https://openrouter.ai). Requires --api-key or OPENROUTER_API_KEY env var.",
     )
     parser.add_argument(
         "--commonstack",
         action="store_true",
-        help="Use Commonstack API (https://api.commonstack.ai). Requires --api-key or COMMONSTACK_API_KEY env var."
+        help="Use Commonstack API (https://api.commonstack.ai). Requires --api-key or COMMONSTACK_API_KEY env var.",
     )
 
     # General args
@@ -1182,7 +1338,10 @@ def main():
         "--max-concurrent", type=int, default=200, help="Max concurrent requests"
     )
     parser.add_argument(
-        "--timeout", type=float, default=120.0, help="Request timeout in seconds (increase for tiled mode)"
+        "--timeout",
+        type=float,
+        default=120.0,
+        help="Request timeout in seconds (increase for tiled mode)",
     )
     parser.add_argument(
         "--screenshot-dir", type=str, default="screenshots", help="Screenshot directory"
@@ -1190,21 +1349,27 @@ def main():
 
     # Retrieval mode args (mutually exclusive)
     parser.add_argument(
-        "--url-screenshot", action="store_true", help="Use ground-truth screenshot for each example"
+        "--url-screenshot",
+        action="store_true",
+        help="Use ground-truth screenshot for each example",
     )
     parser.add_argument(
         "--max-pixels",
         type=int,
         default=None,
         help="Max pixels for screenshot resize (for --url-screenshot). "
-             "None=no resize (VLM handles it). "
-             "Common values: 16777216 (16M, ~16K tokens), 4000000 (4M, ~4K tokens), 1000000 (1M, ~1K tokens)"
+        "None=no resize (VLM handles it). "
+        "Common values: 16777216 (16M, ~16K tokens), 4000000 (4M, ~4K tokens), 1000000 (1M, ~1K tokens)",
     )
     parser.add_argument(
-        "--url-tiled-screenshot", action="store_true", help="Use ground-truth screenshot split into tiles"
+        "--url-tiled-screenshot",
+        action="store_true",
+        help="Use ground-truth screenshot split into tiles",
     )
     parser.add_argument(
-        "--url-text", action="store_true", help="Use text content from URL (crawl/jina/wikipedia)"
+        "--url-text",
+        action="store_true",
+        help="Use text content from URL (crawl/jina/wikipedia)",
     )
     parser.add_argument(
         "--text-source",
@@ -1247,12 +1412,18 @@ def main():
         help="Disable Qwen3 thinking via chat_template_kwargs.enable_thinking=False",
     )
     parser.add_argument(
-        "--text-cache", type=str, default="auto", help="Pre-fetched text JSONL (default: auto-generate based on text-source)"
+        "--text-cache",
+        type=str,
+        default="auto",
+        help="Pre-fetched text JSONL (default: auto-generate based on text-source)",
     )
 
     # Vector retrieval specific
     parser.add_argument(
-        "--retrieval-top-k", type=int, default=3, help="Top-k items the retriever fetches per query"
+        "--retrieval-top-k",
+        type=int,
+        default=3,
+        help="Top-k items the retriever fetches per query",
     )
     parser.add_argument(
         "--reader-top-k",
@@ -1356,7 +1527,7 @@ def main():
         "--evqa-multimodal-query",
         action="store_true",
         help="EVQA only: pass text + image as separate modalities to query embedding (no query card). "
-             "Uses GLDv2 landmark / iNaturalist image + question text. Requires --use-tiled-retrieval --use-qwen3vl-embedding.",
+        "Uses GLDv2 landmark / iNaturalist image + question text. Requires --use-tiled-retrieval --use-qwen3vl-embedding.",
     )
     parser.add_argument(
         "--evqa-multimodal-query-text-only",
@@ -1372,8 +1543,8 @@ def main():
         "--evqa-multi-image-query",
         action="store_true",
         help="EVQA only: use ALL query images per example for retrieval (not just the first). "
-             "Each image is used for separate multimodal search, scores are aggregated via max. "
-             "Requires --evqa-multimodal-query --use-tiled-retrieval --use-qwen3vl-embedding.",
+        "Each image is used for separate multimodal search, scores are aggregated via max. "
+        "Requires --evqa-multimodal-query --use-tiled-retrieval --use-qwen3vl-embedding.",
     )
     parser.add_argument(
         "--tiles-dir",
@@ -1382,7 +1553,10 @@ def main():
         help="Directory to store image tiles (default: tiles-1024x{tile_height})",
     )
     parser.add_argument(
-        "--tile-height", type=int, default=1024, help="Tile height in pixels (width is fixed to 1024)"
+        "--tile-height",
+        type=int,
+        default=1024,
+        help="Tile height in pixels (width is fixed to 1024)",
     )
     parser.add_argument(
         "--tile-overlap", type=int, default=0, help="Overlap between tiles in pixels"
@@ -1399,7 +1573,7 @@ def main():
         "--pixel-query",
         action="store_true",
         help="Render queries as images (pixel queries) for retrieval and LLM input. "
-             "Only works with --use-tiled-retrieval --use-qwen3vl-embedding.",
+        "Only works with --use-tiled-retrieval --use-qwen3vl-embedding.",
     )
     parser.add_argument(
         "--pixel-query-dir",
@@ -1419,7 +1593,7 @@ def main():
         type=str,
         default=None,
         help="Directory to store raw local-wiki tile downloads (default: screenshots-localwiki). "
-             "Keeps local-wiki cache separate from regular screenshots.",
+        "Keeps local-wiki cache separate from regular screenshots.",
     )
 
     parser.add_argument(
@@ -1427,7 +1601,7 @@ def main():
         type=str,
         default=None,
         help="Path to a prebuilt tile directory (e.g. tiles-hard-mini/) containing ALL tiles "
-             "(golden + distractor). Bypasses tile preparation — loads all .png files in the dir.",
+        "(golden + distractor). Bypasses tile preparation — loads all .png files in the dir.",
     )
 
     parser.add_argument(
@@ -1450,9 +1624,9 @@ def main():
         type=float,
         default=None,
         help="Pixel compression ratio for generation images (float, ≥1.0). "
-             "Divides total pixel count by this factor (dimensions by sqrt). "
-             "E.g. for 1024x1024 tile: 1.5->837x837, 4->512x512, 9->341x341, 16->256x256, 25->205x205. "
-             "Retrieval is always at original resolution. Default: no compression.",
+        "Divides total pixel count by this factor (dimensions by sqrt). "
+        "E.g. for 1024x1024 tile: 1.5->837x837, 4->512x512, 9->341x341, 16->256x256, 25->205x205. "
+        "Retrieval is always at original resolution. Default: no compression.",
     )
 
     # Local API retrieval
@@ -1488,42 +1662,42 @@ def main():
         "--no-query-image",
         action="store_true",
         help="Suppress attaching the example's query image to the retrieval query. "
-             "Only affects --local-api (screenshot index): the retriever sends text-only. "
-             "Reader still receives the query image. Useful for ablations that isolate the "
-             "visual contribution of the retrieval query (not the reader).",
+        "Only affects --local-api (screenshot index): the retriever sends text-only. "
+        "Reader still receives the query image. Useful for ablations that isolate the "
+        "visual contribution of the retrieval query (not the reader).",
     )
     parser.add_argument(
         "--query-instruction",
         type=str,
         default=None,
         help="Override query embedding instruction string sent to the search API(s). "
-             "Applies to --local-api (screenshot, :30888) and --text-api (:30889) and "
-             "both legs of --hybrid. Default: server-side default "
-             "('Retrieve images or text relevant to the user's query.' for screenshot, "
-             "'Retrieve text relevant to the user's query.' for text).",
+        "Applies to --local-api (screenshot, :30888) and --text-api (:30889) and "
+        "both legs of --hybrid. Default: server-side default "
+        "('Retrieve images or text relevant to the user's query.' for screenshot, "
+        "'Retrieve text relevant to the user's query.' for text).",
     )
     parser.add_argument(
         "--reader-extra-instructions",
         type=str,
         default=None,
         help="Extra free-form instructions appended to the reader's user-message "
-             "additional_instructions (after the task's default, e.g. the short-answer "
-             "directive for nq/triviaqa/nq_tables). Use for reader-side prompt ablations "
-             "(e.g. visual-grid steering, few-shot format demos).",
+        "additional_instructions (after the task's default, e.g. the short-answer "
+        "directive for nq/triviaqa/nq_tables). Use for reader-side prompt ablations "
+        "(e.g. visual-grid steering, few-shot format demos).",
     )
     parser.add_argument(
         "--reader-few-shot-json",
         type=str,
         default=None,
         help="Path to a JSON list of few-shot demos, each {'question','image_path','answer'}. "
-             "When set, build_messages prepends (Example N, image, Q+A) blocks to every "
-             "reader user-message. Works across pixel / text / naive modes.",
+        "When set, build_messages prepends (Example N, image, Q+A) blocks to every "
+        "reader user-message. Works across pixel / text / naive modes.",
     )
     parser.add_argument(
         "--lookup-reference-url",
         action="store_true",
         help="For local-api mode: also look up the ground-truth reference URL in kiwix "
-             "and append its tiles to the API search results (deduplicated by article ID).",
+        "and append its tiles to the API search results (deduplicated by article ID).",
     )
     parser.add_argument(
         "--reranker",
@@ -1640,7 +1814,7 @@ def main():
         "--read-as-text-ocr",
         action="store_true",
         help="Ablation A: OCR retrieved tiles and feed text to reader. "
-             "Requires an image retrieval mode (--local-api, --use-tiled-retrieval, etc.).",
+        "Requires an image retrieval mode (--local-api, --use-tiled-retrieval, etc.).",
     )
     parser.add_argument(
         "--ocr-url",
@@ -1672,7 +1846,7 @@ def main():
         "--render-as-image",
         action="store_true",
         help="Ablation B: render each retrieved text chunk as a compact Wikipedia-style image "
-             "and feed images to the VLM reader. Requires --text-api.",
+        "and feed images to the VLM reader. Requires --text-api.",
     )
     parser.add_argument(
         "--render-dir",
@@ -1687,23 +1861,23 @@ def main():
         "--hybrid",
         action="store_true",
         help="Hybrid retrieval: query both the image search API (--local-api-url) and the "
-             "text search API (--text-api-url), merge hits by raw score desc, take top "
-             "--retrieval-top-k overall. Feeds images for image hits and text for text hits "
-             "to the same VL reader. Mutually exclusive with --local-api / --text-api / "
-             "--read-as-text-ocr / --render-as-image.",
+        "text search API (--text-api-url), merge hits by raw score desc, take top "
+        "--retrieval-top-k overall. Feeds images for image hits and text for text hits "
+        "to the same VL reader. Mutually exclusive with --local-api / --text-api / "
+        "--read-as-text-ocr / --render-as-image.",
     )
     parser.add_argument(
         "--html-dom-lookup",
         action="store_true",
         help="HTML DOM lookup baseline: use text retrieval (--text-api-url) to find chunks, "
-             "then look up their containing DOM structure in the original HTML from kiwix-serve. "
-             "Returns structured HTML context (tables, sections) to the reader instead of flat text.",
+        "then look up their containing DOM structure in the original HTML from kiwix-serve. "
+        "Returns structured HTML context (tables, sections) to the reader instead of flat text.",
     )
     parser.add_argument(
         "--llm-verify",
         action="store_true",
         help="(With --html-dom-lookup) Use an LLM (GPT-4.1-mini) to verify/improve DOM "
-             "closure extraction. Falls back to heuristic when LLM call fails.",
+        "closure extraction. Falls back to heuristic when LLM call fails.",
     )
 
     args = parser.parse_args()
@@ -1735,10 +1909,17 @@ def main():
     # Validate EVQA multimodal ablation flags
     if args.evqa_multimodal_query_text_only or args.evqa_multimodal_query_image_only:
         if not args.evqa_multimodal_query:
-            print("Error: --evqa-multimodal-query-text-only and --evqa-multimodal-query-image-only require --evqa-multimodal-query.")
+            print(
+                "Error: --evqa-multimodal-query-text-only and --evqa-multimodal-query-image-only require --evqa-multimodal-query."
+            )
             sys.exit(1)
-        if args.evqa_multimodal_query_text_only and args.evqa_multimodal_query_image_only:
-            print("Error: --evqa-multimodal-query-text-only and --evqa-multimodal-query-image-only are mutually exclusive.")
+        if (
+            args.evqa_multimodal_query_text_only
+            and args.evqa_multimodal_query_image_only
+        ):
+            print(
+                "Error: --evqa-multimodal-query-text-only and --evqa-multimodal-query-image-only are mutually exclusive."
+            )
             sys.exit(1)
 
     # Set default tiles-dir and screenshot-dir for EVQA (use cached paths)
@@ -1746,7 +1927,9 @@ def main():
         if args.tiles_dir is None:
             args.tiles_dir = "tiles/evqa_localwiki" if args.local_wiki else "tiles/evqa"
         if args.use_tiled_retrieval and args.screenshot_dir == "screenshots":
-            args.screenshot_dir = "screenshots/evqa_localwiki" if args.local_wiki else "screenshots/evqa"
+            args.screenshot_dir = (
+                "screenshots/evqa_localwiki" if args.local_wiki else "screenshots/evqa"
+            )
     elif args.tiles_dir is None:
         if args.local_wiki:
             args.tiles_dir = f"tiles-local-wiki-h{args.tile_height}"
@@ -1772,7 +1955,9 @@ def main():
     if args.url_text and args.text_cache == "auto":
         cache_dir = "text_cache"
         os.makedirs(cache_dir, exist_ok=True)
-        args.text_cache = os.path.join(cache_dir, f"text_cache_{args.text_source}.jsonl")
+        args.text_cache = os.path.join(
+            cache_dir, f"text_cache_{args.text_source}.jsonl"
+        )
         logger.info(f"Using text cache: {args.text_cache}")
     elif args.text_cache == "auto":
         args.text_cache = None  # Disable cache for non-text modes
@@ -1795,7 +1980,11 @@ def main():
         or args.retrieval_augment
         or (args.text_vector and args.text_source == "ds-serve")
     ) and args.max_concurrent > 20:
-        reason = "ds-serve API" if (args.text_vector and args.text_source == "ds-serve") else "image processing"
+        reason = (
+            "ds-serve API"
+            if (args.text_vector and args.text_source == "ds-serve")
+            else "image processing"
+        )
         logger.warning(
             f"Lowering max_concurrent from {args.max_concurrent} to 20 for {reason} stability."
         )

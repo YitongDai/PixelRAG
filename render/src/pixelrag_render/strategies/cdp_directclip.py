@@ -61,7 +61,6 @@ class CDPDirectClipStrategy:
 
     @property
     def name(self) -> str:
-        l = "pw" if self.launcher == "playwright" else "ws"
         hs = " HS" if self.headless_shell else ""
         return f"{self.n_workers}w {self.fmt} dc{self.tile_height}{hs}"
 
@@ -74,15 +73,23 @@ class CDPDirectClipStrategy:
         else:
             for i in range(self.n_workers):
                 conn = await launch_websocket(
-                    self.chrome_path, self._base_port + i,
-                    headless_shell=self.headless_shell)
+                    self.chrome_path,
+                    self._base_port + i,
+                    headless_shell=self.headless_shell,
+                )
                 self._connections.append(conn)
 
         for conn in self._connections:
             await conn.cdp("Page.enable")
-            await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT,
-                "deviceScaleFactor": 1, "mobile": False})
+            await conn.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": VIEWPORT_HEIGHT,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
 
         if self.fmt == "raw":
             os.makedirs("/dev/shm/pixelrag_bench", exist_ok=True)
@@ -107,7 +114,8 @@ class CDPDirectClipStrategy:
                 all_results[article_index[article["path"]]] = ac
 
         await asyncio.gather(
-            *[worker_task(i) for i in range(n)], return_exceptions=True)
+            *[worker_task(i) for i in range(n)], return_exceptions=True
+        )
         return [r for r in all_results if r is not None]
 
     async def _capture_one(self, wi: int, article: dict) -> ArticleCapture:
@@ -122,11 +130,14 @@ class CDPDirectClipStrategy:
             return ac
 
         try:
-            r = await conn.cdp("Runtime.evaluate", {
-                "expression": WAIT_FONTS,
-                "awaitPromise": True,
-                "returnByValue": True,
-            })
+            r = await conn.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": WAIT_FONTS,
+                    "awaitPromise": True,
+                    "returnByValue": True,
+                },
+            )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = VIEWPORT_HEIGHT
@@ -137,7 +148,9 @@ class CDPDirectClipStrategy:
         nav_ms = (time.monotonic() - t_nav) * 1000
         ac.total_nav_ms = nav_ms
         ac.page_height = page_h
-        ac.n_tiles_expected = max(1, (page_h + self.tile_height - 1) // self.tile_height)
+        ac.n_tiles_expected = max(
+            1, (page_h + self.tile_height - 1) // self.tile_height
+        )
 
         # Process page in viewport-sized chunks
         viewport_y = 0
@@ -146,13 +159,17 @@ class CDPDirectClipStrategy:
         while viewport_y < page_h:
             # Scroll to this viewport chunk
             if viewport_y > 0:
-                await conn.cdp("Runtime.evaluate",
-                    {"expression": f"window.scrollTo(0, {viewport_y})"})
-                await conn.cdp("Runtime.evaluate", {
-                    "expression":
-                        "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
-                    "awaitPromise": True,
-                })
+                await conn.cdp(
+                    "Runtime.evaluate",
+                    {"expression": f"window.scrollTo(0, {viewport_y})"},
+                )
+                await conn.cdp(
+                    "Runtime.evaluate",
+                    {
+                        "expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
+                        "awaitPromise": True,
+                    },
+                )
 
             # Calculate tiles within this viewport chunk
             chunk_end = min(viewport_y + VIEWPORT_HEIGHT, page_h)
@@ -171,7 +188,7 @@ class CDPDirectClipStrategy:
                 break
 
             # Fire all directClip requests in parallel
-            if hasattr(conn, '_ws'):
+            if hasattr(conn, "_ws"):
                 # Websocket: true parallel
                 t0 = time.monotonic()
                 pending = []
@@ -181,21 +198,32 @@ class CDPDirectClipStrategy:
                     params = {
                         "directClip": True,
                         "optimizeForSpeed": True,
-                        "clip": {"x": 0, "y": ty, "width": VIEWPORT_WIDTH,
-                                 "height": ch, "scale": 1},
+                        "clip": {
+                            "x": 0,
+                            "y": ty,
+                            "width": VIEWPORT_WIDTH,
+                            "height": ch,
+                            "scale": 1,
+                        },
                     }
                     if self.fmt == "raw":
-                        params["rawFilePath"] = f"/dev/shm/pixelrag_bench/w{wi}_{tile_idx}.raw"
+                        params["rawFilePath"] = (
+                            f"/dev/shm/pixelrag_bench/w{wi}_{tile_idx}.raw"
+                        )
                     else:
                         params["format"] = self.fmt
                         if self.fmt == "jpeg":
                             params["quality"] = self.quality
 
-                    await conn._ws.send(json.dumps({
-                        "id": mid,
-                        "method": "Page.captureScreenshot",
-                        "params": params,
-                    }))
+                    await conn._ws.send(
+                        json.dumps(
+                            {
+                                "id": mid,
+                                "method": "Page.captureScreenshot",
+                                "params": params,
+                            }
+                        )
+                    )
                     pending.append((mid, tile_idx, ty, ch))
 
                 # Collect responses
@@ -203,8 +231,9 @@ class CDPDirectClipStrategy:
                 collected = {}
                 while len(collected) < len(pending):
                     try:
-                        r = json.loads(await asyncio.wait_for(
-                            conn._ws.recv(), timeout=180))
+                        r = json.loads(
+                            await asyncio.wait_for(conn._ws.recv(), timeout=180)
+                        )
                         rid = r.get("id")
                         if rid in mid_to_info:
                             collected[rid] = r
@@ -220,7 +249,8 @@ class CDPDirectClipStrategy:
                     r = collected.get(mid)
                     if not r or "error" in r:
                         ac.errors.append(
-                            f"tile {tile_idx}: {r.get('error') if r else 'no response'}")
+                            f"tile {tile_idx}: {r.get('error') if r else 'no response'}"
+                        )
                         continue
 
                     tc = TileCapture(
@@ -231,7 +261,9 @@ class CDPDirectClipStrategy:
                         clip_h=ch,
                     )
                     if self.fmt == "raw":
-                        tc.raw_file_path = f"/dev/shm/pixelrag_bench/w{wi}_{tile_idx}.raw"
+                        tc.raw_file_path = (
+                            f"/dev/shm/pixelrag_bench/w{wi}_{tile_idx}.raw"
+                        )
                     else:
                         tc.image_bytes = base64.b64decode(r["result"]["data"])
                     ac.tiles.append(tc)
@@ -242,11 +274,18 @@ class CDPDirectClipStrategy:
                     params = {
                         "directClip": True,
                         "optimizeForSpeed": True,
-                        "clip": {"x": 0, "y": ty, "width": VIEWPORT_WIDTH,
-                                 "height": ch, "scale": 1},
+                        "clip": {
+                            "x": 0,
+                            "y": ty,
+                            "width": VIEWPORT_WIDTH,
+                            "height": ch,
+                            "scale": 1,
+                        },
                     }
                     if self.fmt == "raw":
-                        params["rawFilePath"] = f"/dev/shm/pixelrag_bench/w{wi}_{tile_idx}.raw"
+                        params["rawFilePath"] = (
+                            f"/dev/shm/pixelrag_bench/w{wi}_{tile_idx}.raw"
+                        )
                     else:
                         params["format"] = self.fmt
                         if self.fmt == "jpeg":
@@ -265,9 +304,14 @@ class CDPDirectClipStrategy:
                         tc = TileCapture(
                             shot_ms=shot_ms,
                             nav_ms=nav_ms if tile_idx == 0 else 0.0,
-                            tile_index=tile_idx, clip_y=ty, clip_h=ch)
+                            tile_index=tile_idx,
+                            clip_y=ty,
+                            clip_h=ch,
+                        )
                         if self.fmt == "raw":
-                            tc.raw_file_path = f"/dev/shm/pixelrag_bench/w{wi}_{tile_idx}.raw"
+                            tc.raw_file_path = (
+                                f"/dev/shm/pixelrag_bench/w{wi}_{tile_idx}.raw"
+                            )
                         else:
                             tc.image_bytes = base64.b64decode(r["result"]["data"])
                         ac.tiles.append(tc)

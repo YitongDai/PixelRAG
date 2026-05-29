@@ -28,8 +28,11 @@ def format_assistant(reasoning: str, answer: str) -> str:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--traces", required=True,
-                   help="JSONL with {query, chunk_path, answer, reasoning}")
+    p.add_argument(
+        "--traces",
+        required=True,
+        help="JSONL with {query, chunk_path, answer, reasoning}",
+    )
     p.add_argument("--output-dir", default=f"{BASE_DATA}/think_sft")
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args()
@@ -59,13 +62,18 @@ def main():
             if not Path(img_path).exists():
                 skipped += 1
                 continue
-            data.append({
-                "messages": [
-                    {"role": "user", "content": "<image>\n" + t["query"]},
-                    {"role": "assistant", "content": format_assistant(t["reasoning"], t["answer"])},
-                ],
-                "images": [img_path],
-            })
+            data.append(
+                {
+                    "messages": [
+                        {"role": "user", "content": "<image>\n" + t["query"]},
+                        {
+                            "role": "assistant",
+                            "content": format_assistant(t["reasoning"], t["answer"]),
+                        },
+                    ],
+                    "images": [img_path],
+                }
+            )
         print(f"  {c}: {len(data)} ({skipped} skipped)")
         out_json = out / f"train_{c}.json"
         out_json.write_text(json.dumps(data, ensure_ascii=False))
@@ -74,8 +82,12 @@ def main():
             "file_name": str(out_json),
             "formatting": "sharegpt",
             "columns": {"messages": "messages", "images": "images"},
-            "tags": {"role_tag": "role", "content_tag": "content",
-                     "user_tag": "user", "assistant_tag": "assistant"},
+            "tags": {
+                "role_tag": "role",
+                "content_tag": "content",
+                "user_tag": "user",
+                "assistant_tag": "assistant",
+            },
         }
 
     # Mixed dataset: concat all 4
@@ -90,8 +102,12 @@ def main():
         "file_name": str(mixed_json),
         "formatting": "sharegpt",
         "columns": {"messages": "messages", "images": "images"},
-        "tags": {"role_tag": "role", "content_tag": "content",
-                 "user_tag": "user", "assistant_tag": "assistant"},
+        "tags": {
+            "role_tag": "role",
+            "content_tag": "content",
+            "user_tag": "user",
+            "assistant_tag": "assistant",
+        },
     }
 
     # Reuse existing eval sets (no reasoning needed, we still eval on plain Q→A)
@@ -107,8 +123,12 @@ def main():
             "file_name": f"{BASE_DATA}/compressed_{c}/eval.json",
             "formatting": "sharegpt",
             "columns": {"messages": "messages", "images": "images"},
-            "tags": {"role_tag": "role", "content_tag": "content",
-                     "user_tag": "user", "assistant_tag": "assistant"},
+            "tags": {
+                "role_tag": "role",
+                "content_tag": "content",
+                "user_tag": "user",
+                "assistant_tag": "assistant",
+            },
         }
 
     info_path = out / "dataset_info.json"

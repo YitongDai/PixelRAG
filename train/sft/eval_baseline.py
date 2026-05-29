@@ -22,7 +22,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import torch
-from PIL import Image
 from tqdm import tqdm
 from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
@@ -59,40 +58,71 @@ def _resolve_image_path(ex: dict, images_root: str) -> str:
     return os.path.join(images_root, rel)
 
 
-def run_inference(model, processor, examples, images_root: str, device: str,
-                  desc: str, max_new_tokens: int = 128, enable_thinking: bool = False):
+def run_inference(
+    model,
+    processor,
+    examples,
+    images_root: str,
+    device: str,
+    desc: str,
+    max_new_tokens: int = 128,
+    enable_thinking: bool = False,
+):
     """Run VQA inference on a list of examples; returns list of (golden, predicted) pairs."""
     results = []
     for ex in tqdm(examples, desc=desc):
         img_path = _resolve_image_path(ex, images_root)
         if not os.path.exists(img_path):
-            results.append({"query": ex["query"], "golden": ex["answer"].strip(),
-                            "predicted": "", "image_missing": True})
+            results.append(
+                {
+                    "query": ex["query"],
+                    "golden": ex["answer"].strip(),
+                    "predicted": "",
+                    "image_missing": True,
+                }
+            )
             continue
 
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "image", "image": f"file://{img_path}"},
-                {"type": "text", "text": ex["query"]},
-            ],
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": f"file://{img_path}"},
+                    {"type": "text", "text": ex["query"]},
+                ],
+            }
+        ]
 
         text = processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
             enable_thinking=enable_thinking,
         )
         image_inputs, video_inputs = process_vision_info(messages)
-        inputs = processor(text=[text], images=image_inputs, videos=video_inputs,
-                           padding=True, return_tensors="pt").to(device)
+        inputs = processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        ).to(device)
 
         with torch.no_grad():
-            out_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-        gen_ids = out_ids[0][inputs.input_ids.shape[1]:]
+            out_ids = model.generate(
+                **inputs, max_new_tokens=max_new_tokens, do_sample=False
+            )
+        gen_ids = out_ids[0][inputs.input_ids.shape[1] :]
         pred = processor.decode(gen_ids, skip_special_tokens=True).strip()
 
-        results.append({"query": ex["query"], "golden": ex["answer"].strip(),
-                        "predicted": pred, "chunk_path": ex["chunk_path"]})
+        results.append(
+            {
+                "query": ex["query"],
+                "golden": ex["answer"].strip(),
+                "predicted": pred,
+                "chunk_path": ex["chunk_path"],
+            }
+        )
     return results
 
 
@@ -123,20 +153,23 @@ def compute_em_char(results):
 def grade_with_gpt(results, model: str, concurrency: int = 16):
     """Grade predictions with GPT-4.1. Returns list of (bool correct, raw grade)."""
     from openai import OpenAI
+
     client = OpenAI()  # uses OPENAI_API_KEY + OPENAI_BASE_URL from env
 
     def _grade(idx, r):
         try:
             resp = client.chat.completions.create(
                 model=model,
-                messages=[{
-                    "role": "user",
-                    "content": _GRADER_TEMPLATE.format(
-                        question=r["query"],
-                        target=r["golden"],
-                        predicted_answer=r["predicted"] or "(no answer)",
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": _GRADER_TEMPLATE.format(
+                            question=r["query"],
+                            target=r["golden"],
+                            predicted_answer=r["predicted"] or "(no answer)",
+                        ),
+                    }
+                ],
                 max_tokens=5,
                 temperature=0,
             )
@@ -162,39 +195,68 @@ def grade_with_gpt(results, model: str, concurrency: int = 16):
     for i, (grade, is_correct) in enumerate(verdicts):
         results[i]["judge_grade"] = grade
         results[i]["judge_correct"] = is_correct
-    return {"llm_judge_accuracy": correct / n if n else 0.0,
-            "llm_judge_correct": correct, "llm_judge_total": n}
+    return {
+        "llm_judge_accuracy": correct / n if n else 0.0,
+        "llm_judge_correct": correct,
+        "llm_judge_total": n,
+    }
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="Qwen/Qwen3-VL-4B-Instruct")
-    p.add_argument("--adapter", default=None,
-                   help="Path to LoRA adapter checkpoint (optional). If unset, use base model.")
-    p.add_argument("--dataset-dir", default="/scratch/users/zwcolin/cxr_embeds/external_data/screenshot-training-natural-filtered-v2",
-                   help="Directory containing <split>_hn_with_answer.jsonl")
+    p.add_argument(
+        "--adapter",
+        default=None,
+        help="Path to LoRA adapter checkpoint (optional). If unset, use base model.",
+    )
+    p.add_argument(
+        "--dataset-dir",
+        default="/scratch/users/zwcolin/cxr_embeds/external_data/screenshot-training-natural-filtered-v2",
+        help="Directory containing <split>_hn_with_answer.jsonl",
+    )
     p.add_argument("--split", default="test", choices=["train", "eval", "test"])
-    p.add_argument("--images-root", default=None,
-                   help="Directory that contains the images/ subtree. "
-                        "Default: --dataset-dir (uncompressed). For compressed eval, pass "
-                        "/scratch/users/zwcolin/cxr_embeds/sft_data/compressed_Nx")
+    p.add_argument(
+        "--images-root",
+        default=None,
+        help="Directory that contains the images/ subtree. "
+        "Default: --dataset-dir (uncompressed). For compressed eval, pass "
+        "/scratch/users/zwcolin/cxr_embeds/sft_data/compressed_Nx",
+    )
     p.add_argument("--n-examples", type=int, default=500)
     p.add_argument("--max-new-tokens", type=int, default=128)
-    p.add_argument("--thinking", action="store_true",
-                   help="Enable <think></think> mode. Auto-bumps max-new-tokens to 512 if still default.")
+    p.add_argument(
+        "--thinking",
+        action="store_true",
+        help="Enable <think></think> mode. Auto-bumps max-new-tokens to 512 if still default.",
+    )
     p.add_argument("--device", default="cuda:0")
-    p.add_argument("--judge", action="store_true", default=True,
-                   help="Run GPT-4.1 judge (default on).")
+    p.add_argument(
+        "--judge",
+        action="store_true",
+        default=True,
+        help="Run GPT-4.1 judge (default on).",
+    )
     p.add_argument("--no-judge", dest="judge", action="store_false")
     p.add_argument("--judge-model", default="gpt-4.1-2025-04-14")
     p.add_argument("--judge-concurrency", type=int, default=16)
-    p.add_argument("--tag", required=True, help="Run label (e.g. 'base_0x', 'sft_3x'). Used in output filename.")
-    p.add_argument("--output-dir", default="/scratch/users/zwcolin/cxr_embeds/cxr_embedding/sft/eval_out")
+    p.add_argument(
+        "--tag",
+        required=True,
+        help="Run label (e.g. 'base_0x', 'sft_3x'). Used in output filename.",
+    )
+    p.add_argument(
+        "--output-dir",
+        default="/scratch/users/zwcolin/cxr_embeds/cxr_embedding/sft/eval_out",
+    )
     args = p.parse_args()
 
     if args.judge and not os.environ.get("OPENAI_API_KEY"):
-        print("ERROR: --judge set but OPENAI_API_KEY not in env. "
-              "Run `source .env` (repo root) or pass --no-judge.", file=sys.stderr)
+        print(
+            "ERROR: --judge set but OPENAI_API_KEY not in env. "
+            "Run `source .env` (repo root) or pass --no-judge.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     images_root = args.images_root or args.dataset_dir
@@ -202,10 +264,13 @@ def main():
     # Load model (+ optional adapter)
     print(f"Loading base model: {args.model}")
     model = Qwen3VLForConditionalGeneration.from_pretrained(
-        args.model, torch_dtype=torch.bfloat16, device_map=args.device,
+        args.model,
+        torch_dtype=torch.bfloat16,
+        device_map=args.device,
     )
     if args.adapter:
         from peft import PeftModel
+
         print(f"Loading LoRA adapter: {args.adapter}")
         model = PeftModel.from_pretrained(model, args.adapter)
         model = model.merge_and_unload()
@@ -218,19 +283,26 @@ def main():
     with open(jsonl) as f:
         examples = [json.loads(line) for line in f]
     if args.n_examples > 0:
-        examples = examples[:args.n_examples]
+        examples = examples[: args.n_examples]
     print(f"Loaded {len(examples)} examples from {jsonl}")
     print(f"Images root: {images_root}")
 
     # Auto-bump max-new-tokens for thinking mode
     if args.thinking and args.max_new_tokens < 512:
         args.max_new_tokens = 512
-        print(f"Thinking enabled: bumped max_new_tokens to 512")
+        print("Thinking enabled: bumped max_new_tokens to 512")
 
     # Inference
-    results = run_inference(model, processor, examples, images_root, args.device,
-                            desc=f"eval[{args.tag}]", max_new_tokens=args.max_new_tokens,
-                            enable_thinking=args.thinking)
+    results = run_inference(
+        model,
+        processor,
+        examples,
+        images_root,
+        args.device,
+        desc=f"eval[{args.tag}]",
+        max_new_tokens=args.max_new_tokens,
+        enable_thinking=args.thinking,
+    )
 
     # Compute metrics
     metrics = compute_em_char(results)
@@ -240,10 +312,14 @@ def main():
     print(f"  char_accuracy: {metrics['char_accuracy']:.4f}")
 
     if args.judge:
-        judge_metrics = grade_with_gpt(results, args.judge_model, args.judge_concurrency)
+        judge_metrics = grade_with_gpt(
+            results, args.judge_model, args.judge_concurrency
+        )
         metrics.update(judge_metrics)
-        print(f"  llm_judge:     {metrics['llm_judge_accuracy']:.4f} "
-              f"({metrics['llm_judge_correct']}/{metrics['llm_judge_total']})")
+        print(
+            f"  llm_judge:     {metrics['llm_judge_accuracy']:.4f} "
+            f"({metrics['llm_judge_correct']}/{metrics['llm_judge_total']})"
+        )
 
     # Save
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)

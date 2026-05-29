@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
-import os
 import time
 from dataclasses import dataclass
 
@@ -49,7 +48,6 @@ class CDPFullpageStrategy:
 
     @property
     def name(self) -> str:
-        l = "pw" if self.launcher == "playwright" else "ws"
         hs = " HS" if self.headless_shell else ""
         return f"{self.n_workers}w {self.fmt} full{hs}"
 
@@ -62,8 +60,10 @@ class CDPFullpageStrategy:
         else:
             for i in range(self.n_workers):
                 conn = await launch_websocket(
-                    self.chrome_path, self._base_port + i,
-                    headless_shell=self.headless_shell)
+                    self.chrome_path,
+                    self._base_port + i,
+                    headless_shell=self.headless_shell,
+                )
                 self._connections.append(conn)
 
         for conn in self._connections:
@@ -89,7 +89,8 @@ class CDPFullpageStrategy:
                 all_results[article_index[article["path"]]] = ac
 
         await asyncio.gather(
-            *[worker_task(i) for i in range(n)], return_exceptions=True)
+            *[worker_task(i) for i in range(n)], return_exceptions=True
+        )
         return [r for r in all_results if r is not None]
 
     async def _capture_one(self, wi: int, article: dict) -> ArticleCapture:
@@ -97,9 +98,15 @@ class CDPFullpageStrategy:
         ac = ArticleCapture(article_path=article["path"])
 
         # Step 1: small viewport, navigate, measure true height
-        await conn.cdp("Emulation.setDeviceMetricsOverride", {
-            "width": VIEWPORT_WIDTH, "height": MEASURE_HEIGHT,
-            "deviceScaleFactor": 1, "mobile": False})
+        await conn.cdp(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": VIEWPORT_WIDTH,
+                "height": MEASURE_HEIGHT,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+            },
+        )
 
         t_nav = time.monotonic()
         try:
@@ -111,8 +118,10 @@ class CDPFullpageStrategy:
         ac.total_nav_ms = (time.monotonic() - t_nav) * 1000
 
         try:
-            r = await conn.cdp("Runtime.evaluate", {
-                "expression": """(() => {
+            r = await conn.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": """(() => {
                     const sh = document.documentElement.scrollHeight;
                     const body = document.body;
                     if (body) {
@@ -121,7 +130,8 @@ class CDPFullpageStrategy:
                     }
                     return sh;
                 })()"""
-            })
+                },
+            )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = MEASURE_HEIGHT
@@ -130,32 +140,48 @@ class CDPFullpageStrategy:
         ac.n_tiles_expected = max(1, (page_h + TILE_HEIGHT - 1) // TILE_HEIGHT)
 
         # Step 2: lock viewport-relative units before resize
-        await conn.cdp("Runtime.evaluate", {
-            "expression": """(() => {
+        await conn.cdp(
+            "Runtime.evaluate",
+            {
+                "expression": """(() => {
                 const style = document.createElement('style');
                 style.textContent = 'html, body { height: auto !important; min-height: 0 !important; }';
                 document.head.appendChild(style);
             })()"""
-        })
+            },
+        )
 
         # Step 3: resize viewport to content height for capture
         capture_h = min(page_h, MAX_CHROME_HEIGHT)
-        await conn.cdp("Emulation.setDeviceMetricsOverride", {
-            "width": VIEWPORT_WIDTH, "height": capture_h,
-            "deviceScaleFactor": 1, "mobile": False})
+        await conn.cdp(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": VIEWPORT_WIDTH,
+                "height": capture_h,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+            },
+        )
 
-        await conn.cdp("Runtime.evaluate", {
-            "expression":
-                "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
-            "awaitPromise": True,
-        })
+        await conn.cdp(
+            "Runtime.evaluate",
+            {
+                "expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
+                "awaitPromise": True,
+            },
+        )
 
         # Step 4: single screenshot
         params = {
             "fromSurface": self.from_surface,
             "optimizeForSpeed": True,
-            "clip": {"x": 0, "y": 0, "width": VIEWPORT_WIDTH,
-                     "height": capture_h, "scale": 1},
+            "clip": {
+                "x": 0,
+                "y": 0,
+                "width": VIEWPORT_WIDTH,
+                "height": capture_h,
+                "scale": 1,
+            },
             "format": "png",
         }
 

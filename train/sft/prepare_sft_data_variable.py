@@ -16,10 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import random
-import sys
 from pathlib import Path
 
 
@@ -37,7 +35,7 @@ def build_variable_image_set(row: dict, rng: random.Random, k_min: int, k_max: i
     hit_sufs = [shard_suffix(h["path"]) for h in row["hits"]]
     non_gold = [s for s in hit_sufs if s != gold]
     k = rng.randint(k_min, k_max)
-    chosen = [gold] + non_gold[:k - 1]
+    chosen = [gold] + non_gold[: k - 1]
     while len(chosen) < k:
         chosen.append(gold)
     idx = list(range(k))
@@ -49,24 +47,42 @@ def build_variable_image_set(row: dict, rng: random.Random, k_min: int, k_max: i
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--retrieval-dir", default="/scratch/users/zwcolin/cxr_embeds/sft_data/retrieval_raw")
-    p.add_argument("--out-root", required=True,
-                   help="Existing output root containing images/... already populated")
+    p.add_argument(
+        "--retrieval-dir",
+        default="/scratch/users/zwcolin/cxr_embeds/sft_data/retrieval_raw",
+    )
+    p.add_argument(
+        "--out-root",
+        required=True,
+        help="Existing output root containing images/... already populated",
+    )
     p.add_argument("--splits", nargs="+", default=["train", "eval", "test"])
-    p.add_argument("--shuffle-seed", type=int, default=1337,
-                   help="Different from the top-3 prep seed so we get fresh compositions")
+    p.add_argument(
+        "--shuffle-seed",
+        type=int,
+        default=1337,
+        help="Different from the top-3 prep seed so we get fresh compositions",
+    )
     p.add_argument("--k-min", type=int, default=1)
     p.add_argument("--k-max", type=int, default=6)
-    p.add_argument("--json-suffix", default="_vark",
-                   help="Suffix for output JSONs (default _vark → train_vark.json)")
-    p.add_argument("--ds-key-prefix", default="multimage_vark",
-                   help="dataset_info key prefix: <prefix>_<split>")
+    p.add_argument(
+        "--json-suffix",
+        default="_vark",
+        help="Suffix for output JSONs (default _vark → train_vark.json)",
+    )
+    p.add_argument(
+        "--ds-key-prefix",
+        default="multimage_vark",
+        help="dataset_info key prefix: <prefix>_<split>",
+    )
     args = p.parse_args()
 
     retrieval_dir = Path(args.retrieval_dir)
     out_root = Path(args.out_root)
     out_images = out_root / "images"
-    assert out_images.exists(), f"{out_images} missing — run prepare_sft_data_multiimage.py first"
+    assert out_images.exists(), (
+        f"{out_images} missing — run prepare_sft_data_multiimage.py first"
+    )
 
     print(f"Retrieval dir: {retrieval_dir}")
     print(f"Out root:      {out_root}")
@@ -81,7 +97,7 @@ def main():
     else:
         dataset_info = {}
 
-    split_counts = {k: 0 for k in range(args.k_min, args.k_max + 1)}
+    {k: 0 for k in range(args.k_min, args.k_max + 1)}
 
     for split in args.splits:
         p_in = retrieval_dir / f"{split}.jsonl"
@@ -101,22 +117,26 @@ def main():
         skipped = 0
         per_k = {k: 0 for k in range(args.k_min, args.k_max + 1)}
         for r in rows:
-            shuffled, gold_pos, k = build_variable_image_set(r, rng, args.k_min, args.k_max)
+            shuffled, gold_pos, k = build_variable_image_set(
+                r, rng, args.k_min, args.k_max
+            )
             img_paths = [str(out_images / s) for s in shuffled]
             if any(not os.path.exists(pp) for pp in img_paths):
                 skipped += 1
                 continue
             user_content = ("<image>" * k) + "\n" + r["query"]
-            sg.append({
-                "messages": [
-                    {"role": "user", "content": user_content},
-                    {"role": "assistant", "content": r["answer"]},
-                ],
-                "images": img_paths,
-                "_gold_pos": gold_pos,
-                "_k": k,
-                "_gold_in_top6_pos": r.get("gold_in_top6_pos", -1),
-            })
+            sg.append(
+                {
+                    "messages": [
+                        {"role": "user", "content": user_content},
+                        {"role": "assistant", "content": r["answer"]},
+                    ],
+                    "images": img_paths,
+                    "_gold_pos": gold_pos,
+                    "_k": k,
+                    "_gold_in_top6_pos": r.get("gold_in_top6_pos", -1),
+                }
+            )
             per_k[k] += 1
 
         out_json = out_root / f"{split}{args.json_suffix}.json"
@@ -131,8 +151,12 @@ def main():
             "file_name": str(out_json),
             "formatting": "sharegpt",
             "columns": {"messages": "messages", "images": "images"},
-            "tags": {"role_tag": "role", "content_tag": "content",
-                     "user_tag": "user", "assistant_tag": "assistant"},
+            "tags": {
+                "role_tag": "role",
+                "content_tag": "content",
+                "user_tag": "user",
+                "assistant_tag": "assistant",
+            },
         }
 
     with open(info_path, "w") as f:

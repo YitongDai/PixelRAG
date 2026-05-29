@@ -1,4 +1,5 @@
 """Parse pixelrag.yaml with parameter forwarding."""
+
 import os
 from pathlib import Path
 

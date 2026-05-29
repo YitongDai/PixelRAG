@@ -13,11 +13,9 @@ Programmatic:
     path = install_chrome()          # download if needed
 """
 
-import hashlib
 import json
 import os
 import platform
-import shutil
 import subprocess
 import sys
 import tarfile
@@ -40,7 +38,8 @@ _SEARCH_PATHS = [
     lambda: os.environ.get("CHROME_PATH", ""),
     lambda: str(INSTALL_DIR / "headless_shell"),
     lambda: os.path.expanduser(
-        "~/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome"),
+        "~/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome"
+    ),
     lambda: "/usr/bin/google-chrome",
     lambda: "/usr/bin/google-chrome-stable",
     lambda: "/usr/bin/chromium-browser",
@@ -135,12 +134,14 @@ def install_chrome(version: str | None = None, force: bool = False) -> Path:
         try:
             subprocess.run(
                 ["zstd", "-d", tmp_path, "-o", decomp_path],
-                check=True, capture_output=True,
+                check=True,
+                capture_output=True,
             )
         except (FileNotFoundError, subprocess.CalledProcessError):
             # Fallback: try python zstandard
             try:
                 import zstandard
+
                 with open(tmp_path, "rb") as f_in, open(decomp_path, "wb") as f_out:
                     dctx = zstandard.ZstdDecompressor()
                     dctx.copy_stream(f_in, f_out)
@@ -160,7 +161,9 @@ def install_chrome(version: str | None = None, force: bool = False) -> Path:
         version_data = {"version": version, "binary": str(binary_path)}
         (INSTALL_DIR / VERSION_FILE).write_text(json.dumps(version_data))
 
-        print(f"Installed: {binary_path} ({binary_path.stat().st_size / 1024 / 1024:.0f}MB)")
+        print(
+            f"Installed: {binary_path} ({binary_path.stat().st_size / 1024 / 1024:.0f}MB)"
+        )
         return binary_path
 
     finally:
@@ -180,6 +183,7 @@ def _progress_hook(block_num, block_size, total_size):
 def main():
     """CLI entry point for chrome management."""
     import argparse
+
     parser = argparse.ArgumentParser(description="Manage Chrome for pixelrag-render")
     sub = parser.add_subparsers(dest="command")
 

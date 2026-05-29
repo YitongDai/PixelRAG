@@ -56,7 +56,6 @@ class CDPPerTileImgWaitStrategy:
 
     @property
     def name(self) -> str:
-        l = "pw" if self.launcher == "playwright" else "ws"
         hs = " HS" if self.headless_shell else ""
         return f"{self.n_workers}w {self.fmt} ptimg{hs}"
 
@@ -69,15 +68,23 @@ class CDPPerTileImgWaitStrategy:
         else:
             for i in range(self.n_workers):
                 conn = await launch_websocket(
-                    self.chrome_path, self._base_port + i,
-                    headless_shell=self.headless_shell)
+                    self.chrome_path,
+                    self._base_port + i,
+                    headless_shell=self.headless_shell,
+                )
                 self._connections.append(conn)
 
         for conn in self._connections:
             await conn.cdp("Page.enable")
-            await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                "deviceScaleFactor": 1, "mobile": False})
+            await conn.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": TILE_HEIGHT,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
 
         if self.fmt == "raw":
             os.makedirs("/dev/shm/pixelrag_bench", exist_ok=True)
@@ -102,7 +109,8 @@ class CDPPerTileImgWaitStrategy:
                 all_results[article_index[article["path"]]] = ac
 
         await asyncio.gather(
-            *[worker_task(i) for i in range(n)], return_exceptions=True)
+            *[worker_task(i) for i in range(n)], return_exceptions=True
+        )
         return [r for r in all_results if r is not None]
 
     async def _capture_one(self, wi: int, article: dict) -> ArticleCapture:
@@ -118,9 +126,14 @@ class CDPPerTileImgWaitStrategy:
 
         # fonts.ready only — no image wait (fast nav)
         try:
-            r = await conn.cdp("Runtime.evaluate", {
-                "expression": WAIT_FONTS_ONLY,
-                "awaitPromise": True, "returnByValue": True})
+            r = await conn.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": WAIT_FONTS_ONLY,
+                    "awaitPromise": True,
+                    "returnByValue": True,
+                },
+            )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = TILE_HEIGHT
@@ -143,8 +156,10 @@ class CDPPerTileImgWaitStrategy:
 
             # Scroll + wait for viewport images (combined, one CDP call)
             try:
-                await conn.cdp("Runtime.evaluate", {
-                    "expression": f"""new Promise(resolve => {{
+                await conn.cdp(
+                    "Runtime.evaluate",
+                    {
+                        "expression": f"""new Promise(resolve => {{
                         window.scrollTo(0, {y});
                         requestAnimationFrame(() => requestAnimationFrame(() => {{
                             const imgs = Array.from(document.images).filter(i => {{
@@ -161,15 +176,22 @@ class CDPPerTileImgWaitStrategy:
                             Promise.race([loaded, timeout]).then(resolve);
                         }}));
                     }})""",
-                    "awaitPromise": True})
+                        "awaitPromise": True,
+                    },
+                )
             except Exception:
                 pass
 
             params = {
                 "fromSurface": self.from_surface,
                 "optimizeForSpeed": True,
-                "clip": {"x": 0, "y": y, "width": VIEWPORT_WIDTH,
-                         "height": clip_h, "scale": 1},
+                "clip": {
+                    "x": 0,
+                    "y": y,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
+                },
             }
 
             raw_path = None
@@ -197,7 +219,10 @@ class CDPPerTileImgWaitStrategy:
             tc = TileCapture(
                 shot_ms=shot_ms,
                 nav_ms=nav_ms if t == 0 else 0.0,
-                tile_index=t, clip_y=y, clip_h=clip_h)
+                tile_index=t,
+                clip_y=y,
+                clip_h=clip_h,
+            )
             if self.fmt == "raw":
                 tc.raw_file_path = raw_path
             else:

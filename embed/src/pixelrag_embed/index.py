@@ -31,7 +31,6 @@ Usage:
 import argparse
 import json
 import os
-import struct
 import sys
 import time
 from functools import partial
@@ -87,15 +86,17 @@ def _merge_all_shards(shard_files):
     for i, sf in enumerate(shard_files):
         with np.load(sf) as data:
             n = data["embeddings"].shape[0]
-            all_emb[row:row + n] = data["embeddings"].astype(np.float32)
-            all_aids[row:row + n] = data["article_ids"]
-            all_tiles[row:row + n] = data["tile_indices"]
-            all_chunks[row:row + n] = data["chunk_indices"]
-            all_yoff[row:row + n] = data["y_offsets"]
-            all_theights[row:row + n] = data["tile_heights"]
+            all_emb[row : row + n] = data["embeddings"].astype(np.float32)
+            all_aids[row : row + n] = data["article_ids"]
+            all_tiles[row : row + n] = data["tile_indices"]
+            all_chunks[row : row + n] = data["chunk_indices"]
+            all_yoff[row : row + n] = data["y_offsets"]
+            all_theights[row : row + n] = data["tile_heights"]
             row += n
         if (i + 1) % 100 == 0 or i == len(shard_files) - 1:
-            print(f"  [{i+1}/{len(shard_files)}] {row:,} vectors, {time.time() - t0:.0f}s")
+            print(
+                f"  [{i + 1}/{len(shard_files)}] {row:,} vectors, {time.time() - t0:.0f}s"
+            )
 
     print(f"Concat done: {row:,} vectors in {time.time() - t0:.0f}s")
 
@@ -103,12 +104,18 @@ def _merge_all_shards(shard_files):
     # Pack into single int64: article_id * 1e8 + tile * 1e4 + chunk
     print("Deduplicating...")
     t1 = time.time()
-    keys = all_aids[:row] * 100_000_000 + all_tiles[:row].astype(np.int64) * 10_000 + all_chunks[:row].astype(np.int64)
+    keys = (
+        all_aids[:row] * 100_000_000
+        + all_tiles[:row].astype(np.int64) * 10_000
+        + all_chunks[:row].astype(np.int64)
+    )
     _, unique_idx = np.unique(keys, return_index=True)
     unique_idx.sort()  # preserve original order
     n_unique = len(unique_idx)
     n_dupes = row - n_unique
-    print(f"Dedup done: {n_unique:,} unique, {n_dupes:,} duplicates removed in {time.time() - t1:.1f}s")
+    print(
+        f"Dedup done: {n_unique:,} unique, {n_dupes:,} duplicates removed in {time.time() - t1:.1f}s"
+    )
 
     if n_dupes > 0:
         return {
@@ -159,7 +166,7 @@ def build_ivf(
 
     shard_files = _load_shards(embeddings_dir)
 
-    print(f"\nMerging and deduplicating shards...")
+    print("\nMerging and deduplicating shards...")
     merged = _merge_all_shards(shard_files)
     embeddings = merged["embeddings"]
     dim = merged["dim"]
@@ -191,7 +198,9 @@ def build_ivf(
 
     if gpu_id >= 0:
         # GPU-accelerated training: move CPU index to GPU, train, move back
-        print(f"\nTraining IVF on GPU {gpu_id} (nlist={nlist}) on {actual_train:,} vectors...")
+        print(
+            f"\nTraining IVF on GPU {gpu_id} (nlist={nlist}) on {actual_train:,} vectors..."
+        )
         t0 = time.time()
         res = faiss.StandardGpuResources()
         gpu_index = faiss.index_cpu_to_gpu(res, gpu_id, index)
@@ -219,7 +228,9 @@ def build_ivf(
         elapsed = time.time() - t0
         rate = end / elapsed if elapsed > 0 else 0
         eta = (n - end) / rate if rate > 0 else 0
-        print(f"  added {end:,}/{n:,} ({elapsed:.0f}s, {rate:.0f} vec/s, ETA {eta:.0f}s)")
+        print(
+            f"  added {end:,}/{n:,} ({elapsed:.0f}s, {rate:.0f} vec/s, ETA {eta:.0f}s)"
+        )
     print(f"Add done in {time.time() - t0:.1f}s")
 
     # Set default nprobe
@@ -246,7 +257,9 @@ def build_ivf(
         json.dump(summary, f, indent=2)
 
     index_size = os.path.getsize(index_path)
-    print(f"\nDone! Index: {index_size / 1e9:.1f} GB, metadata: {os.path.getsize(metadata_path) / 1e9:.1f} GB")
+    print(
+        f"\nDone! Index: {index_size / 1e9:.1f} GB, metadata: {os.path.getsize(metadata_path) / 1e9:.1f} GB"
+    )
     print(f"Summary: {summary_path}")
 
 
@@ -272,38 +285,57 @@ def test_search(index_dir: str, nprobe: int = 128, k: int = 10):
     # Self-search: query with first vector
     # Extract first vector from the index
     query = index.reconstruct(0).reshape(1, -1)
-    print(f"Query: first vector (self-search, should return itself as #1)")
+    print("Query: first vector (self-search, should return itself as #1)")
 
     t0 = time.time()
     distances, indices = index.search(query, k)
     dt = time.time() - t0
 
-    print(f"\nTop-{k} results ({dt*1000:.1f}ms):")
+    print(f"\nTop-{k} results ({dt * 1000:.1f}ms):")
     for i in range(k):
         idx = indices[0, i]
         dist = distances[0, i]
         aid = article_ids[idx]
-        print(f"  {i+1}. row={idx}, dist={dist:.6f}, article_id={aid}")
+        print(f"  {i + 1}. row={idx}, dist={dist:.6f}, article_id={aid}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build vector search index from wiki-screenshot embeddings")
+    parser = argparse.ArgumentParser(
+        description="Build vector search index from wiki-screenshot embeddings"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     # build
     p_build = sub.add_parser("build", help="Build IVF index (default)")
     p_build.add_argument("--embeddings-dir", default="./data/embeddings")
     p_build.add_argument("--output-dir", default="./output/search_index")
-    p_build.add_argument("--nlist", type=int, default=4096,
-                         help="Number of IVF clusters (default: 4096)")
-    p_build.add_argument("--nprobe", type=int, default=128,
-                         help="Default nprobe for search (default: 128)")
-    p_build.add_argument("--train-sample", type=int, default=500_000,
-                         help="Vectors to sample for training (default: 500k)")
-    p_build.add_argument("--metric", choices=["ip", "l2"], default="ip",
-                         help="Distance metric (default: ip for cosine/L2-normalized)")
-    p_build.add_argument("--gpu-id", type=int, default=-1,
-                         help="GPU for K-means training (-1 = CPU only)")
+    p_build.add_argument(
+        "--nlist", type=int, default=4096, help="Number of IVF clusters (default: 4096)"
+    )
+    p_build.add_argument(
+        "--nprobe",
+        type=int,
+        default=128,
+        help="Default nprobe for search (default: 128)",
+    )
+    p_build.add_argument(
+        "--train-sample",
+        type=int,
+        default=500_000,
+        help="Vectors to sample for training (default: 500k)",
+    )
+    p_build.add_argument(
+        "--metric",
+        choices=["ip", "l2"],
+        default="ip",
+        help="Distance metric (default: ip for cosine/L2-normalized)",
+    )
+    p_build.add_argument(
+        "--gpu-id",
+        type=int,
+        default=-1,
+        help="GPU for K-means training (-1 = CPU only)",
+    )
 
     # test
     p_test = sub.add_parser("test", help="Test search on built index")

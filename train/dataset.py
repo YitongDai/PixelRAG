@@ -3,7 +3,6 @@
 
 import json
 import logging
-from pathlib import Path
 
 from PIL import Image
 from torch.utils.data import Dataset
@@ -55,31 +54,50 @@ def make_collate_fn(processor, device="cuda"):
         queries, paths, images = zip(*valid)
 
         # Build query inputs using chat template (text-only)
-        q_messages_batch = [[
-            {"role": "system", "content": [{"type": "text", "text": QUERY_INSTRUCTION}]},
-            {"role": "user", "content": [{"type": "text", "text": q}]},
-        ] for q in queries]
+        q_messages_batch = [
+            [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": QUERY_INSTRUCTION}],
+                },
+                {"role": "user", "content": [{"type": "text", "text": q}]},
+            ]
+            for q in queries
+        ]
         q_texts = [
             processor.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
             for m in q_messages_batch
         ]
         q_inputs = processor(text=q_texts, return_tensors="pt", padding=True)
-        q_inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in q_inputs.items()}
+        q_inputs = {
+            k: v.to(device) if hasattr(v, "to") else v for k, v in q_inputs.items()
+        }
 
         # Build image inputs using chat template (image)
-        i_messages_batch = [[
-            {"role": "system", "content": [{"type": "text", "text": DOC_INSTRUCTION}]},
-            {"role": "user", "content": [{"type": "image", "image": img}]},
-        ] for img in images]
+        i_messages_batch = [
+            [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": DOC_INSTRUCTION}],
+                },
+                {"role": "user", "content": [{"type": "image", "image": img}]},
+            ]
+            for img in images
+        ]
         i_texts = [
             processor.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
             for m in i_messages_batch
         ]
         i_inputs = processor(
-            text=i_texts, images=list(images), return_tensors="pt",
-            padding=True, device=device,
+            text=i_texts,
+            images=list(images),
+            return_tensors="pt",
+            padding=True,
+            device=device,
         )
-        i_inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in i_inputs.items()}
+        i_inputs = {
+            k: v.to(device) if hasattr(v, "to") else v for k, v in i_inputs.items()
+        }
 
         return q_inputs, i_inputs
 

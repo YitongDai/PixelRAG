@@ -43,7 +43,6 @@ class CDPDynamicStrategy:
 
     @property
     def name(self) -> str:
-        l = "pw" if self.launcher == "playwright" else "ws"
         hs = " HS" if self.headless_shell else ""
         return f"{self.n_workers}w {self.fmt} dyn{hs}"
 
@@ -56,15 +55,23 @@ class CDPDynamicStrategy:
         else:
             for i in range(self.n_workers):
                 conn = await launch_websocket(
-                    self.chrome_path, self._base_port + i,
-                    headless_shell=self.headless_shell)
+                    self.chrome_path,
+                    self._base_port + i,
+                    headless_shell=self.headless_shell,
+                )
                 self._connections.append(conn)
 
         for conn in self._connections:
             await conn.cdp("Page.enable")
-            await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                "deviceScaleFactor": 1, "mobile": False})
+            await conn.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": TILE_HEIGHT,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
 
         if self.fmt == "raw":
             os.makedirs("/dev/shm/pixelrag_bench", exist_ok=True)
@@ -89,7 +96,8 @@ class CDPDynamicStrategy:
                 all_results[article_index[article["path"]]] = ac
 
         await asyncio.gather(
-            *[worker_task(i) for i in range(n)], return_exceptions=True)
+            *[worker_task(i) for i in range(n)], return_exceptions=True
+        )
         return [r for r in all_results if r is not None]
 
     async def _capture_one(self, wi: int, article: dict) -> ArticleCapture:
@@ -105,11 +113,13 @@ class CDPDynamicStrategy:
 
         # Minimal wait: just 2 rAF for first paint (no fonts.ready, no height measurement)
         try:
-            await conn.cdp("Runtime.evaluate", {
-                "expression":
-                    "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
-                "awaitPromise": True,
-            })
+            await conn.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
+                    "awaitPromise": True,
+                },
+            )
         except Exception:
             await asyncio.sleep(0.05)
 
@@ -125,18 +135,22 @@ class CDPDynamicStrategy:
 
             # Scroll to tile position
             if tile_idx > 0:
-                await conn.cdp("Runtime.evaluate",
-                    {"expression": f"window.scrollTo(0, {y})"})
-                await conn.cdp("Runtime.evaluate", {
-                    "expression":
-                        "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
-                    "awaitPromise": True,
-                })
+                await conn.cdp(
+                    "Runtime.evaluate", {"expression": f"window.scrollTo(0, {y})"}
+                )
+                await conn.cdp(
+                    "Runtime.evaluate",
+                    {
+                        "expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
+                        "awaitPromise": True,
+                    },
+                )
 
                 # Check if scroll moved
                 try:
-                    r = await conn.cdp("Runtime.evaluate",
-                        {"expression": "window.scrollY"})
+                    r = await conn.cdp(
+                        "Runtime.evaluate", {"expression": "window.scrollY"}
+                    )
                     actual_y = r["result"]["result"]["value"]
                 except Exception:
                     break
@@ -147,8 +161,10 @@ class CDPDynamicStrategy:
 
             # Get current page height for clip (might still be changing, that's ok)
             try:
-                r = await conn.cdp("Runtime.evaluate",
-                    {"expression": "document.documentElement.scrollHeight"})
+                r = await conn.cdp(
+                    "Runtime.evaluate",
+                    {"expression": "document.documentElement.scrollHeight"},
+                )
                 page_h = r["result"]["result"]["value"]
             except Exception:
                 page_h = (tile_idx + 1) * TILE_HEIGHT
@@ -163,8 +179,11 @@ class CDPDynamicStrategy:
                 "fromSurface": self.from_surface,
                 "optimizeForSpeed": True,
                 "clip": {
-                    "x": 0, "y": y,
-                    "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1,
+                    "x": 0,
+                    "y": y,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
                 },
             }
 

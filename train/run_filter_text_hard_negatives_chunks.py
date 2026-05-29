@@ -16,16 +16,29 @@ from pathlib import Path
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True, help="Input JSONL with retrieve_top20")
-    parser.add_argument("--output-dir", required=True, help="Base directory for chunk outputs")
+    parser.add_argument(
+        "--input", required=True, help="Input JSONL with retrieve_top20"
+    )
+    parser.add_argument(
+        "--output-dir", required=True, help="Base directory for chunk outputs"
+    )
     parser.add_argument("--chunk-size", type=int, default=1000, help="Rows per chunk")
-    parser.add_argument("--start-offset", type=int, default=0, help="Initial row offset")
-    parser.add_argument("--limit-total", type=int, default=0, help="Optional max rows to process overall")
+    parser.add_argument(
+        "--start-offset", type=int, default=0, help="Initial row offset"
+    )
+    parser.add_argument(
+        "--limit-total",
+        type=int,
+        default=0,
+        help="Optional max rows to process overall",
+    )
     parser.add_argument("--candidate-k", type=int, default=10)
     parser.add_argument("--num-hard-negatives", type=int, default=7)
     parser.add_argument("--model", default="gpt-4.1-mini")
     parser.add_argument("--provider", choices=["openai", "gemini"], default="openai")
-    parser.add_argument("--gemini", action="store_true", help="Alias for --provider gemini.")
+    parser.add_argument(
+        "--gemini", action="store_true", help="Alias for --provider gemini."
+    )
     parser.add_argument("--gemini-project", default="wise-coyote-478119-h0")
     parser.add_argument("--gemini-location", default="global")
     parser.add_argument("--max-retries", type=int, default=5)
@@ -59,7 +72,9 @@ def main() -> int:
     if args.limit_total > 0:
         total_target = min(total_target, args.limit_total)
 
-    chunks = math.ceil(max(total_target, 0) / args.chunk_size) if total_target > 0 else 0
+    chunks = (
+        math.ceil(max(total_target, 0) / args.chunk_size) if total_target > 0 else 0
+    )
     print(
         f"Input rows={total_rows} start_offset={args.start_offset} "
         f"target_rows={total_target} chunk_size={args.chunk_size} chunks={chunks}",
@@ -120,8 +135,7 @@ def main() -> int:
             cmd.append("--gemini")
 
         print(
-            f"[chunk {chunk_index + 1}/{chunks}] rows {start}-{end} "
-            f"-> {cur_dir}",
+            f"[chunk {chunk_index + 1}/{chunks}] rows {start}-{end} -> {cur_dir}",
             flush=True,
         )
         subprocess.run(cmd, check=True, env=os.environ.copy())

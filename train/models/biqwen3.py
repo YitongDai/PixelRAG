@@ -63,15 +63,21 @@ class BiQwen3(Qwen3VLModel):
         # For transformers <5.0: handle key remapping manually
         from transformers import PreTrainedModel
         import inspect
+
         sig = inspect.signature(PreTrainedModel.from_pretrained)
         if "key_mapping" in sig.parameters:
             # transformers >=5.0: use native key_mapping
-            kwargs.setdefault("key_mapping", {
-                r"^model\.visual": "visual",
-                r"^model\.language_model": "language_model",
-                r"^model\.": "",
-            })
-            return super().from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+            kwargs.setdefault(
+                "key_mapping",
+                {
+                    r"^model\.visual": "visual",
+                    r"^model\.language_model": "language_model",
+                    r"^model\.": "",
+                },
+            )
+            return super().from_pretrained(
+                pretrained_model_name_or_path, *args, **kwargs
+            )
 
         # transformers <5.0: load with remapped state_dict
         from transformers import AutoConfig
@@ -80,7 +86,7 @@ class BiQwen3(Qwen3VLModel):
         from huggingface_hub import snapshot_download
         import glob
 
-        dtype = kwargs.get("dtype", kwargs.get("torch_dtype", None))
+        kwargs.get("dtype", kwargs.get("torch_dtype", None))
 
         # Resolve model path
         model_path = pretrained_model_name_or_path
@@ -89,8 +95,14 @@ class BiQwen3(Qwen3VLModel):
 
         # Load config
         config = AutoConfig.from_pretrained(model_path)
-        model = cls(config, **{k: v for k, v in kwargs.items()
-                               if k in ("dtype", "torch_dtype", "attn_implementation", "use_cache")})
+        model = cls(
+            config,
+            **{
+                k: v
+                for k, v in kwargs.items()
+                if k in ("dtype", "torch_dtype", "attn_implementation", "use_cache")
+            },
+        )
 
         # Load and remap state dict
         safetensor_files = sorted(glob.glob(str(Path(model_path) / "*.safetensors")))
@@ -107,7 +119,9 @@ class BiQwen3(Qwen3VLModel):
         state_dict = _remap_keys(state_dict)
         missing, unexpected = model.load_state_dict(state_dict, strict=False)
         if missing:
-            print(f"BiQwen3: {len(missing)} missing keys (expected for embedding-only model)")
+            print(
+                f"BiQwen3: {len(missing)} missing keys (expected for embedding-only model)"
+            )
         if unexpected:
             print(f"BiQwen3: {len(unexpected)} unexpected keys: {unexpected[:5]}...")
 
@@ -125,7 +139,10 @@ class BiQwen3(Qwen3VLModel):
             # undo padding back to flat (total_patches, dim) for Qwen3VLModel.
             offsets = kwargs["image_grid_thw"].prod(dim=1).tolist()
             kwargs["pixel_values"] = torch.cat(
-                [pixel_sequence[:offset] for pixel_sequence, offset in zip(kwargs["pixel_values"], offsets)],
+                [
+                    pixel_sequence[:offset]
+                    for pixel_sequence, offset in zip(kwargs["pixel_values"], offsets)
+                ],
                 dim=0,
             )
         # Standard Qwen3VLProcessor already gives flat (total_patches, dim) — no-op.
@@ -143,13 +160,23 @@ class BiQwen3(Qwen3VLModel):
                 # Build (batch, 1, seq_len, seq_len): 0.0=attend, large_neg=mask
                 # Rows: which positions are querying. Cols: which positions to attend to.
                 # We mask columns where padding exists.
-                mask_4d = orig_mask[:, None, None, :].expand(batch, 1, seq_len, seq_len).to(torch.bfloat16)
+                mask_4d = (
+                    orig_mask[:, None, None, :]
+                    .expand(batch, 1, seq_len, seq_len)
+                    .to(torch.bfloat16)
+                )
                 mask_4d = (1.0 - mask_4d) * torch.finfo(torch.bfloat16).min
                 kwargs["attention_mask"] = mask_4d
 
         last_hidden_states = (
             super()
-            .forward(*args, **kwargs, use_cache=False, output_hidden_states=True, return_dict=True)
+            .forward(
+                *args,
+                **kwargs,
+                use_cache=False,
+                output_hidden_states=True,
+                return_dict=True,
+            )
             .last_hidden_state
         )
 

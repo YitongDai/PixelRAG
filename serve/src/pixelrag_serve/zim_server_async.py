@@ -9,9 +9,7 @@ Usage:
 
 import argparse
 import asyncio
-import os
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -41,7 +39,7 @@ class ZimApp:
 
         prefix = f"/content/{self.book_name}/"
         if path.startswith(prefix):
-            entry_path = path[len(prefix):]
+            entry_path = path[len(prefix) :]
         elif path.startswith("/"):
             entry_path = path[1:]
         else:
@@ -51,7 +49,8 @@ class ZimApp:
             entry_path = entry_path.split("?")[0]
 
         result = await self.loop.run_in_executor(
-            self.pool, self._read_entry, entry_path)
+            self.pool, self._read_entry, entry_path
+        )
 
         if result is None:
             return web.Response(status=404, text=f"Not found: {entry_path}")
@@ -82,7 +81,9 @@ def main():
 
     app.on_startup.append(on_startup)
 
-    print(f"Async ZIM server: http://{args.host}:{args.port}/content/{app_state.book_name}/")
+    print(
+        f"Async ZIM server: http://{args.host}:{args.port}/content/{app_state.book_name}/"
+    )
     print(f"ZIM: {args.zim} ({app_state.archive.article_count:,} articles)")
     print(f"Thread pool: {args.workers} workers")
 

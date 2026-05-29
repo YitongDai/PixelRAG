@@ -28,6 +28,7 @@ def setup_driver(window_width=1024, window_height=2000, device_scale_factor=1):
     from webdriver_manager.chrome import ChromeDriverManager
 
     import shutil
+
     snap_chromedriver = "/snap/bin/chromium.chromedriver"
     if os.path.exists(snap_chromedriver):
         driver_path = snap_chromedriver
@@ -106,7 +107,7 @@ def _capture_with_scroll(driver, output_path, scroll_pause=0.8, max_scrolls=100)
 
     while scroll_count < max_scrolls:
         # Take screenshot
-        temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+        temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         driver.save_screenshot(temp_file.name)
 
         # Check if image changed (detect end of scrolling)
@@ -127,13 +128,16 @@ def _capture_with_scroll(driver, output_path, scroll_pause=0.8, max_scrolls=100)
         center_x = viewport_width // 2
         center_y = viewport_height // 2
         try:
-            driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
-                "type": "mouseWheel",
-                "x": center_x,
-                "y": center_y,
-                "deltaX": 0,
-                "deltaY": int(viewport_height * 0.8)  # Scroll 80% of viewport
-            })
+            driver.execute_cdp_cmd(
+                "Input.dispatchMouseEvent",
+                {
+                    "type": "mouseWheel",
+                    "x": center_x,
+                    "y": center_y,
+                    "deltaX": 0,
+                    "deltaY": int(viewport_height * 0.8),  # Scroll 80% of viewport
+                },
+            )
         except Exception:
             # Fallback to ActionChains
             actions = ActionChains(driver)
@@ -161,7 +165,7 @@ def _capture_with_scroll(driver, output_path, scroll_pause=0.8, max_scrolls=100)
     overlap = int(viewport_height * 0.2)
     total_height = viewport_height + (len(images) - 1) * (viewport_height - overlap)
 
-    stitched = Image.new('RGB', (viewport_width, total_height), (255, 255, 255))
+    stitched = Image.new("RGB", (viewport_width, total_height), (255, 255, 255))
 
     y_offset = 0
     for i, img in enumerate(images):
@@ -267,7 +271,7 @@ def capture_screenshot(url, output_path, full_page=False, scroll_capture=False):
 
             # Re-measure height (may change after lazy content loads)
             total_height = driver.execute_script("return document.body.scrollHeight")
-            driver.set_window_size(current_window['width'], total_height)
+            driver.set_window_size(current_window["width"], total_height)
             time.sleep(0.5)
 
             # Final wait for any images triggered by resize
@@ -348,6 +352,7 @@ def encode_image(image_path, max_pixels: int = 150_000_000, max_height: int = 80
 
             # Encode to JPEG
             from io import BytesIO
+
             buffered = BytesIO()
             img.save(buffered, format="JPEG", quality=85)
             return base64.b64encode(buffered.getvalue()).decode("utf-8")
@@ -397,6 +402,7 @@ def encode_image_for_vlm(image_path, max_pixels: int = 89_000_000):
 
             # Encode to JPEG
             from io import BytesIO
+
             buffered = BytesIO()
             img.save(buffered, format="JPEG", quality=85)
             return base64.b64encode(buffered.getvalue()).decode("utf-8")

@@ -14,8 +14,6 @@ from dataclasses import dataclass
 
 from .base import article_url, ArticleCapture, TileCapture
 from .connection import (
-    WebsocketConnection,
-    PlaywrightConnection,
     launch_websocket,
     launch_playwright,
 )
@@ -69,7 +67,8 @@ class CDPSequentialStrategy:
             for i in range(self.n_workers):
                 port = self._base_port + i
                 conn = await launch_websocket(
-                    self.chrome_path, port,
+                    self.chrome_path,
+                    port,
                     headless_shell=self.headless_shell,
                     extra_args=self.extra_args,
                 )
@@ -77,10 +76,15 @@ class CDPSequentialStrategy:
 
         for conn in self._connections:
             await conn.cdp("Page.enable")
-            await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                "deviceScaleFactor": 1, "mobile": False,
-            })
+            await conn.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": TILE_HEIGHT,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
 
         if self.fmt == "raw":
             os.makedirs("/dev/shm/pixelrag_bench", exist_ok=True)
@@ -124,8 +128,10 @@ class CDPSequentialStrategy:
 
         # Wait for fonts + eager images (with timeout) + layout, return scrollHeight
         try:
-            r = await conn.cdp("Runtime.evaluate", {
-                "expression": """new Promise(resolve => {
+            r = await conn.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": """new Promise(resolve => {
                     const waitEagerImgs = Promise.all(
                         Array.from(document.images)
                             .filter(i => !i.complete && i.loading !== 'lazy')
@@ -149,9 +155,10 @@ class CDPSequentialStrategy:
                         });
                     });
                 })""",
-                "awaitPromise": True,
-                "returnByValue": True,
-            })
+                    "awaitPromise": True,
+                    "returnByValue": True,
+                },
+            )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = TILE_HEIGHT
@@ -175,8 +182,10 @@ class CDPSequentialStrategy:
             if t > 0:
                 y = t * TILE_HEIGHT
                 try:
-                    await conn.cdp("Runtime.evaluate", {
-                        "expression": f"""new Promise(resolve => {{
+                    await conn.cdp(
+                        "Runtime.evaluate",
+                        {
+                            "expression": f"""new Promise(resolve => {{
                             window.scrollTo(0, {y});
                             requestAnimationFrame(() => requestAnimationFrame(() => {{
                                 const imgs = Array.from(document.images).filter(i => {{
@@ -193,8 +202,9 @@ class CDPSequentialStrategy:
                                 Promise.race([loaded, timeout]).then(resolve);
                             }}));
                         }})""",
-                        "awaitPromise": True,
-                    })
+                            "awaitPromise": True,
+                        },
+                    )
                 except Exception:
                     pass
 
@@ -202,8 +212,11 @@ class CDPSequentialStrategy:
                 "fromSurface": self.from_surface,
                 "optimizeForSpeed": True,
                 "clip": {
-                    "x": 0, "y": t * TILE_HEIGHT,
-                    "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1,
+                    "x": 0,
+                    "y": t * TILE_HEIGHT,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
                 },
             }
 

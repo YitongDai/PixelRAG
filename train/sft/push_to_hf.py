@@ -10,7 +10,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from huggingface_hub import HfApi, create_repo, upload_folder
+from huggingface_hub import create_repo, upload_folder
 
 TOKEN = os.environ["HF_TOKEN"]
 USER = "Chrisyichuan"
@@ -19,12 +19,20 @@ USER = "Chrisyichuan"
 # NEW: LLM+ViT LoRA (freeze_vision_tower: false) for 3x/5x/9x. 2x tied with old LLM-only.
 BEST = [
     # Universal adapter: one LoRA across all compression levels (2x/3x/5x/9x).
-    ("universal", "qwen3vl_mixed_llmvit_v1", 6503, 0.920,
-     "r=128, 1ep, lr 2e-5, ViT unfrozen, trained on 2x+3x+5x+9x mixed data"),
+    (
+        "universal",
+        "qwen3vl_mixed_llmvit_v1",
+        6503,
+        0.920,
+        "r=128, 1ep, lr 2e-5, ViT unfrozen, trained on 2x+3x+5x+9x mixed data",
+    ),
 ]
 
 BASE_BASELINE = {
-    "2x": 0.904, "3x": 0.826, "5x": 0.554, "9x": 0.180,
+    "2x": 0.904,
+    "3x": 0.826,
+    "5x": 0.554,
+    "9x": 0.180,
     "universal": (0.904 + 0.826 + 0.554 + 0.180) / 4,
 }
 
@@ -46,6 +54,7 @@ KEEP_FILES = {
     "video_preprocessor_config.json",
     "vocab.json",
 }
+
 
 def build_readme(comp, step, judge, config, base_judge):
     return f"""---
@@ -87,7 +96,7 @@ SFT gain over base at {comp}: **+{judge - base_judge:.3f}** ({100 * (judge - bas
 
 ## Data preparation
 
-Training images were downscaled by `1/sqrt({comp[:-1]})` per dimension using PIL LANCZOS, e.g. a 1200×800 screenshot becomes {int(1200/int(comp[:-1])**0.5)}×{int(800/int(comp[:-1])**0.5)} px (~{100/int(comp[:-1]):.0f}% of original pixels).
+Training images were downscaled by `1/sqrt({comp[:-1]})` per dimension using PIL LANCZOS, e.g. a 1200×800 screenshot becomes {int(1200 / int(comp[:-1]) ** 0.5)}×{int(800 / int(comp[:-1]) ** 0.5)} px (~{100 / int(comp[:-1]):.0f}% of original pixels).
 
 ## Usage
 
@@ -141,8 +150,10 @@ def push_one(comp, run_dir, step, judge, config):
 
         # Write README
         base_judge = BASE_BASELINE[comp]
-        (tmp / "README.md").write_text(build_readme(comp, step, judge, config, base_judge))
-        print(f"  + README.md")
+        (tmp / "README.md").write_text(
+            build_readme(comp, step, judge, config, base_judge)
+        )
+        print("  + README.md")
 
         # Create repo + upload
         create_repo(repo_id, token=TOKEN, exist_ok=True, private=False)

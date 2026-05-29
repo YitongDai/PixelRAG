@@ -122,9 +122,13 @@ _USE_CODEX_FALLBACK = None  # auto-detect on first call
 
 def _call_judge_codex(prompt: str, model: str = "gpt-5.5") -> str:
     import subprocess
+
     result = subprocess.run(
         ["codex", "exec", "--sandbox", "workspace-write", "-m", model, "-"],
-        input=prompt, capture_output=True, text=True, timeout=180,
+        input=prompt,
+        capture_output=True,
+        text=True,
+        timeout=180,
     )
     text = result.stdout.strip()
     for line in reversed(text.splitlines()):
@@ -147,7 +151,9 @@ def _call_judge(
 ) -> str:
     global _USE_CODEX_FALLBACK
     api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
-    base_url = base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    base_url = base_url or os.environ.get(
+        "OPENAI_BASE_URL", "https://api.openai.com/v1"
+    )
 
     prompt = GRADER_TEMPLATE.format(
         question=question, target=target, predicted_answer=predicted
@@ -186,7 +192,7 @@ def _call_judge(
             return match.group(0) if match else "C"
         except urllib.error.HTTPError as e:
             if e.code == 401:
-                print(f"  OpenAI API 401 — falling back to codex exec")
+                print("  OpenAI API 401 — falling back to codex exec")
                 _USE_CODEX_FALLBACK = True
                 codex_prompt = (
                     f"Grade this answer. Reply with exactly one letter: A (CORRECT), B (INCORRECT), or C (NOT_ATTEMPTED).\n\n"
@@ -199,7 +205,7 @@ def _call_judge(
                 time.sleep(min(60, 2**attempt + 2))
                 continue
             raise
-        except urllib.error.URLError as e:
+        except urllib.error.URLError:
             if attempt < 3:
                 time.sleep(min(60, 2**attempt + 2))
                 continue
@@ -250,7 +256,11 @@ def _find_wikipedia_url(urls: list[str]) -> str | None:
     for part in all_parts:
         if "en.wikipedia.org/wiki/" in part:
             return part
-    return all_parts[0] if all_parts else (urls[0].split("#")[0].lstrip("- ").strip() if urls else None)
+    return (
+        all_parts[0]
+        if all_parts
+        else (urls[0].split("#")[0].lstrip("- ").strip() if urls else None)
+    )
 
 
 def compute_retrieval_accuracy(examples: list) -> dict | None:
@@ -259,7 +269,9 @@ def compute_retrieval_accuracy(examples: list) -> dict | None:
         used_url = ex.get("used_url")
         if not used_url:
             continue
-        run_metadata = ex.get("run_metadata") if isinstance(ex.get("run_metadata"), dict) else {}
+        run_metadata = (
+            ex.get("run_metadata") if isinstance(ex.get("run_metadata"), dict) else {}
+        )
         reader_top_k = run_metadata.get("reader_top_k")
         retrieval_top_k = run_metadata.get("retrieval_top_k")
         od = ex.get("original_data", {})
@@ -276,12 +288,14 @@ def compute_retrieval_accuracy(examples: list) -> dict | None:
             gt_url = _find_wikipedia_url(meta["urls"])
         if not gt_url:
             continue
-        eval_examples.append({
-            "used_url": used_url,
-            "ground_truth_url": gt_url,
-            "reader_top_k": reader_top_k,
-            "retrieval_top_k": retrieval_top_k,
-        })
+        eval_examples.append(
+            {
+                "used_url": used_url,
+                "ground_truth_url": gt_url,
+                "reader_top_k": reader_top_k,
+                "retrieval_top_k": retrieval_top_k,
+            }
+        )
 
     if not eval_examples:
         return None
@@ -313,10 +327,13 @@ def compute_retrieval_accuracy(examples: list) -> dict | None:
 def normalize_answer(s: str) -> str:
     def remove_articles(text):
         return re.sub(r"\b(a|an|the)\b", " ", text)
+
     def white_space_fix(text):
         return " ".join(text.split())
+
     def remove_punc(text):
         return "".join(ch for ch in text if ch not in set(string.punctuation))
+
     return white_space_fix(remove_articles(remove_punc(s.lower())))
 
 
@@ -340,8 +357,9 @@ def _token_f1(prediction: str, ground_truth: str) -> float:
     return 2 * p * r / (p + r)
 
 
-def _grade_monaco_dir(pred_dir: str, save_path: str | None = None,
-                      verbose: bool = False) -> None:
+def _grade_monaco_dir(
+    pred_dir: str, save_path: str | None = None, verbose: bool = False
+) -> None:
     """Grade a directory of MoNaCo per-example JSON prediction files.
 
     Computes token-level F1 (primary metric) from already-computed inline
@@ -351,6 +369,7 @@ def _grade_monaco_dir(pred_dir: str, save_path: str | None = None,
         python grade.py monaco eval_output/monaco/<tag>
     """
     from pathlib import Path as _P
+
     folder = _P(pred_dir)
     if not folder.is_dir():
         print(f"Error: {pred_dir} is not a directory")
@@ -362,6 +381,7 @@ def _grade_monaco_dir(pred_dir: str, save_path: str | None = None,
         sys.exit(1)
 
     _ANSWERS_PAT = re.compile(r"(?im)^\s*answers?:\s*(.*)$")
+
     def _extract_answer(output: str) -> str:
         if not output:
             return ""
@@ -428,7 +448,9 @@ def _grade_monaco_dir(pred_dir: str, save_path: str | None = None,
         print(f"  Token F1 (primary):  {mean_f1:.4f}  ({len(f1_scores)} graded)")
         print(f"  Token EM:            {mean_em:.4f}")
     else:
-        print("  No token F1 scores available (missing gold_answers in prediction files)")
+        print(
+            "  No token F1 scores available (missing gold_answers in prediction files)"
+        )
 
     if judge_f1_scores:
         mean_jf1 = sum(judge_f1_scores) / len(judge_f1_scores)
@@ -445,7 +467,9 @@ def _grade_monaco_dir(pred_dir: str, save_path: str | None = None,
     }
     if f1_scores:
         results["mean_token_f1"] = round(sum(f1_scores) / len(f1_scores), 4)
-        results["mean_token_em"] = round(sum(em_scores) / len(em_scores), 4) if em_scores else 0.0
+        results["mean_token_em"] = (
+            round(sum(em_scores) / len(em_scores), 4) if em_scores else 0.0
+        )
     if judge_f1_scores:
         results["mean_judge_f1"] = round(sum(judge_f1_scores) / len(judge_f1_scores), 4)
         results["n_judged"] = len(judge_f1_scores)
@@ -456,10 +480,19 @@ def _grade_monaco_dir(pred_dir: str, save_path: str | None = None,
 
 def main():
     parser = argparse.ArgumentParser(description="Grade eval JSONL results")
-    parser.add_argument("task", help="Task name (simpleqa, nq, nq_tables, encyclopedic_vqa, mmsearch, monaco, etc.)")
-    parser.add_argument("file_path", help="Path to JSONL results file (or directory for monaco)")
+    parser.add_argument(
+        "task",
+        help="Task name (simpleqa, nq, nq_tables, encyclopedic_vqa, mmsearch, monaco, etc.)",
+    )
+    parser.add_argument(
+        "file_path", help="Path to JSONL results file (or directory for monaco)"
+    )
     parser.add_argument("--grader-model", default="gpt-4.1-2025-04-14")
-    parser.add_argument("--llm-judge", action="store_true", help="Use LLM judge for NQ/NQ-Tables (default: EM)")
+    parser.add_argument(
+        "--llm-judge",
+        action="store_true",
+        help="Use LLM judge for NQ/NQ-Tables (default: EM)",
+    )
     parser.add_argument("--max-workers", type=int, default=10)
     parser.add_argument("--save-path", default=None)
     parser.add_argument("--verbose", "-v", action="store_true")
@@ -467,7 +500,9 @@ def main():
 
     # MoNaCo: directory-based grading
     if args.task == "monaco":
-        _grade_monaco_dir(args.file_path, save_path=args.save_path, verbose=args.verbose)
+        _grade_monaco_dir(
+            args.file_path, save_path=args.save_path, verbose=args.verbose
+        )
         return
 
     if not os.path.exists(args.file_path):
@@ -477,7 +512,9 @@ def main():
     with open(args.file_path) as f:
         examples = [json.loads(line) for line in f if line.strip()]
 
-    successful = [e for e in examples if e.get("success", True) and e.get("final_response")]
+    successful = [
+        e for e in examples if e.get("success", True) and e.get("final_response")
+    ]
     print(f"Loaded {len(examples)} examples ({len(successful)} successful)")
 
     retrieval_acc = compute_retrieval_accuracy(successful)
@@ -496,10 +533,20 @@ def main():
         print(f"  Avg prompt tokens: {total_prompt // n:,}")
         print(f"  Avg completion tokens: {total_comp // n:,}")
 
-    use_llm_judge = args.task in (
-        "simpleqa", "encyclopedic_vqa", "worldvqa", "simplevqa",
-        "factualvqa", "mmsearch", "webqa", "multimodalqa",
-    ) or args.llm_judge
+    use_llm_judge = (
+        args.task
+        in (
+            "simpleqa",
+            "encyclopedic_vqa",
+            "worldvqa",
+            "simplevqa",
+            "factualvqa",
+            "mmsearch",
+            "webqa",
+            "multimodalqa",
+        )
+        or args.llm_judge
+    )
 
     if not use_llm_judge and args.task in ("nq", "nq_tables", "triviaqa"):
         print("\nUsing exact-match grading (pass --llm-judge for GPT-4.1 judge)")
@@ -523,7 +570,9 @@ def main():
             print("Error: OPENAI_API_KEY not set")
             sys.exit(1)
 
-        print(f"\nGrading with {args.grader_model} ({len(successful)} examples, {args.max_workers} workers)...")
+        print(
+            f"\nGrading with {args.grader_model} ({len(successful)} examples, {args.max_workers} workers)..."
+        )
 
         grades = {}
 
@@ -558,7 +607,10 @@ def main():
         print(f"\nNo grading implemented for task '{args.task}' without --llm-judge")
 
     # Save results
-    save_path = args.save_path or str(Path(args.file_path).with_suffix("")) + "_eval_results.json"
+    save_path = (
+        args.save_path
+        or str(Path(args.file_path).with_suffix("")) + "_eval_results.json"
+    )
     results = {
         "task": args.task,
         "num_examples": len(successful),
@@ -568,7 +620,9 @@ def main():
         results["retrieval_accuracy"] = retrieval_acc
     if use_llm_judge and "grades" in dir():
         n = len(grades)
-        results["accuracy"] = sum(1 for g in grades.values() if g == "A") / n if n else 0
+        results["accuracy"] = (
+            sum(1 for g in grades.values() if g == "A") / n if n else 0
+        )
         results["correct"] = sum(1 for g in grades.values() if g == "A")
         results["incorrect"] = sum(1 for g in grades.values() if g == "B")
         results["not_attempted"] = sum(1 for g in grades.values() if g == "C")

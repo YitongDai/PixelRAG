@@ -20,7 +20,6 @@ Usage:
 
 import copy
 import sys
-from contextlib import nullcontext
 
 import torch
 import torch.nn.functional as F
@@ -29,8 +28,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from train_contrastors import (
-    LogitScale, clip_loss, grad_cache_loss, chunk_inputs,
-    forward_query, forward_doc, _clear_rope_deltas,
+    LogitScale,
+    clip_loss,
+    grad_cache_loss,
+    chunk_inputs,
+    forward_query,
+    forward_doc,
+    _clear_rope_deltas,
 )
 
 
@@ -75,6 +79,7 @@ def make_fake_inputs(processor, batch_size, device):
         images.append(Image.fromarray(arr))
 
     from train_contrastors import process_queries, process_doc_images
+
     query_inputs = process_queries(processor, queries)
     doc_inputs = process_doc_images(processor, images)
 
@@ -111,7 +116,7 @@ def compare_gradients(grads_ref, grads_gc, names, verbose=True):
             continue
         if gr is None or ggc is None:
             print(f"  MISMATCH: {name} — one grad is None")
-            return 0.0, float('inf'), float('inf')
+            return 0.0, float("inf"), float("inf")
         if gr.abs().max().item() == 0 and ggc.abs().max().item() == 0:
             continue
 
@@ -148,36 +153,55 @@ def compare_gradients(grads_ref, grads_gc, names, verbose=True):
     return cosine, rel_l2, max_rel
 
 
-def run_test(label, model, model_state, ls_state, query_inputs, doc_inputs,
-             chunk_size, device, verbose=True):
+def run_test(
+    label,
+    model,
+    model_state,
+    ls_state,
+    query_inputs,
+    doc_inputs,
+    chunk_size,
+    device,
+    verbose=True,
+):
     """Compare chunked-reference vs GradCache for a given chunk_size."""
 
     # --- Chunked reference (full-memory backward) ---
     model.load_state_dict(model_state)
-    ls_ref = LogitScale(init_value=1/0.07).to(device)
+    ls_ref = LogitScale(init_value=1 / 0.07).to(device)
     ls_ref.load_state_dict(ls_state)
     model.zero_grad()
     ls_ref.zero_grad()
 
     # Create fresh chunks for each path (can't share autograd graphs)
-    q_chunks_ref = chunk_inputs({k: v.clone() for k, v in query_inputs.items()}, chunk_size)
-    d_chunks_ref = chunk_inputs({k: v.clone() for k, v in doc_inputs.items()}, chunk_size)
+    q_chunks_ref = chunk_inputs(
+        {k: v.clone() for k, v in query_inputs.items()}, chunk_size
+    )
+    d_chunks_ref = chunk_inputs(
+        {k: v.clone() for k, v in doc_inputs.items()}, chunk_size
+    )
 
     # Seed before reference forward so dropout masks are deterministic
     torch.manual_seed(42)
     torch.cuda.manual_seed_all(42)
-    loss_ref, _ = chunked_reference_forward_backward(model, q_chunks_ref, d_chunks_ref, ls_ref)
+    loss_ref, _ = chunked_reference_forward_backward(
+        model, q_chunks_ref, d_chunks_ref, ls_ref
+    )
     names, grads_ref = collect_grads(model, ls_ref)
 
     # --- GradCache (actual function from train_contrastors.py) ---
     model.load_state_dict(model_state)
-    ls_gc = LogitScale(init_value=1/0.07).to(device)
+    ls_gc = LogitScale(init_value=1 / 0.07).to(device)
     ls_gc.load_state_dict(ls_state)
     model.zero_grad()
     ls_gc.zero_grad()
 
-    q_chunks_gc = chunk_inputs({k: v.clone() for k, v in query_inputs.items()}, chunk_size)
-    d_chunks_gc = chunk_inputs({k: v.clone() for k, v in doc_inputs.items()}, chunk_size)
+    q_chunks_gc = chunk_inputs(
+        {k: v.clone() for k, v in query_inputs.items()}, chunk_size
+    )
+    d_chunks_gc = chunk_inputs(
+        {k: v.clone() for k, v in doc_inputs.items()}, chunk_size
+    )
 
     # Same seed → GradCache step 1 (no-grad forward) uses the same dropout masks
     # as the reference. Step 3 (replay) uses RandContext to reproduce them.
@@ -198,7 +222,9 @@ def run_test(label, model, model_state, ls_state, query_inputs, doc_inputs,
         print(f"  Loss GradCache: {loss_gc.item():.8f}")
         print(f"  Loss diff:      {abs(loss_ref.item() - loss_gc.item()):.2e}")
 
-    cosine, rel_l2, max_rel = compare_gradients(grads_ref, grads_gc, names, verbose=verbose)
+    cosine, rel_l2, max_rel = compare_gradients(
+        grads_ref, grads_gc, names, verbose=verbose
+    )
     return cosine, rel_l2, loss_ref.item(), loss_gc.item()
 
 
@@ -218,7 +244,9 @@ def main():
     merge_size = processor.image_processor.merge_size
     tile = patch_size * merge_size
     processor.image_processor.max_pixels = 256 * tile * tile
-    processor.image_processor.size["longest_edge"] = processor.image_processor.max_pixels
+    processor.image_processor.size["longest_edge"] = (
+        processor.image_processor.max_pixels
+    )
     processor.tokenizer.padding_side = "left"
 
     print("Creating fake data...")
@@ -234,7 +262,8 @@ def main():
     print("=" * 80)
 
     lora_config = LoraConfig(
-        r=8, lora_alpha=8,
+        r=8,
+        lora_alpha=8,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         lora_dropout=0.0,
         task_type="FEATURE_EXTRACTION",
@@ -242,13 +271,14 @@ def main():
     model = get_peft_model(copy.deepcopy(base_model), lora_config).to(device)
     model.train()
     model_state = copy.deepcopy(model.state_dict())
-    ls_state = LogitScale(init_value=1/0.07).state_dict()
+    ls_state = LogitScale(init_value=1 / 0.07).state_dict()
 
     for cs in [batch_size, 2, 1]:
         label = f"A_chunk{cs}"
         print(f"\n--- chunk_size={cs} {'(degenerate)' if cs == batch_size else ''} ---")
-        cos, rl2, _, _ = run_test(label, model, model_state, ls_state,
-                                  query_inputs, doc_inputs, cs, device)
+        cos, rl2, _, _ = run_test(
+            label, model, model_state, ls_state, query_inputs, doc_inputs, cs, device
+        )
         results[label] = cos
 
     # =========================================================================
@@ -259,7 +289,8 @@ def main():
     print("=" * 80)
 
     lora_config_drop = LoraConfig(
-        r=8, lora_alpha=8,
+        r=8,
+        lora_alpha=8,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         lora_dropout=0.05,
         task_type="FEATURE_EXTRACTION",
@@ -270,9 +301,19 @@ def main():
 
     for cs in [batch_size, 2, 1]:
         label = f"B_drop_chunk{cs}"
-        print(f"\n--- chunk_size={cs} with dropout {'(degenerate)' if cs == batch_size else ''} ---")
-        cos, rl2, _, _ = run_test(label, model_drop, model_drop_state, ls_state,
-                                  query_inputs, doc_inputs, cs, device)
+        print(
+            f"\n--- chunk_size={cs} with dropout {'(degenerate)' if cs == batch_size else ''} ---"
+        )
+        cos, rl2, _, _ = run_test(
+            label,
+            model_drop,
+            model_drop_state,
+            ls_state,
+            query_inputs,
+            doc_inputs,
+            cs,
+            device,
+        )
         results[label] = cos
 
     # =========================================================================
@@ -287,15 +328,17 @@ def main():
     N, D = 4, 8
     q = F.normalize(torch.randn(N, D, device=device), dim=-1)
     d = F.normalize(torch.randn(N, D, device=device), dim=-1)
-    ls = LogitScale(init_value=1/0.07).to(device)
+    ls = LogitScale(init_value=1 / 0.07).to(device)
     loss, acc = clip_loss(q, d, ls, gather_enabled=False)
     # Labels should be [0, 1, 2, 3] — each query matches its own doc
     sim = ls(q @ d.T)
     expected_labels = torch.arange(N, device=device)
     expected_loss = F.cross_entropy(sim, expected_labels)
     c1_ok = abs(loss.item() - expected_loss.item()) < 1e-5
-    print(f"  loss={loss.item():.6f}  expected={expected_loss.item():.6f}  "
-          f"diff={abs(loss.item() - expected_loss.item()):.2e}  [{'PASS' if c1_ok else 'FAIL'}]")
+    print(
+        f"  loss={loss.item():.6f}  expected={expected_loss.item():.6f}  "
+        f"diff={abs(loss.item() - expected_loss.item()):.2e}  [{'PASS' if c1_ok else 'FAIL'}]"
+    )
     results["C1_basic_labels"] = 1.0 if c1_ok else 0.0
 
     # C2: Hard negatives — 2 hard negs per query, docs interleaved
@@ -310,9 +353,11 @@ def main():
     expected_hn_labels = torch.arange(N, device=device) * docs_per_q
     expected_hn_loss = F.cross_entropy(sim_hn, expected_hn_labels)
     c2_ok = abs(loss_hn.item() - expected_hn_loss.item()) < 1e-5
-    print(f"  labels={expected_hn_labels.tolist()}  loss={loss_hn.item():.6f}  "
-          f"expected={expected_hn_loss.item():.6f}  "
-          f"diff={abs(loss_hn.item() - expected_hn_loss.item()):.2e}  [{'PASS' if c2_ok else 'FAIL'}]")
+    print(
+        f"  labels={expected_hn_labels.tolist()}  loss={loss_hn.item():.6f}  "
+        f"expected={expected_hn_loss.item():.6f}  "
+        f"diff={abs(loss_hn.item() - expected_hn_loss.item()):.2e}  [{'PASS' if c2_ok else 'FAIL'}]"
+    )
     results["C2_hard_neg_labels"] = 1.0 if c2_ok else 0.0
 
     # C3: Verify assertion fires for bad divisibility
@@ -325,7 +370,7 @@ def main():
     except AssertionError as e:
         c3_ok = True
         print(f"  AssertionError raised as expected: {e}")
-        print(f"  [PASS]")
+        print("  [PASS]")
     results["C3_divisibility_assert"] = 1.0 if c3_ok else 0.0
 
     # =========================================================================
@@ -347,16 +392,16 @@ def main():
 
     # Check that rope_deltas is set on the inner model
     inner = model
-    while hasattr(inner, 'model'):
+    while hasattr(inner, "model"):
         inner = inner.model
-    has_rope = hasattr(inner, 'rope_deltas') and inner.rope_deltas is not None
+    has_rope = hasattr(inner, "rope_deltas") and inner.rope_deltas is not None
     print(f"  rope_deltas set after image forward: {has_rope}")
 
     # Now forward text — WITHOUT clearing, this should fail or give wrong results
     # if rope_deltas shape mismatches the text batch
     # First, demonstrate that clearing prevents the issue:
     _clear_rope_deltas(model)
-    cleared = not hasattr(inner, 'rope_deltas') or inner.rope_deltas is None
+    cleared = not hasattr(inner, "rope_deltas") or inner.rope_deltas is None
     print(f"  rope_deltas cleared after _clear_rope_deltas: {cleared}")
 
     d_ok = False
@@ -366,7 +411,7 @@ def main():
                 _clear_rope_deltas(model)
                 _ = model(**{k: v[:3] for k, v in query_inputs.items()})
         d_ok = True
-        print(f"  Text forward after clear succeeded: [PASS]")
+        print("  Text forward after clear succeeded: [PASS]")
     except Exception as e:
         print(f"  Text forward after clear failed: {e}  [FAIL]")
     results["D_rope_deltas"] = 1.0 if d_ok else 0.0

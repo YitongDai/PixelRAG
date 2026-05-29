@@ -87,9 +87,7 @@ async def _launch_oneshot(
         args += extra_args
     args += ["about:blank"]
 
-    proc = subprocess.Popen(
-        args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
+    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     last_exc: Exception | None = None
     for _ in range(_POLL_ATTEMPTS):
@@ -194,9 +192,7 @@ class CDPOneShotStrategy:
         await asyncio.gather(*[capture_task(a) for a in articles])
         return [r for r in all_results if r is not None]
 
-    async def _capture_one(
-        self, article: dict, slot: int, port: int
-    ) -> ArticleCapture:
+    async def _capture_one(self, article: dict, slot: int, port: int) -> ArticleCapture:
         ac = ArticleCapture(article_path=article["path"])
         th = self.tile_height
 
@@ -208,7 +204,8 @@ class CDPOneShotStrategy:
             # Launch a fresh process on this port slot.
             try:
                 conn, proc = await _launch_oneshot(
-                    self.chrome_path, port,
+                    self.chrome_path,
+                    port,
                     headless_shell=self.headless_shell,
                     extra_args=self.extra_chrome_args,
                 )
@@ -239,10 +236,15 @@ class CDPOneShotStrategy:
         # === Configure viewport ===
         try:
             await conn.cdp("Page.enable")
-            await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": th,
-                "deviceScaleFactor": 1, "mobile": False,
-            })
+            await conn.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": th,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
         except Exception as e:
             ac.errors.append(f"setup cdp: {e}")
             return
@@ -277,11 +279,14 @@ class CDPOneShotStrategy:
             wait_expr = WAIT_FONTS_IMGS.replace(
                 "setTimeout(r, 2000)", f"setTimeout(r, {self.nav_timeout_ms})"
             )
-            r = await conn.cdp("Runtime.evaluate", {
-                "expression": wait_expr,
-                "awaitPromise": True,
-                "returnByValue": True,
-            })
+            r = await conn.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": wait_expr,
+                    "awaitPromise": True,
+                    "returnByValue": True,
+                },
+            )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = th
@@ -304,8 +309,10 @@ class CDPOneShotStrategy:
 
             # Scroll into position and wait for viewport images.
             try:
-                await conn.cdp("Runtime.evaluate", {
-                    "expression": f"""new Promise(resolve => {{
+                await conn.cdp(
+                    "Runtime.evaluate",
+                    {
+                        "expression": f"""new Promise(resolve => {{
                         window.scrollTo(0, {clip_y});
                         requestAnimationFrame(() => requestAnimationFrame(() => {{
                             const imgs = Array.from(document.images).filter(i => {{
@@ -322,8 +329,9 @@ class CDPOneShotStrategy:
                             Promise.race([loaded, timeout]).then(resolve);
                         }}));
                     }})""",
-                    "awaitPromise": True,
-                })
+                        "awaitPromise": True,
+                    },
+                )
             except Exception:
                 pass
 
@@ -331,8 +339,11 @@ class CDPOneShotStrategy:
                 "fromSurface": self.from_surface,
                 "optimizeForSpeed": True,
                 "clip": {
-                    "x": 0, "y": clip_y,
-                    "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1,
+                    "x": 0,
+                    "y": clip_y,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
                 },
             }
 
@@ -364,7 +375,9 @@ class CDPOneShotStrategy:
             tc = TileCapture(
                 shot_ms=shot_ms,
                 nav_ms=nav_ms if t == 0 else 0.0,
-                tile_index=t, clip_y=clip_y, clip_h=clip_h,
+                tile_index=t,
+                clip_y=clip_y,
+                clip_h=clip_h,
             )
             if self.fmt == "raw":
                 tc.raw_file_path = raw_path

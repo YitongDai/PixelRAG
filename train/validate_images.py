@@ -7,6 +7,7 @@ Usage:
 Only rows with valid positive images (exists + opens correctly) are kept.
 Hard negative paths are checked for existence only (no image verify).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -80,14 +81,16 @@ def main():
             else:
                 corrupt += 1
             if (i + 1) % 10000 == 0:
-                print(f"  {i+1}/{total} checked, {len(valid_lines)} valid")
+                print(f"  {i + 1}/{total} checked, {len(valid_lines)} valid")
 
     with open(args.output, "w") as f:
         f.writelines(valid_lines)
 
     passed = len(valid_lines)
     failed = total - passed
-    print(f"\nDone: {passed}/{total} valid ({failed} failed: {missing} missing, {corrupt} corrupt)")
+    print(
+        f"\nDone: {passed}/{total} valid ({failed} failed: {missing} missing, {corrupt} corrupt)"
+    )
     print(f"Written to {args.output}")
 
 

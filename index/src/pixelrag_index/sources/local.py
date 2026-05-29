@@ -1,4 +1,5 @@
 """Local directory source — auto-detect file types."""
+
 from pathlib import Path
 from typing import Iterator
 
@@ -18,7 +19,8 @@ class LocalSource(Source):
     def __init__(self, path: str, **kwargs):
         self.path = Path(path)
         self._files = [
-            f for f in sorted(self.path.rglob("*"))
+            f
+            for f in sorted(self.path.rglob("*"))
             if f.is_file() and f.suffix.lower() in EXTENSIONS
         ]
 

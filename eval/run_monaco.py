@@ -37,6 +37,7 @@ Dataset:
     Place at: data/monaco/monaco_version_1_release.jsonl (relative to this script)
     Or pass --data-path <path>
 """
+
 from __future__ import annotations
 
 import argparse
@@ -48,7 +49,6 @@ import logging
 import os
 import re
 import string
-import sys
 import time
 import traceback
 import urllib.parse
@@ -82,13 +82,13 @@ USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "tool_calls": 0
 
 # Pricing per million tokens
 PRICING = {
-    "gpt-5":                {"in": 0.625, "out": 5.0},
-    "gpt-5-2025-08-07":     {"in": 0.625, "out": 5.0},
-    "gpt-4o-2024-08-06":    {"in": 2.50,  "out": 10.0},
-    "gpt-4o":               {"in": 2.50,  "out": 10.0},
-    "claude-sonnet-4-6":    {"in": 3.0,   "out": 15.0},
-    "claude-opus-4-7":      {"in": 15.0,  "out": 75.0},
-    "claude-haiku-4-5":     {"in": 0.80,  "out": 4.0},
+    "gpt-5": {"in": 0.625, "out": 5.0},
+    "gpt-5-2025-08-07": {"in": 0.625, "out": 5.0},
+    "gpt-4o-2024-08-06": {"in": 2.50, "out": 10.0},
+    "gpt-4o": {"in": 2.50, "out": 10.0},
+    "claude-sonnet-4-6": {"in": 3.0, "out": 15.0},
+    "claude-opus-4-7": {"in": 15.0, "out": 75.0},
+    "claude-haiku-4-5": {"in": 0.80, "out": 4.0},
 }
 
 # Module-level globals (set in main() from CLI args)
@@ -134,11 +134,11 @@ SYSTEM_PROMPT_TEMPLATE = (
     "Choosing top_k:\n"
     "  - Default (omit top_k): {default_k} results per search.\n"
     "  - Narrow factoid lookup (one person/date/place): top_k=2-3.\n"
-    "  - Broad enumeration (\"all X\", \"every Y\", \"list of Z\"): top_k=7-10.\n"
+    '  - Broad enumeration ("all X", "every Y", "list of Z"): top_k=7-10.\n'
     "\n"
     "List questions (especially LONG lists):\n"
-    "  - If the question asks for a list (\"all X\", \"every Y\", \"each Z\", "
-    "\"top N\"), do AT LEAST 3 distinct searches with varied phrasings before "
+    '  - If the question asks for a list ("all X", "every Y", "each Z", '
+    '"top N"), do AT LEAST 3 distinct searches with varied phrasings before '
     "answering.\n"
     "  - If the question implies a VERY long list (50+ entries), do AT LEAST "
     "5 broader searches; aim to enumerate AT LEAST 30 entries.\n"
@@ -280,10 +280,15 @@ def _search_pixel(query: str, n_docs: int | None = None) -> list[dict]:
         try:
             with open(png_path, "rb") as fh:
                 b64 = base64.b64encode(fh.read()).decode("ascii")
-            parts.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}", "detail": _IMAGE_DETAIL},
-            })
+            parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{b64}",
+                        "detail": _IMAGE_DETAIL,
+                    },
+                }
+            )
         except Exception as e:
             parts.append({"type": "text", "text": f"[image_error for {png_path}: {e}]"})
     return parts
@@ -304,8 +309,9 @@ def _is_claude_model(model: str) -> bool:
     return "claude" in model.lower()
 
 
-def _call_llm_openai(messages: list[dict], model: str, tool_schema: dict,
-                     api_key: str, base_url: str) -> dict:
+def _call_llm_openai(
+    messages: list[dict], model: str, tool_schema: dict, api_key: str, base_url: str
+) -> dict:
     """One OpenAI LLM turn with tools. Returns the message dict."""
     body: dict = {
         "model": model,
@@ -322,7 +328,10 @@ def _call_llm_openai(messages: list[dict], model: str, tool_schema: dict,
     req = urllib.request.Request(
         base_url.rstrip("/") + "/chat/completions",
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
     )
     last_exc = None
     for attempt in range(5):
@@ -337,13 +346,13 @@ def _call_llm_openai(messages: list[dict], model: str, tool_schema: dict,
         except urllib.error.HTTPError as e:
             last_exc = e
             if e.code in (400, 429, 500, 502, 503, 504) and attempt < 4:
-                time.sleep(min(60, 2 ** attempt + 2))
+                time.sleep(min(60, 2**attempt + 2))
                 continue
             raise
         except urllib.error.URLError as e:
             last_exc = e
             if attempt < 4:
-                time.sleep(min(60, 2 ** attempt + 2))
+                time.sleep(min(60, 2**attempt + 2))
                 continue
             raise
     raise last_exc  # type: ignore[misc]
@@ -351,7 +360,11 @@ def _call_llm_openai(messages: list[dict], model: str, tool_schema: dict,
 
 def _openai_tool_to_claude(schema: dict) -> dict:
     fn = schema["function"]
-    return {"name": fn["name"], "description": fn["description"], "input_schema": fn["parameters"]}
+    return {
+        "name": fn["name"],
+        "description": fn["description"],
+        "input_schema": fn["parameters"],
+    }
 
 
 def _openai_msgs_to_claude(messages: list[dict]) -> tuple[str, list[dict]]:
@@ -361,7 +374,9 @@ def _openai_msgs_to_claude(messages: list[dict]) -> tuple[str, list[dict]]:
     for m in messages:
         role = m.get("role", "")
         if role == "system":
-            system_parts.append(m["content"] if isinstance(m["content"], str) else str(m["content"]))
+            system_parts.append(
+                m["content"] if isinstance(m["content"], str) else str(m["content"])
+            )
         elif role == "user":
             content = m["content"]
             if isinstance(content, str):
@@ -376,7 +391,16 @@ def _openai_msgs_to_claude(messages: list[dict]) -> tuple[str, list[dict]]:
                         if url.startswith("data:"):
                             header, b64data = url.split(",", 1)
                             media_type = header.split(":")[1].split(";")[0]
-                            blocks.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64data}})
+                            blocks.append(
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": b64data,
+                                    },
+                                }
+                            )
                 claude_msgs.append({"role": "user", "content": blocks})
         elif role == "assistant":
             blocks = []
@@ -389,13 +413,31 @@ def _openai_msgs_to_claude(messages: list[dict]) -> tuple[str, list[dict]]:
                     inp = json.loads(fn.get("arguments", "{}"))
                 except Exception:
                     inp = {}
-                blocks.append({"type": "tool_use", "id": tc["id"], "name": fn["name"], "input": inp})
-            claude_msgs.append({"role": "assistant", "content": blocks or [{"type": "text", "text": ""}]})
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc["id"],
+                        "name": fn["name"],
+                        "input": inp,
+                    }
+                )
+            claude_msgs.append(
+                {
+                    "role": "assistant",
+                    "content": blocks or [{"type": "text", "text": ""}],
+                }
+            )
         elif role == "tool":
             tool_content = m.get("content", "")
             result_blocks = []
             if isinstance(tool_content, str):
-                result_blocks.append({"type": "tool_result", "tool_use_id": m.get("tool_call_id", ""), "content": tool_content})
+                result_blocks.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": m.get("tool_call_id", ""),
+                        "content": tool_content,
+                    }
+                )
             elif isinstance(tool_content, list):
                 inner = []
                 for part in tool_content:
@@ -406,12 +448,30 @@ def _openai_msgs_to_claude(messages: list[dict]) -> tuple[str, list[dict]]:
                         if url.startswith("data:"):
                             header, b64data = url.split(",", 1)
                             media_type = header.split(":")[1].split(";")[0]
-                            inner.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64data}})
-                result_blocks.append({"type": "tool_result", "tool_use_id": m.get("tool_call_id", ""), "content": inner})
-            if (claude_msgs and claude_msgs[-1]["role"] == "user"
-                    and isinstance(claude_msgs[-1]["content"], list)
-                    and claude_msgs[-1]["content"]
-                    and claude_msgs[-1]["content"][0].get("type") == "tool_result"):
+                            inner.append(
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": b64data,
+                                    },
+                                }
+                            )
+                result_blocks.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": m.get("tool_call_id", ""),
+                        "content": inner,
+                    }
+                )
+            if (
+                claude_msgs
+                and claude_msgs[-1]["role"] == "user"
+                and isinstance(claude_msgs[-1]["content"], list)
+                and claude_msgs[-1]["content"]
+                and claude_msgs[-1]["content"][0].get("type") == "tool_result"
+            ):
                 claude_msgs[-1]["content"].extend(result_blocks)
             else:
                 claude_msgs.append({"role": "user", "content": result_blocks})
@@ -425,20 +485,27 @@ def _claude_response_to_openai(response) -> dict:
         if block.type == "text":
             content_text += block.text
         elif block.type == "tool_use":
-            tool_calls.append({
-                "id": block.id,
-                "type": "function",
-                "function": {"name": block.name, "arguments": json.dumps(block.input)},
-            })
+            tool_calls.append(
+                {
+                    "id": block.id,
+                    "type": "function",
+                    "function": {
+                        "name": block.name,
+                        "arguments": json.dumps(block.input),
+                    },
+                }
+            )
     msg: dict = {"content": content_text or None}
     if tool_calls:
         msg["tool_calls"] = tool_calls
     return msg
 
 
-def _call_llm_claude(messages: list[dict], model: str, tool_schema: dict,
-                     api_key: str) -> dict:
+def _call_llm_claude(
+    messages: list[dict], model: str, tool_schema: dict, api_key: str
+) -> dict:
     import anthropic
+
     client = anthropic.Anthropic(api_key=api_key)
     system_str, claude_msgs = _openai_msgs_to_claude(messages)
     claude_tool = _openai_tool_to_claude(tool_schema)
@@ -460,20 +527,21 @@ def _call_llm_claude(messages: list[dict], model: str, tool_schema: dict,
         except anthropic.APIStatusError as e:
             last_exc = e
             if e.status_code in (400, 429, 500, 502, 503, 529) and attempt < 4:
-                time.sleep(min(60, 2 ** attempt + 2))
+                time.sleep(min(60, 2**attempt + 2))
                 continue
             raise
         except Exception as e:
             last_exc = e
             if attempt < 4:
-                time.sleep(min(60, 2 ** attempt + 2))
+                time.sleep(min(60, 2**attempt + 2))
                 continue
             raise
     raise last_exc  # type: ignore[misc]
 
 
-def _call_llm_forced_openai(messages: list[dict], model: str,
-                            api_key: str, base_url: str) -> str:
+def _call_llm_forced_openai(
+    messages: list[dict], model: str, api_key: str, base_url: str
+) -> str:
     """Final forced-answer call without tools."""
     body: dict = {"model": model, "messages": messages}
     if _is_local_model(base_url):
@@ -485,7 +553,10 @@ def _call_llm_forced_openai(messages: list[dict], model: str,
     req = urllib.request.Request(
         base_url.rstrip("/") + "/chat/completions",
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
     )
     with urllib.request.urlopen(req, timeout=READER_TIMEOUT) as resp:
         d = json.load(resp)
@@ -497,6 +568,7 @@ def _call_llm_forced_openai(messages: list[dict], model: str,
 
 def _call_llm_forced_claude(messages: list[dict], model: str, api_key: str) -> str:
     import anthropic
+
     client = anthropic.Anthropic(api_key=api_key)
     system_str, claude_msgs = _openai_msgs_to_claude(messages)
     last_exc = None
@@ -515,7 +587,7 @@ def _call_llm_forced_claude(messages: list[dict], model: str, api_key: str) -> s
         except anthropic.APIStatusError as e:
             last_exc = e
             if e.status_code in (400, 429, 500, 502, 503, 529) and attempt < 3:
-                time.sleep(min(60, 2 ** attempt + 2))
+                time.sleep(min(60, 2**attempt + 2))
                 continue
             raise
     raise last_exc  # type: ignore[misc]
@@ -524,14 +596,21 @@ def _call_llm_forced_claude(messages: list[dict], model: str, api_key: str) -> s
 # ---------------------------------------------------------------------------
 # ReAct loop
 # ---------------------------------------------------------------------------
-def react_loop(question: str, model: str, retrieval: str,
-               api_key: str, base_url: str,
-               max_turns: int | None = None) -> dict:
+def react_loop(
+    question: str,
+    model: str,
+    retrieval: str,
+    api_key: str,
+    base_url: str,
+    max_turns: int | None = None,
+) -> dict:
     """Run the ReAct loop. Returns dict with 'final', 'turns', 'searches', 'trace', 'k_values'."""
     if max_turns is None:
         max_turns = MAX_TURNS
     system_prompt = _build_system_prompt(retrieval)
-    tool_schema = copy.deepcopy(SEARCH_PIXEL_TOOL if retrieval == "pixel" else SEARCH_TEXT_TOOL)
+    tool_schema = copy.deepcopy(
+        SEARCH_PIXEL_TOOL if retrieval == "pixel" else SEARCH_TEXT_TOOL
+    )
     tool_name = "search_pixel" if retrieval == "pixel" else "search_text"
     use_claude = _is_claude_model(model)
 
@@ -573,24 +652,30 @@ def react_loop(question: str, model: str, retrieval: str,
 
                     if retrieval == "text":
                         result = _search_text(q, n_docs=k)
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": result[:RESULT_TRUNCATE_CHARS],
-                        })
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc["id"],
+                                "content": result[:RESULT_TRUNCATE_CHARS],
+                            }
+                        )
                     else:
                         image_parts = _search_pixel(q, n_docs=k)
-                        messages.append({
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc["id"],
+                                "content": image_parts,
+                            }
+                        )
+                else:
+                    messages.append(
+                        {
                             "role": "tool",
                             "tool_call_id": tc["id"],
-                            "content": image_parts,
-                        })
-                else:
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc["id"],
-                        "content": f"[unknown tool: {name}]",
-                    })
+                            "content": f"[unknown tool: {name}]",
+                        }
+                    )
         else:
             # No tool calls -> final answer
             content = msg.get("content", "") or ""
@@ -604,10 +689,12 @@ def react_loop(question: str, model: str, retrieval: str,
             }
 
     # Hit max_turns: force a final answer
-    messages.append({
-        "role": "user",
-        "content": "You must now provide the final answer. Output exactly one line:\nAnswers: {your answer}",
-    })
+    messages.append(
+        {
+            "role": "user",
+            "content": "You must now provide the final answer. Output exactly one line:\nAnswers: {your answer}",
+        }
+    )
     if use_claude:
         forced = _call_llm_forced_claude(messages, model, api_key)
     else:
@@ -645,12 +732,16 @@ def normalize_answer(s: str) -> str:
     """SQuAD-style normalization: lowercase, strip punctuation, articles, whitespace."""
     if s is None:
         return ""
+
     def remove_articles(text: str) -> str:
         return re.sub(r"\b(a|an|the)\b", " ", text)
+
     def white_space_fix(text: str) -> str:
         return " ".join(text.split())
+
     def remove_punc(text: str) -> str:
         return "".join(ch for ch in text if ch not in set(string.punctuation))
+
     return white_space_fix(remove_articles(remove_punc(s.lower())))
 
 
@@ -713,8 +804,9 @@ def grade_monaco(predicted: str, validated_answer: Any) -> dict:
 # ---------------------------------------------------------------------------
 # Process one example
 # ---------------------------------------------------------------------------
-def process_one(ex: dict, model: str, retrieval: str,
-                api_key: str, base_url: str) -> dict:
+def process_one(
+    ex: dict, model: str, retrieval: str, api_key: str, base_url: str
+) -> dict:
     """Run the ReAct agent on one MoNaCo example. Returns prediction record."""
     t0 = time.time()
     ex_num = ex["ex_num"]
@@ -734,7 +826,9 @@ def process_one(ex: dict, model: str, retrieval: str,
             "output": output,
             "qa_type": f"agent_self_decomp_{retrieval}",
             "llm": model,
-            "gold_decomposition": "\n".join(f"{i+1}. {s}" for i, s in enumerate(decomp)),
+            "gold_decomposition": "\n".join(
+                f"{i + 1}. {s}" for i, s in enumerate(decomp)
+            ),
             "ex_num": ex_num,
             "gold_question": question,
             "elapsed_sec": round(time.time() - t0, 2),
@@ -749,7 +843,9 @@ def process_one(ex: dict, model: str, retrieval: str,
             "output": "Let's think step by step: [agent_error]\nAnswers: [error]",
             "qa_type": f"agent_self_decomp_{retrieval}",
             "llm": model,
-            "gold_decomposition": "\n".join(f"{i+1}. {s}" for i, s in enumerate(decomp)),
+            "gold_decomposition": "\n".join(
+                f"{i + 1}. {s}" for i, s in enumerate(decomp)
+            ),
             "ex_num": ex_num,
             "gold_question": question,
             "elapsed_sec": round(time.time() - t0, 2),
@@ -817,7 +913,9 @@ overlapping answers: List all of the answers in [response] that also appear in [
 """
 
 _JUDGE_LEN_PAT = re.compile(r"final answer length\s*[:\-]?\s*(\d+)", re.IGNORECASE)
-_JUDGE_OVERLAP_PAT = re.compile(r"overlapping answers\s*[:\-]?\s*(.*)", re.IGNORECASE | re.DOTALL)
+_JUDGE_OVERLAP_PAT = re.compile(
+    r"overlapping answers\s*[:\-]?\s*(.*)", re.IGNORECASE | re.DOTALL
+)
 
 
 def _gold_length(validated_answer: Any) -> int:
@@ -847,9 +945,14 @@ def _judge_f1(predicted_num: int, correct_preds: list[str], gold_len: int) -> di
     p = num_correct / predicted_num if predicted_num > 0 else 0.0
     r = num_correct / gold_len if gold_len > 0 else 0.0
     f1 = 2 * p * r / (p + r) if (p + r) > 0 else 0.0
-    return {"judge_f1": f1, "judge_p": p, "judge_r": r,
-            "judge_n_correct": num_correct, "judge_n_pred": predicted_num,
-            "judge_gold_len": gold_len}
+    return {
+        "judge_f1": f1,
+        "judge_p": p,
+        "judge_r": r,
+        "judge_n_correct": num_correct,
+        "judge_n_pred": predicted_num,
+        "judge_gold_len": gold_len,
+    }
 
 
 def judge_one(rec: dict, judge_model: str, api_key: str, base_url: str) -> dict:
@@ -873,7 +976,10 @@ def judge_one(rec: dict, judge_model: str, api_key: str, base_url: str) -> dict:
     req = urllib.request.Request(
         base_url.rstrip("/") + "/chat/completions",
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
     )
     last_exc = None
     for attempt in range(4):
@@ -889,13 +995,13 @@ def judge_one(rec: dict, judge_model: str, api_key: str, base_url: str) -> dict:
         except urllib.error.HTTPError as e:
             last_exc = e
             if e.code in (429, 500, 502, 503, 504) and attempt < 3:
-                time.sleep(min(60, 2 ** attempt + 2))
+                time.sleep(min(60, 2**attempt + 2))
                 continue
             raise
         except urllib.error.URLError as e:
             last_exc = e
             if attempt < 3:
-                time.sleep(min(60, 2 ** attempt + 2))
+                time.sleep(min(60, 2**attempt + 2))
                 continue
             raise
     raise last_exc  # type: ignore[misc]
@@ -909,44 +1015,109 @@ def main() -> None:
         description="MoNaCo multi-hop QA evaluation with ReAct agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--reader", type=str, default="gpt-5",
-                    help="Model name (default: gpt-5). E.g. gpt-5, gpt-4o-2024-08-06, claude-sonnet-4-6.")
-    ap.add_argument("--retrieval", type=str, choices=["text", "pixel"], default="text",
-                    help="Retrieval backend: 'text' (default) or 'pixel'.")
-    ap.add_argument("--data-path", type=str, default=str(DEFAULT_DATA_PATH),
-                    help=f"Path to MoNaCo JSONL file (default: {DEFAULT_DATA_PATH})")
-    ap.add_argument("--output-dir", type=str, default="",
-                    help="Override output directory (default: eval_output/monaco/<tag>)")
-    ap.add_argument("--limit", type=int, default=0,
-                    help="Process only first N examples (0 = all)")
-    ap.add_argument("--workers", type=int, default=4,
-                    help="Number of concurrent workers (default: 4)")
-    ap.add_argument("--smoke", type=int, default=0,
-                    help="Quick smoke test with N examples")
-    ap.add_argument("--tag-suffix", type=str, default="",
-                    help="Appended to the auto-generated run tag")
-    ap.add_argument("--base-url", type=str, default="",
-                    help="Override OPENAI_BASE_URL")
-    ap.add_argument("--api-key", type=str, default="",
-                    help="Override OPENAI_API_KEY / ANTHROPIC_API_KEY")
-    ap.add_argument("--pixel-api", type=str, default="",
-                    help=f"Pixel search endpoint (default: {PIXEL_API})")
-    ap.add_argument("--text-api", type=str, default="",
-                    help=f"Text search endpoint (default: {TEXT_API})")
-    ap.add_argument("--image-detail", choices=["auto", "low", "high"], default="auto",
-                    help="OpenAI image detail level for pixel retrieval")
-    ap.add_argument("--default-top-k", type=int, default=DEFAULT_K,
-                    help=f"Default top-k per search (default: {DEFAULT_K})")
-    ap.add_argument("--max-top-k", type=int, default=MAX_TOP_K,
-                    help=f"Max top-k the agent can use (default: {MAX_TOP_K})")
-    ap.add_argument("--max-turns", type=int, default=MAX_TURNS,
-                    help=f"Max ReAct turns (default: {MAX_TURNS})")
-    ap.add_argument("--judge", action="store_true",
-                    help="Run LLM judge grading after all predictions (secondary metric)")
-    ap.add_argument("--judge-model", type=str, default="gpt-4.1-2025-04-14",
-                    help="Model for LLM judge (default: gpt-4.1-2025-04-14)")
-    ap.add_argument("--judge-workers", type=int, default=12,
-                    help="Workers for LLM judge (default: 12)")
+    ap.add_argument(
+        "--reader",
+        type=str,
+        default="gpt-5",
+        help="Model name (default: gpt-5). E.g. gpt-5, gpt-4o-2024-08-06, claude-sonnet-4-6.",
+    )
+    ap.add_argument(
+        "--retrieval",
+        type=str,
+        choices=["text", "pixel"],
+        default="text",
+        help="Retrieval backend: 'text' (default) or 'pixel'.",
+    )
+    ap.add_argument(
+        "--data-path",
+        type=str,
+        default=str(DEFAULT_DATA_PATH),
+        help=f"Path to MoNaCo JSONL file (default: {DEFAULT_DATA_PATH})",
+    )
+    ap.add_argument(
+        "--output-dir",
+        type=str,
+        default="",
+        help="Override output directory (default: eval_output/monaco/<tag>)",
+    )
+    ap.add_argument(
+        "--limit", type=int, default=0, help="Process only first N examples (0 = all)"
+    )
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="Number of concurrent workers (default: 4)",
+    )
+    ap.add_argument(
+        "--smoke", type=int, default=0, help="Quick smoke test with N examples"
+    )
+    ap.add_argument(
+        "--tag-suffix",
+        type=str,
+        default="",
+        help="Appended to the auto-generated run tag",
+    )
+    ap.add_argument("--base-url", type=str, default="", help="Override OPENAI_BASE_URL")
+    ap.add_argument(
+        "--api-key",
+        type=str,
+        default="",
+        help="Override OPENAI_API_KEY / ANTHROPIC_API_KEY",
+    )
+    ap.add_argument(
+        "--pixel-api",
+        type=str,
+        default="",
+        help=f"Pixel search endpoint (default: {PIXEL_API})",
+    )
+    ap.add_argument(
+        "--text-api",
+        type=str,
+        default="",
+        help=f"Text search endpoint (default: {TEXT_API})",
+    )
+    ap.add_argument(
+        "--image-detail",
+        choices=["auto", "low", "high"],
+        default="auto",
+        help="OpenAI image detail level for pixel retrieval",
+    )
+    ap.add_argument(
+        "--default-top-k",
+        type=int,
+        default=DEFAULT_K,
+        help=f"Default top-k per search (default: {DEFAULT_K})",
+    )
+    ap.add_argument(
+        "--max-top-k",
+        type=int,
+        default=MAX_TOP_K,
+        help=f"Max top-k the agent can use (default: {MAX_TOP_K})",
+    )
+    ap.add_argument(
+        "--max-turns",
+        type=int,
+        default=MAX_TURNS,
+        help=f"Max ReAct turns (default: {MAX_TURNS})",
+    )
+    ap.add_argument(
+        "--judge",
+        action="store_true",
+        help="Run LLM judge grading after all predictions (secondary metric)",
+    )
+    ap.add_argument(
+        "--judge-model",
+        type=str,
+        default="gpt-4.1-2025-04-14",
+        help="Model for LLM judge (default: gpt-4.1-2025-04-14)",
+    )
+    ap.add_argument(
+        "--judge-workers",
+        type=int,
+        default=12,
+        help="Workers for LLM judge (default: 12)",
+    )
     args = ap.parse_args()
 
     # Set module-level globals
@@ -962,7 +1133,9 @@ def main() -> None:
     model = args.reader
     use_claude = _is_claude_model(model)
     if use_claude:
-        api_key = (args.api_key.strip() or os.environ.get("ANTHROPIC_API_KEY", "")).strip()
+        api_key = (
+            args.api_key.strip() or os.environ.get("ANTHROPIC_API_KEY", "")
+        ).strip()
         if not api_key:
             raise SystemExit("ANTHROPIC_API_KEY not set (use --api-key or env var)")
         base_url = ""  # unused for Claude
@@ -970,7 +1143,10 @@ def main() -> None:
         api_key = (args.api_key.strip() or os.environ.get("OPENAI_API_KEY", "")).strip()
         if not api_key:
             raise SystemExit("OPENAI_API_KEY not set (use --api-key or env var)")
-        base_url = (args.base_url.strip() or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")).strip()
+        base_url = (
+            args.base_url.strip()
+            or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        ).strip()
 
     # Build run tag
     model_slug = model.replace("/", "_").replace("-", "_").replace(".", "_")
@@ -998,14 +1174,19 @@ def main() -> None:
         logger.info(f"text_api: {_TEXT_API}")
 
     # Filter already-done examples (resumable)
-    todo = [ex for ex in rows
-            if not (out_dir / f"llm_qa_judgement__{ex['ex_num']}.json").exists()]
-    logger.info(f"Remaining: {len(todo)} (skipping {len(rows) - len(todo)} already-done)")
+    todo = [
+        ex
+        for ex in rows
+        if not (out_dir / f"llm_qa_judgement__{ex['ex_num']}.json").exists()
+    ]
+    logger.info(
+        f"Remaining: {len(todo)} (skipping {len(rows) - len(todo)} already-done)"
+    )
 
     if args.smoke:
-        todo = todo[:args.smoke]
+        todo = todo[: args.smoke]
     elif args.limit:
-        todo = todo[:args.limit]
+        todo = todo[: args.limit]
 
     if not todo:
         logger.info("Nothing to do.")
@@ -1017,8 +1198,12 @@ def main() -> None:
         n_graded = 0
 
         with cf.ThreadPoolExecutor(max_workers=args.workers) as pool:
-            futs = {pool.submit(process_one, ex, model, args.retrieval, api_key, base_url): ex
-                    for ex in todo}
+            futs = {
+                pool.submit(
+                    process_one, ex, model, args.retrieval, api_key, base_url
+                ): ex
+                for ex in todo
+            }
             for i, fut in enumerate(cf.as_completed(futs), 1):
                 ex = futs[fut]
                 out_path = out_dir / f"llm_qa_judgement__{ex['ex_num']}.json"
@@ -1034,11 +1219,13 @@ def main() -> None:
                         n_graded += 1
 
                     tail = rec["output"].splitlines()[-1][:120] if rec["output"] else ""
-                    msg = (f"  [{i:>4}/{len(todo)}] ex={ex['ex_num']:<5} "
-                           f"turns={rec.get('n_turns', '?')} "
-                           f"searches={rec.get('n_searches', '?')} "
-                           f"t={rec.get('elapsed_sec'):>5.1f}s "
-                           f"{f1_str} | {tail}")
+                    msg = (
+                        f"  [{i:>4}/{len(todo)}] ex={ex['ex_num']:<5} "
+                        f"turns={rec.get('n_turns', '?')} "
+                        f"searches={rec.get('n_searches', '?')} "
+                        f"t={rec.get('elapsed_sec'):>5.1f}s "
+                        f"{f1_str} | {tail}"
+                    )
                     logger.info(msg)
                 except Exception as e:
                     n_err += 1
@@ -1050,16 +1237,29 @@ def main() -> None:
         dt = time.time() - t0
 
         # Estimate cost
-        price = PRICING.get(model, PRICING.get(
-            "gpt-5" if "gpt-5" in model else ("gpt-4o-2024-08-06" if "gpt-4o" in model else ""),
-            {"in": 0.0, "out": 0.0}))
-        cost = USAGE["prompt_tokens"] * price["in"] * 1e-6 + USAGE["completion_tokens"] * price["out"] * 1e-6
+        price = PRICING.get(
+            model,
+            PRICING.get(
+                "gpt-5"
+                if "gpt-5" in model
+                else ("gpt-4o-2024-08-06" if "gpt-4o" in model else ""),
+                {"in": 0.0, "out": 0.0},
+            ),
+        )
+        cost = (
+            USAGE["prompt_tokens"] * price["in"] * 1e-6
+            + USAGE["completion_tokens"] * price["out"] * 1e-6
+        )
 
-        logger.info(f"\nPredictions done in {dt/60:.1f} min — ok={n_ok} err={n_err}")
+        logger.info(f"\nPredictions done in {dt / 60:.1f} min — ok={n_ok} err={n_err}")
         logger.info(f"LLM calls: {USAGE['calls']} | tool calls: {USAGE['tool_calls']}")
-        logger.info(f"Tokens: in={USAGE['prompt_tokens']:,} out={USAGE['completion_tokens']:,} | est cost: ${cost:.4f}")
+        logger.info(
+            f"Tokens: in={USAGE['prompt_tokens']:,} out={USAGE['completion_tokens']:,} | est cost: ${cost:.4f}"
+        )
         if n_graded:
-            logger.info(f"Mean token F1 (new predictions): {f1_sum / n_graded:.4f} ({n_graded} graded)")
+            logger.info(
+                f"Mean token F1 (new predictions): {f1_sum / n_graded:.4f} ({n_graded} graded)"
+            )
 
     # Aggregate F1 over all completed predictions
     all_files = sorted(out_dir.glob("llm_qa_judgement__*.json"))
@@ -1074,14 +1274,18 @@ def main() -> None:
                 all_em.append(rec["token_em"])
         if all_f1:
             logger.info(f"\nAggregate over {len(all_f1)} examples:")
-            logger.info(f"  Mean token F1: {sum(all_f1)/len(all_f1):.4f}")
-            logger.info(f"  Mean token EM: {sum(all_em)/len(all_em):.4f}")
+            logger.info(f"  Mean token F1: {sum(all_f1) / len(all_f1):.4f}")
+            logger.info(f"  Mean token EM: {sum(all_em) / len(all_em):.4f}")
 
     # Optional: LLM judge grading
     if args.judge:
-        logger.info(f"\nRunning LLM judge ({args.judge_model}) on {len(all_files)} predictions...")
+        logger.info(
+            f"\nRunning LLM judge ({args.judge_model}) on {len(all_files)} predictions..."
+        )
         judge_api_key = os.environ.get("OPENAI_API_KEY", "").strip() or api_key
-        judge_base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+        judge_base_url = os.environ.get(
+            "OPENAI_BASE_URL", "https://api.openai.com/v1"
+        ).strip()
 
         n_judged = n_skip_judge = n_judge_err = 0
         judge_f1_sum = 0.0
@@ -1119,7 +1323,9 @@ def main() -> None:
 
         n_total_judge = n_judged + n_skip_judge
         if n_total_judge:
-            logger.info(f"Judge: {n_judged} new + {n_skip_judge} cached = {n_total_judge} total ({n_judge_err} errors)")
+            logger.info(
+                f"Judge: {n_judged} new + {n_skip_judge} cached = {n_total_judge} total ({n_judge_err} errors)"
+            )
             logger.info(f"Mean judge F1: {judge_f1_sum / n_total_judge:.4f}")
 
     # Write aggregate summary

@@ -85,17 +85,40 @@ class ApiRequestError(RuntimeError):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True, help="Input JSONL with retrieve_top20")
+    parser.add_argument(
+        "--input", required=True, help="Input JSONL with retrieve_top20"
+    )
     parser.add_argument("--output", required=True, help="Filtered output JSONL")
-    parser.add_argument("--reviews-output", default=None, help="Optional candidate review JSONL")
+    parser.add_argument(
+        "--reviews-output", default=None, help="Optional candidate review JSONL"
+    )
     parser.add_argument("--summary-output", default=None, help="Optional summary JSON")
-    parser.add_argument("--offset", type=int, default=0, help="Skip this many input rows before processing")
-    parser.add_argument("--limit", type=int, default=0, help="Max examples to process (0=all)")
-    parser.add_argument("--candidate-k", type=int, default=10, help="Max non-positive candidates to inspect")
-    parser.add_argument("--num-hard-negatives", type=int, default=7, help="Number of HNs to keep per example")
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Skip this many input rows before processing",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=0, help="Max examples to process (0=all)"
+    )
+    parser.add_argument(
+        "--candidate-k",
+        type=int,
+        default=10,
+        help="Max non-positive candidates to inspect",
+    )
+    parser.add_argument(
+        "--num-hard-negatives",
+        type=int,
+        default=7,
+        help="Number of HNs to keep per example",
+    )
     parser.add_argument("--model", default="gpt-4.1-mini")
     parser.add_argument("--provider", choices=["openai", "gemini"], default="openai")
-    parser.add_argument("--gemini", action="store_true", help="Alias for --provider gemini.")
+    parser.add_argument(
+        "--gemini", action="store_true", help="Alias for --provider gemini."
+    )
     parser.add_argument("--gemini-project", default="wise-coyote-478119-h0")
     parser.add_argument("--gemini-location", default="global")
     parser.add_argument("--max-retries", type=int, default=5)
@@ -127,7 +150,9 @@ def init_token_usage() -> dict:
     }
 
 
-def update_usage(client_ctx: dict, prompt_tokens: int = 0, completion_tokens: int = 0) -> None:
+def update_usage(
+    client_ctx: dict, prompt_tokens: int = 0, completion_tokens: int = 0
+) -> None:
     with client_ctx["usage_lock"]:
         client_ctx["usage"]["prompt_tokens"] += int(prompt_tokens or 0)
         client_ctx["usage"]["completion_tokens"] += int(completion_tokens or 0)
@@ -162,7 +187,9 @@ def build_text_client(args: argparse.Namespace) -> dict:
     }
 
 
-def call_openai_chat_completions(client_ctx: dict, model: str, prompt: str, max_retries: int) -> str:
+def call_openai_chat_completions(
+    client_ctx: dict, model: str, prompt: str, max_retries: int
+) -> str:
     headers = {
         "Authorization": f"Bearer {client_ctx['api_key']}",
         "Content-Type": "application/json",
@@ -174,7 +201,9 @@ def call_openai_chat_completions(client_ctx: dict, model: str, prompt: str, max_
     }
     for attempt in range(1, max_retries + 1):
         try:
-            resp = requests.post(CHAT_COMPLETIONS_URL, headers=headers, json=payload, timeout=180)
+            resp = requests.post(
+                CHAT_COMPLETIONS_URL, headers=headers, json=payload, timeout=180
+            )
             resp.raise_for_status()
             data = resp.json()
             usage = data.get("usage", {})
@@ -191,7 +220,9 @@ def call_openai_chat_completions(client_ctx: dict, model: str, prompt: str, max_
     raise RuntimeError("Unreachable")
 
 
-def call_gemini_generate_content(client_ctx: dict, model: str, prompt: str, max_retries: int) -> str:
+def call_gemini_generate_content(
+    client_ctx: dict, model: str, prompt: str, max_retries: int
+) -> str:
     from google.genai.types import GenerateContentConfig
 
     config = GenerateContentConfig(temperature=0, max_output_tokens=128)
@@ -238,13 +269,24 @@ def call_text_llm(client_ctx: dict, model: str, prompt: str, max_retries: int) -
     return call_gemini_generate_content(client_ctx, model, prompt, max_retries)
 
 
-def answer_question(client_ctx: dict, model: str, question: str, passage: str, max_retries: int) -> str:
+def answer_question(
+    client_ctx: dict, model: str, question: str, passage: str, max_retries: int
+) -> str:
     prompt = ANSWER_PROMPT_TEMPLATE.format(question=question, passage=passage)
     return call_text_llm(client_ctx, model, prompt, max_retries)
 
 
-def judge_answer(client_ctx: dict, model: str, question: str, passage: str, answer: str, max_retries: int) -> str:
-    prompt = JUDGE_PROMPT_TEMPLATE.format(question=question, candidate_answer=answer, passage=passage)
+def judge_answer(
+    client_ctx: dict,
+    model: str,
+    question: str,
+    passage: str,
+    answer: str,
+    max_retries: int,
+) -> str:
+    prompt = JUDGE_PROMPT_TEMPLATE.format(
+        question=question, candidate_answer=answer, passage=passage
+    )
     verdict = call_text_llm(client_ctx, model, prompt, max_retries)
     verdict = verdict.strip().upper().replace('"', "").replace("`", "")
     compact_verdict = verdict.replace("-", "_").replace(" ", "_")
@@ -327,7 +369,9 @@ def build_usage_summary(client_ctx: dict, model: str) -> dict:
     }
 
 
-def process_example(example_index: int, item: dict, args: argparse.Namespace, client_ctx: dict) -> dict:
+def process_example(
+    example_index: int, item: dict, args: argparse.Namespace, client_ctx: dict
+) -> dict:
     query = item["query"]
     selected_hns = []
     review_rows = []
@@ -336,13 +380,20 @@ def process_example(example_index: int, item: dict, args: argparse.Namespace, cl
     positive_passage = item["passage"]
     positive_answer = None
     try:
-        positive_answer = answer_question(client_ctx, args.model, query, positive_passage, args.max_retries)
+        positive_answer = answer_question(
+            client_ctx, args.model, query, positive_passage, args.max_retries
+        )
         time.sleep(args.sleep_seconds)
         if normalize_answer(positive_answer) == "CANNOT_ANSWER":
             positive_verdict = "CANNOT_ANSWER"
         else:
             positive_verdict = judge_answer(
-                client_ctx, args.model, query, positive_passage, positive_answer, args.max_retries
+                client_ctx,
+                args.model,
+                query,
+                positive_passage,
+                positive_answer,
+                args.max_retries,
             )
             time.sleep(args.sleep_seconds)
     except ApiRequestError as exc:
@@ -397,12 +448,21 @@ def process_example(example_index: int, item: dict, args: argparse.Namespace, cl
         candidate_text = candidate.get("text", "")
         answer = None
         try:
-            answer = answer_question(client_ctx, args.model, query, candidate_text, args.max_retries)
+            answer = answer_question(
+                client_ctx, args.model, query, candidate_text, args.max_retries
+            )
             time.sleep(args.sleep_seconds)
             if normalize_answer(answer) == "CANNOT_ANSWER":
                 verdict = "CANNOT_ANSWER"
             else:
-                verdict = judge_answer(client_ctx, args.model, query, candidate_text, answer, args.max_retries)
+                verdict = judge_answer(
+                    client_ctx,
+                    args.model,
+                    query,
+                    candidate_text,
+                    answer,
+                    args.max_retries,
+                )
                 time.sleep(args.sleep_seconds)
         except ApiRequestError as exc:
             counts["skip_reasons"]["api_error"] += 1
@@ -520,9 +580,14 @@ def main() -> int:
     max_workers = max(1, args.concurrency)
     max_pending = max_workers * 2
 
-    with output_path.open("w", encoding="utf-8") as output_handle, (
-        reviews_path.open("w", encoding="utf-8") if reviews_path else open(os.devnull, "w")
-    ) as reviews_handle:
+    with (
+        output_path.open("w", encoding="utf-8") as output_handle,
+        (
+            reviews_path.open("w", encoding="utf-8")
+            if reviews_path
+            else open(os.devnull, "w")
+        ) as reviews_handle,
+    ):
 
         def handle_result(result: dict) -> None:
             kept_row = result["kept_row"]
@@ -549,7 +614,9 @@ def main() -> int:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             pending = set()
-            for i, item in enumerate(iter_jsonl(input_path, args.offset, args.limit), start=1):
+            for i, item in enumerate(
+                iter_jsonl(input_path, args.offset, args.limit), start=1
+            ):
                 summary["input_examples"] += 1
                 pending.add(
                     executor.submit(

@@ -20,7 +20,6 @@ import logging
 import os
 import re
 import time
-from pathlib import Path
 
 import httpx
 
@@ -136,7 +135,7 @@ async def classify_batch(client, queries, batch_idx, semaphore, model="gpt-4.1-m
                     return batch_idx, [int(bool(x)) for x in labels]
                 # Fallback: if wrong length, try to pad/truncate
                 if isinstance(labels, list):
-                    labels = labels[:len(queries)]
+                    labels = labels[: len(queries)]
                     while len(labels) < len(queries):
                         labels.append(0)
                     return batch_idx, [int(bool(x)) for x in labels]
@@ -145,7 +144,7 @@ async def classify_batch(client, queries, batch_idx, semaphore, model="gpt-4.1-m
                 if attempt == 2:
                     logger.warning(f"Batch {batch_idx} failed: {e}")
                     return batch_idx, [0] * len(queries)
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
 
 
 async def main():
@@ -184,15 +183,17 @@ async def main():
         else:
             to_classify.append(i)
 
-    logger.info(f"Pass 1: auto-keep={len(auto_keep)}, auto-remove={len(auto_remove)}, "
-               f"to-classify={len(to_classify)}")
+    logger.info(
+        f"Pass 1: auto-keep={len(auto_keep)}, auto-remove={len(auto_remove)}, "
+        f"to-classify={len(to_classify)}"
+    )
 
     # ---- Pass 2: LLM classification ----
     classify_queries = [(idx, records[idx]["query"]) for idx in to_classify]
 
     batches = []
     for i in range(0, len(classify_queries), args.batch_size):
-        batch = classify_queries[i:i + args.batch_size]
+        batch = classify_queries[i : i + args.batch_size]
         batches.append(batch)
     logger.info(f"Pass 2: {len(batches)} batches of ~{args.batch_size}")
 
@@ -222,19 +223,24 @@ async def main():
                 elapsed = time.time() - t0
                 rate = done / elapsed if elapsed > 0 else 0
                 eta = (len(tasks) - done) / rate if rate > 0 else 0
-                logger.info(f"Pass 2: {done}/{len(tasks)} batches, "
-                           f"{len(llm_keep)} LLM-kept ({len(llm_keep)/len(to_classify)*100:.1f}%), "
-                           f"ETA: {eta:.0f}s")
+                logger.info(
+                    f"Pass 2: {done}/{len(tasks)} batches, "
+                    f"{len(llm_keep)} LLM-kept ({len(llm_keep) / len(to_classify) * 100:.1f}%), "
+                    f"ETA: {eta:.0f}s"
+                )
 
     # Combine
     all_keep = set(auto_keep) | llm_keep
-    logger.info(f"\nFinal: {len(all_keep)}/{len(records)} "
-               f"= {len(all_keep)/len(records)*100:.1f}%")
+    logger.info(
+        f"\nFinal: {len(all_keep)}/{len(records)} "
+        f"= {len(all_keep) / len(records) * 100:.1f}%"
+    )
     logger.info(f"  auto-keep (deep chunks): {len(auto_keep)}")
     logger.info(f"  LLM-kept: {len(llm_keep)}")
 
     # Chunk position breakdown of kept records
     from collections import Counter
+
     pos_counts = Counter()
     for i in all_keep:
         p, c = parse_chunk_position(records[i]["chunk_path"])
@@ -255,6 +261,7 @@ async def main():
 
     # Also save a sample for visual inspection
     import random
+
     random.seed(42)
     sample_indices = random.sample(sorted(all_keep), min(200, len(all_keep)))
     sample_file = args.output.replace(".jsonl", "_sample200.jsonl")

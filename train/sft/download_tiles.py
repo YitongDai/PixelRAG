@@ -19,7 +19,6 @@ import argparse
 import concurrent.futures as cf
 import json
 import os
-import sys
 import time
 import urllib.error
 import urllib.parse
@@ -79,12 +78,14 @@ def try_local_link(suffix: str, local_root: Path, mirror_root: Path) -> bool:
     except OSError:
         # cross-device; fall back to copy (only expected when local & mirror are on different filesystems)
         import shutil
+
         shutil.copy2(src, dst)
     return True
 
 
-def fetch_tile(api_url: str, path: str, dst: Path, timeout: int = 60,
-               retries: int = 3) -> tuple[bool, str]:
+def fetch_tile(
+    api_url: str, path: str, dst: Path, timeout: int = 60, retries: int = 3
+) -> tuple[bool, str]:
     url = api_url.rstrip("/") + "/tile?" + urllib.parse.urlencode({"path": path})
     last_err = None
     for attempt in range(retries):
@@ -98,20 +99,34 @@ def fetch_tile(api_url: str, path: str, dst: Path, timeout: int = 60,
                 f.write(data)
             os.replace(tmp, dst)
             return True, ""
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as e:
+        except (
+            urllib.error.HTTPError,
+            urllib.error.URLError,
+            TimeoutError,
+            OSError,
+        ) as e:
             last_err = str(e)
             if attempt < retries - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
     return False, f"{last_err}"
 
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--retrieval-dir", default="/scratch/users/zwcolin/cxr_embeds/sft_data/retrieval_raw")
-    p.add_argument("--dataset-dir", default="/scratch/users/zwcolin/cxr_embeds/external_data/screenshot-training-natural-filtered-v2",
-                   help="Local dataset root (used to shortcut gold tiles with a hardlink)")
-    p.add_argument("--mirror-dir", default=None,
-                   help="Where to write tile mirror; default <retrieval-dir>/tiles")
+    p.add_argument(
+        "--retrieval-dir",
+        default="/scratch/users/zwcolin/cxr_embeds/sft_data/retrieval_raw",
+    )
+    p.add_argument(
+        "--dataset-dir",
+        default="/scratch/users/zwcolin/cxr_embeds/external_data/screenshot-training-natural-filtered-v2",
+        help="Local dataset root (used to shortcut gold tiles with a hardlink)",
+    )
+    p.add_argument(
+        "--mirror-dir",
+        default=None,
+        help="Where to write tile mirror; default <retrieval-dir>/tiles",
+    )
     p.add_argument("--api-url", default="http://localhost:30895")
     p.add_argument("--splits", nargs="+", default=["train", "eval", "test"])
     p.add_argument("--workers", type=int, default=32)
@@ -167,6 +182,7 @@ def main():
     fail = 0
     fail_paths = []
     with open(failed_log, "w") as f_fail:
+
         def _work(item):
             suffix, abs_path = item
             dst = mirror / suffix
@@ -189,18 +205,26 @@ def main():
                     el = time.time() - t0
                     rate = i / max(el, 1e-9)
                     eta = (len(need_fetch) - i) / max(rate, 1e-9) / 60
-                    print(f"  [{i}/{len(need_fetch)}] ok={ok} fail={fail} "
-                          f"{rate:.1f} tile/s  eta {eta:.1f} min", flush=True)
+                    print(
+                        f"  [{i}/{len(need_fetch)}] ok={ok} fail={fail} "
+                        f"{rate:.1f} tile/s  eta {eta:.1f} min",
+                        flush=True,
+                    )
 
     el = time.time() - t0
-    print(f"\nDone in {el/60:.1f} min. ok={ok} fail={fail}")
+    print(f"\nDone in {el / 60:.1f} min. ok={ok} fail={fail}")
     if fail:
         print(f"Failed paths logged to: {failed_log}")
 
     # Final mirror size
     import subprocess
+
     try:
-        du = subprocess.check_output(["du", "-sh", str(mirror)], timeout=120).decode().split()[0]
+        du = (
+            subprocess.check_output(["du", "-sh", str(mirror)], timeout=120)
+            .decode()
+            .split()[0]
+        )
         print(f"Mirror size: {du}")
     except Exception:
         pass

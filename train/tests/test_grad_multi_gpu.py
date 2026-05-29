@@ -15,7 +15,6 @@ Requires 2 GPUs with ~10GB free each.
 import copy
 import os
 import sys
-from contextlib import nullcontext
 
 import torch
 import torch.distributed as dist
@@ -26,8 +25,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from train_contrastors import (
-    LogitScale, clip_loss, grad_cache_loss, gather_with_grad,
-    chunk_inputs, forward_query, forward_doc, _clear_rope_deltas,
+    LogitScale,
+    clip_loss,
+    grad_cache_loss,
+    gather_with_grad,
+    chunk_inputs,
+    forward_query,
+    forward_doc,
+    _clear_rope_deltas,
 )
 
 
@@ -84,6 +89,7 @@ def make_rank_data(processor, batch_size, device, rank):
         images.append(Image.fromarray(arr))
 
     from train_contrastors import process_queries, process_doc_images
+
     query_inputs = process_queries(processor, queries)
     doc_inputs = process_doc_images(processor, images)
 
@@ -153,7 +159,9 @@ def main():
     merge_size = processor.image_processor.merge_size
     tile = patch_size * merge_size
     processor.image_processor.max_pixels = 256 * tile * tile
-    processor.image_processor.size["longest_edge"] = processor.image_processor.max_pixels
+    processor.image_processor.size["longest_edge"] = (
+        processor.image_processor.max_pixels
+    )
     processor.tokenizer.padding_side = "left"
 
     batch_size = 4
@@ -169,7 +177,8 @@ def main():
         print("=" * 80)
 
     lora_config = LoraConfig(
-        r=8, lora_alpha=8,
+        r=8,
+        lora_alpha=8,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         lora_dropout=0.0,
         task_type="FEATURE_EXTRACTION",
@@ -183,20 +192,24 @@ def main():
         dist.broadcast(model_state[key], src=0)
     model.load_state_dict(model_state)
     model_state = copy.deepcopy(model_state)
-    ls_state = LogitScale(init_value=1/0.07).state_dict()
+    ls_state = LogitScale(init_value=1 / 0.07).state_dict()
 
     # Per-rank data (each rank gets different queries + images)
     query_inputs, doc_inputs = make_rank_data(processor, batch_size, device, rank)
 
     # --- Reference ---
     model.load_state_dict(model_state)
-    ls_ref = LogitScale(init_value=1/0.07).to(device)
+    ls_ref = LogitScale(init_value=1 / 0.07).to(device)
     ls_ref.load_state_dict(ls_state)
     model.zero_grad()
     ls_ref.zero_grad()
 
-    q_chunks_ref = chunk_inputs({k: v.clone() for k, v in query_inputs.items()}, chunk_size)
-    d_chunks_ref = chunk_inputs({k: v.clone() for k, v in doc_inputs.items()}, chunk_size)
+    q_chunks_ref = chunk_inputs(
+        {k: v.clone() for k, v in query_inputs.items()}, chunk_size
+    )
+    d_chunks_ref = chunk_inputs(
+        {k: v.clone() for k, v in doc_inputs.items()}, chunk_size
+    )
 
     torch.manual_seed(42 + rank)
     torch.cuda.manual_seed_all(42 + rank)
@@ -205,18 +218,25 @@ def main():
 
     # --- GradCache with DDP ---
     model.load_state_dict(model_state)
-    ls_gc = LogitScale(init_value=1/0.07).to(device)
+    ls_gc = LogitScale(init_value=1 / 0.07).to(device)
     ls_gc.load_state_dict(ls_state)
     model.zero_grad()
     ls_gc.zero_grad()
 
     # Wrap in DDP (same as train_contrastors.py)
     model_ddp = torch.nn.parallel.DistributedDataParallel(
-        model, device_ids=[local_rank], broadcast_buffers=False,
-        find_unused_parameters=False)
+        model,
+        device_ids=[local_rank],
+        broadcast_buffers=False,
+        find_unused_parameters=False,
+    )
 
-    q_chunks_gc = chunk_inputs({k: v.clone() for k, v in query_inputs.items()}, chunk_size)
-    d_chunks_gc = chunk_inputs({k: v.clone() for k, v in doc_inputs.items()}, chunk_size)
+    q_chunks_gc = chunk_inputs(
+        {k: v.clone() for k, v in query_inputs.items()}, chunk_size
+    )
+    d_chunks_gc = chunk_inputs(
+        {k: v.clone() for k, v in doc_inputs.items()}, chunk_size
+    )
 
     torch.manual_seed(42 + rank)
     torch.cuda.manual_seed_all(42 + rank)
@@ -252,7 +272,8 @@ def main():
         print("=" * 80)
 
     lora_drop = LoraConfig(
-        r=8, lora_alpha=8,
+        r=8,
+        lora_alpha=8,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         lora_dropout=0.05,
         task_type="FEATURE_EXTRACTION",
@@ -268,7 +289,7 @@ def main():
 
     # --- Reference ---
     model2.load_state_dict(m2_state)
-    ls_ref2 = LogitScale(init_value=1/0.07).to(device)
+    ls_ref2 = LogitScale(init_value=1 / 0.07).to(device)
     ls_ref2.load_state_dict(ls_state)
     model2.zero_grad()
     ls_ref2.zero_grad()
@@ -283,14 +304,17 @@ def main():
 
     # --- GradCache with DDP ---
     model2.load_state_dict(m2_state)
-    ls_gc2 = LogitScale(init_value=1/0.07).to(device)
+    ls_gc2 = LogitScale(init_value=1 / 0.07).to(device)
     ls_gc2.load_state_dict(ls_state)
     model2.zero_grad()
     ls_gc2.zero_grad()
 
     model2_ddp = torch.nn.parallel.DistributedDataParallel(
-        model2, device_ids=[local_rank], broadcast_buffers=False,
-        find_unused_parameters=False)
+        model2,
+        device_ids=[local_rank],
+        broadcast_buffers=False,
+        find_unused_parameters=False,
+    )
 
     q_gc2 = chunk_inputs({k: v.clone() for k, v in query_inputs.items()}, chunk_size)
     d_gc2 = chunk_inputs({k: v.clone() for k, v in doc_inputs.items()}, chunk_size)
@@ -335,7 +359,9 @@ def main():
     x = torch.randn(3, 4, device=device, requires_grad=True)
 
     gathered = gather_with_grad(x)
-    assert gathered.shape == (3 * world_size, 4), f"Expected ({3*world_size},4), got {gathered.shape}"
+    assert gathered.shape == (3 * world_size, 4), (
+        f"Expected ({3 * world_size},4), got {gathered.shape}"
+    )
 
     loss = gathered.sum()
     loss.backward()
@@ -389,8 +415,12 @@ def main():
 
     t4_ok = torch.allclose(grad_scaled, all_data_sum, atol=1e-5)
     if is_main:
-        print(f"  grad after loss*W + all_reduce(AVG): mean={grad_scaled.mean().item():.6f}")
-        print(f"  expected (Σ data_r):                 mean={all_data_sum.mean().item():.6f}")
+        print(
+            f"  grad after loss*W + all_reduce(AVG): mean={grad_scaled.mean().item():.6f}"
+        )
+        print(
+            f"  expected (Σ data_r):                 mean={all_data_sum.mean().item():.6f}"
+        )
         print(f"  match: {t4_ok}")
         print(f"  [{'PASS' if t4_ok else 'FAIL'}]")
     results["T4_loss_scaling"] = 1.0 if t4_ok else 0.0

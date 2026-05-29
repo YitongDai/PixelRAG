@@ -102,7 +102,9 @@ def resolve_gpu_ids(gpu_ids_arg: str) -> list[int]:
             if lines:
                 return list(range(len(lines)))
         except Exception:
-            logger.warning("Failed to detect GPUs via nvidia-smi; falling back to GPU 0")
+            logger.warning(
+                "Failed to detect GPUs via nvidia-smi; falling back to GPU 0"
+            )
         return [0]
 
     return [int(g.strip()) for g in gpu_ids_arg.split(",") if g.strip()]
@@ -132,9 +134,11 @@ def save_npz(path: str, compressed: bool, **arrays) -> None:
     else:
         np.savez(path, **arrays)
 
+
 # ---------------------------------------------------------------------------
 # Redirect filtering
 # ---------------------------------------------------------------------------
+
 
 def load_redirect_ids(path: str) -> set[int]:
     """Load redirect article IDs from a .redirects.json file.
@@ -159,8 +163,10 @@ def load_redirect_ids(path: str) -> set[int]:
 # Data structures
 # ---------------------------------------------------------------------------
 
+
 class TileInfo(NamedTuple):
     """Metadata for a single tile image (or a chunk of one)."""
+
     article_id: int
     tile_index: int
     tile_path: str
@@ -172,6 +178,7 @@ class TileInfo(NamedTuple):
 
 class ChunkInfo(NamedTuple):
     """Metadata for a single chunk image (1024px strip of a tile)."""
+
     article_id: int
     tile_index: int
     chunk_index: int
@@ -190,6 +197,7 @@ def _image_path(ti: "TileInfo | ChunkInfo") -> str:
 # ---------------------------------------------------------------------------
 # Tile scanning
 # ---------------------------------------------------------------------------
+
 
 def scan_shard_tiles(
     shard_dir: str,
@@ -256,18 +264,24 @@ def scan_shard_tiles(
         for idx, tile_name in enumerate(meta.get("tiles", [])):
             tile_path = tiles_dir / tile_name
             if tile_path.exists():
-                tiles.append(TileInfo(
-                    article_id=article_id,
-                    tile_index=idx,
-                    tile_path=str(tile_path),
-                    page_height=page_height,
-                    viewport_width=viewport_width,
-                    tile_height=tile_height,
-                ))
+                tiles.append(
+                    TileInfo(
+                        article_id=article_id,
+                        tile_index=idx,
+                        tile_path=str(tile_path),
+                        page_height=page_height,
+                        viewport_width=viewport_width,
+                        tile_height=tile_height,
+                    )
+                )
 
     tiles.sort(key=lambda t: (t.article_id, t.tile_index))
-    logger.info("Scanned %s: %d tiles from %d articles",
-                shard_dir, len(tiles), len({t.article_id for t in tiles}))
+    logger.info(
+        "Scanned %s: %d tiles from %d articles",
+        shard_dir,
+        len(tiles),
+        len({t.article_id for t in tiles}),
+    )
     return tiles
 
 
@@ -327,26 +341,33 @@ def scan_shard_chunks(
         for chunk in meta.get("chunks", []):
             chunk_path = tiles_dir / chunk["file"]
             if chunk_path.exists():
-                chunks.append(ChunkInfo(
-                    article_id=article_id,
-                    tile_index=chunk["tile_index"],
-                    chunk_index=chunk["chunk_index"],
-                    chunk_path=str(chunk_path),
-                    page_height=page_height,
-                    viewport_width=viewport_width,
-                    y_offset=chunk["y_offset"],
-                    chunk_height=chunk["height"],
-                ))
+                chunks.append(
+                    ChunkInfo(
+                        article_id=article_id,
+                        tile_index=chunk["tile_index"],
+                        chunk_index=chunk["chunk_index"],
+                        chunk_path=str(chunk_path),
+                        page_height=page_height,
+                        viewport_width=viewport_width,
+                        y_offset=chunk["y_offset"],
+                        chunk_height=chunk["height"],
+                    )
+                )
 
     chunks.sort(key=lambda c: (c.article_id, c.tile_index, c.chunk_index))
-    logger.info("Scanned %s: %d chunks from %d articles",
-                shard_dir, len(chunks), len({c.article_id for c in chunks}))
+    logger.info(
+        "Scanned %s: %d chunks from %d articles",
+        shard_dir,
+        len(chunks),
+        len({c.article_id for c in chunks}),
+    )
     return chunks
 
 
 # ---------------------------------------------------------------------------
 # Tile reading and hashing (backend-agnostic)
 # ---------------------------------------------------------------------------
+
 
 def read_tiles_and_hash(
     tile_infos: list[TileInfo],
@@ -426,7 +447,9 @@ def _build_chat_prompt(tokenizer, instruction: str | None = None) -> str:
         {"role": "user", "content": [{"type": "image"}]},
     ]
     return tokenizer.apply_chat_template(
-        conversation, tokenize=False, add_generation_prompt=True,
+        conversation,
+        tokenize=False,
+        add_generation_prompt=True,
     )
 
 
@@ -434,19 +457,25 @@ def _build_chat_prompt(tokenizer, instruction: str | None = None) -> str:
 # Backend: vLLM
 # ---------------------------------------------------------------------------
 
+
 def _init_vllm(model_path: str, gpu_id: int, enforce_eager: bool = False):
     """Initialize vLLM embedding engine on a single GPU."""
     from vllm import LLM, EngineArgs
     from vllm.config import PoolerConfig
-    llm = LLM(**vars(EngineArgs(
-        model=model_path,
-        runner="pooling",
-        dtype="bfloat16",
-        trust_remote_code=True,
-        max_model_len=4096,
-        enforce_eager=enforce_eager,
-        pooler_config=PoolerConfig(pooling_type="LAST"),
-    )))
+
+    llm = LLM(
+        **vars(
+            EngineArgs(
+                model=model_path,
+                runner="pooling",
+                dtype="bfloat16",
+                trust_remote_code=True,
+                max_model_len=4096,
+                enforce_eager=enforce_eager,
+                pooler_config=PoolerConfig(pooling_type="LAST"),
+            )
+        )
+    )
     return llm
 
 
@@ -474,6 +503,7 @@ def _embed_vllm(engine, prompt: str, images: list["Image.Image"]) -> list[np.nda
 # Backend: SGLang
 # ---------------------------------------------------------------------------
 
+
 def _init_sglang(model_path: str, gpu_id: int, enforce_eager: bool = False):
     """Initialize SGLang embedding engine on a single GPU.
 
@@ -489,6 +519,7 @@ def _init_sglang(model_path: str, gpu_id: int, enforce_eager: bool = False):
     - disable_radix_cache=True: embedding has no KV reuse
     """
     from sglang.srt.entrypoints.engine import Engine
+
     os.environ.setdefault("SGLANG_LOG_LEVEL", "error")
     return Engine(
         model_path=model_path,
@@ -534,8 +565,13 @@ def _embed_sglang(engine, prompt: str, images: list["Image.Image"]) -> list[np.n
 # Backend: direct_gpu (transformers + GPU-accelerated preprocessing)
 # ---------------------------------------------------------------------------
 
-def _init_direct_gpu(model_path: str, gpu_id: int, enforce_eager: bool = False,
-                     adapter_path: str | None = None):
+
+def _init_direct_gpu(
+    model_path: str,
+    gpu_id: int,
+    enforce_eager: bool = False,
+    adapter_path: str | None = None,
+):
     """Load model + processor for direct GPU inference.
 
     Uses Qwen3VLForConditionalGeneration (not AutoModel, which loads the
@@ -551,7 +587,9 @@ def _init_direct_gpu(model_path: str, gpu_id: int, enforce_eager: bool = False,
 
     processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
     model = Qwen3VLForConditionalGeneration.from_pretrained(
-        model_path, trust_remote_code=True, torch_dtype=torch.bfloat16,
+        model_path,
+        trust_remote_code=True,
+        torch_dtype=torch.bfloat16,
     )
 
     if adapter_path:
@@ -570,12 +608,18 @@ def _init_direct_gpu(model_path: str, gpu_id: int, enforce_eager: bool = False,
         for k, v in raw_sd.items():
             # base_model.model.language_model.* -> base_model.model.model.language_model.*
             new_k = _re.sub(
-                r"^(base_model\.model\.)(language_model\.|visual\.)",
-                r"\1model.\2", k)
+                r"^(base_model\.model\.)(language_model\.|visual\.)", r"\1model.\2", k
+            )
             remapped_sd[new_k] = v
-        n_remapped = sum(1 for ok, nk in zip(raw_sd.keys(), remapped_sd.keys()) if ok != nk)
-        logger.info("GPU %d: remapped %d/%d adapter keys (BiQwen3 -> ConditionalGeneration)",
-                     gpu_id, n_remapped, len(raw_sd))
+        n_remapped = sum(
+            1 for ok, nk in zip(raw_sd.keys(), remapped_sd.keys()) if ok != nk
+        )
+        logger.info(
+            "GPU %d: remapped %d/%d adapter keys (BiQwen3 -> ConditionalGeneration)",
+            gpu_id,
+            n_remapped,
+            len(raw_sd),
+        )
 
         model = PeftModel.from_pretrained(model, adapter_path)
         set_peft_model_state_dict(model, remapped_sd)
@@ -590,10 +634,16 @@ def _init_direct_gpu(model_path: str, gpu_id: int, enforce_eager: bool = False,
     cudnn_ver = torch.backends.cudnn.version()
     if cudnn_ver < 91500:
         _pe = model.model.visual.patch_embed
+
         def _fp32_patch_embed(hidden_states, _pe=_pe):
             conv = _pe.proj
-            x = hidden_states.view(-1, _pe.in_channels, _pe.temporal_patch_size,
-                                   _pe.patch_size, _pe.patch_size)
+            x = hidden_states.view(
+                -1,
+                _pe.in_channels,
+                _pe.temporal_patch_size,
+                _pe.patch_size,
+                _pe.patch_size,
+            )
             old_w, old_b = conv.weight.data, conv.bias.data
             conv.weight.data = old_w.float()
             conv.bias.data = old_b.float()
@@ -601,6 +651,7 @@ def _init_direct_gpu(model_path: str, gpu_id: int, enforce_eager: bool = False,
             conv.weight.data = old_w
             conv.bias.data = old_b
             return out.to(torch.bfloat16)
+
         _pe.forward = _fp32_patch_embed
         logger.info(f"Applied fp32 Conv3d workaround (cuDNN {cudnn_ver} < 91500)")
     else:
@@ -614,7 +665,9 @@ def _get_tokenizer_direct_gpu(engine):
     return processor.tokenizer
 
 
-def _embed_direct_gpu(engine, prompt: str, images: list["Image.Image"]) -> list[np.ndarray]:
+def _embed_direct_gpu(
+    engine, prompt: str, images: list["Image.Image"]
+) -> list[np.ndarray]:
     """Embed images using direct model forward with GPU preprocessing.
 
     The prompt arg is the chat template text (same format as sglang).
@@ -626,16 +679,21 @@ def _embed_direct_gpu(engine, prompt: str, images: list["Image.Image"]) -> list[
     model, processor = engine
 
     # Build per-image message format for the processor
-    messages_batch = [[
-        {"role": "system", "content": [{"type": "text", "text": _INSTRUCTION}]},
-        {"role": "user", "content": [{"type": "image", "image": img}]},
-    ] for img in images]
+    messages_batch = [
+        [
+            {"role": "system", "content": [{"type": "text", "text": _INSTRUCTION}]},
+            {"role": "user", "content": [{"type": "image", "image": img}]},
+        ]
+        for img in images
+    ]
     texts = [
         processor.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
         for m in messages_batch
     ]
     # GPU-accelerated preprocessing: device="cuda" moves resize/normalize/stack to GPU
-    inputs = processor(text=texts, images=images, return_tensors="pt", padding=True, device="cuda")
+    inputs = processor(
+        text=texts, images=images, return_tensors="pt", padding=True, device="cuda"
+    )
     inputs = {k: v.to("cuda") if hasattr(v, "to") else v for k, v in inputs.items()}
 
     with torch.no_grad():
@@ -646,7 +704,9 @@ def _embed_direct_gpu(engine, prompt: str, images: list["Image.Image"]) -> list[
     attention_mask = inputs["attention_mask"]  # (batch, seq_len)
     # Find the last non-padding token for each sequence
     last_token_indices = attention_mask.sum(dim=1) - 1  # (batch,)
-    pooled = last_hidden[torch.arange(last_hidden.size(0), device=last_hidden.device), last_token_indices]
+    pooled = last_hidden[
+        torch.arange(last_hidden.size(0), device=last_hidden.device), last_token_indices
+    ]
     # L2 normalize
     pooled = torch.nn.functional.normalize(pooled, p=2, dim=-1)
 
@@ -667,6 +727,7 @@ BACKENDS = {
 # ---------------------------------------------------------------------------
 # Single-GPU worker (runs in a subprocess via torch.multiprocessing)
 # ---------------------------------------------------------------------------
+
 
 def gpu_worker(
     gpu_id: int,
@@ -706,14 +767,20 @@ def gpu_worker(
 
     init_fn, get_tok_fn, embed_fn = BACKENDS[backend]
 
-    logger.info("GPU %d: loading model %s via %s (%d tiles)",
-                gpu_id, model_path, backend, len(tile_infos))
+    logger.info(
+        "GPU %d: loading model %s via %s (%d tiles)",
+        gpu_id,
+        model_path,
+        backend,
+        len(tile_infos),
+    )
     t0 = time.time()
 
     # Pass adapter_path only for direct_gpu (other backends don't support it)
     if adapter_path and backend == "direct_gpu":
-        engine = init_fn(model_path, gpu_id, enforce_eager=enforce_eager,
-                         adapter_path=adapter_path)
+        engine = init_fn(
+            model_path, gpu_id, enforce_eager=enforce_eager, adapter_path=adapter_path
+        )
     else:
         engine = init_fn(model_path, gpu_id, enforce_eager=enforce_eager)
 
@@ -726,7 +793,10 @@ def gpu_worker(
             init_barrier.wait(timeout=120)
             logger.info("GPU %d: all workers ready, starting embed", gpu_id)
         except threading.BrokenBarrierError:
-            logger.error("GPU %d: barrier broken (another GPU failed to init), continuing anyway", gpu_id)
+            logger.error(
+                "GPU %d: barrier broken (another GPU failed to init), continuing anyway",
+                gpu_id,
+            )
 
     def _cleanup_engine() -> None:
         shutdown = getattr(engine, "shutdown", None)
@@ -841,11 +911,22 @@ def _embed_tile_infos_with_engine(
                 cw, ch = chunk_img.size
                 # Skip chunks with extreme aspect ratio (sglang rejects >200)
                 if ch < 5 or (cw / max(ch, 1)) > 150:
-                    logger.warning("Skipping bad chunk %s ci=%d size=%dx%d (aspect ratio %.1f)",
-                                   img_path, ci, cw, ch, cw / max(ch, 1))
+                    logger.warning(
+                        "Skipping bad chunk %s ci=%d size=%dx%d (aspect ratio %.1f)",
+                        img_path,
+                        ci,
+                        cw,
+                        ch,
+                        cw / max(ch, 1),
+                    )
                     continue
                 if cw > 875:
-                    logger.warning("Skipping oversized chunk %s ci=%d width %d > 875", img_path, ci, cw)
+                    logger.warning(
+                        "Skipping oversized chunk %s ci=%d width %d > 875",
+                        img_path,
+                        ci,
+                        cw,
+                    )
                     skipped_oversized[0] += 1
                     continue
                 # Dedup key: use file path for pre-chunked files (avoids
@@ -903,7 +984,9 @@ def _embed_tile_infos_with_engine(
     n_batches = 0
     first_item_time = None
     consecutive_failures = 0
-    _MAX_CONSECUTIVE_FAILURES = 3  # after 3 consecutive CUDA failures, abort this work item
+    _MAX_CONSECUTIVE_FAILURES = (
+        3  # after 3 consecutive CUDA failures, abort this work item
+    )
     gpu_dead = False
 
     while True:
@@ -934,11 +1017,20 @@ def _embed_tile_infos_with_engine(
                     hash_to_embedding[hh] = emb
             except Exception as e:
                 consecutive_failures += 1
-                logger.error("GPU %d: embed failed at offset %d (%d/%d consecutive): %s",
-                             gpu_id, embedded, consecutive_failures, _MAX_CONSECUTIVE_FAILURES, e)
+                logger.error(
+                    "GPU %d: embed failed at offset %d (%d/%d consecutive): %s",
+                    gpu_id,
+                    embedded,
+                    consecutive_failures,
+                    _MAX_CONSECUTIVE_FAILURES,
+                    e,
+                )
                 if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
-                    logger.error("GPU %d: %d consecutive failures — marking GPU as dead",
-                                 gpu_id, consecutive_failures)
+                    logger.error(
+                        "GPU %d: %d consecutive failures — marking GPU as dead",
+                        gpu_id,
+                        consecutive_failures,
+                    )
                     gpu_dead = True
             embedded += len(batch_h)
             batch_h, batch_imgs = [], []
@@ -963,20 +1055,31 @@ def _embed_tile_infos_with_engine(
         logger.error("GPU %d: I/O producer failed: %s", gpu_id, producer_error[0])
 
     deduped = len(tile_hashes) - unique_total
-    dedup_pct = 100.0 * deduped / len(tile_hashes) if tile_hashes else 0.0
+    100.0 * deduped / len(tile_hashes) if tile_hashes else 0.0
     n_skipped = skipped_oversized[0]
     logger.info(
         "GPU %d: %d images, %d unique (%d deduped, %d skipped>875), embedded %d, pipeline %.2fs (%.1f chunks/s)"
         " | embed=%.2fs (%d batches) queue_wait=%.2fs first_item=%.3fs",
-        gpu_id, len(tile_hashes), unique_total, deduped, n_skipped, embedded, pipeline_s,
+        gpu_id,
+        len(tile_hashes),
+        unique_total,
+        deduped,
+        n_skipped,
+        embedded,
+        pipeline_s,
         embedded / pipeline_s if pipeline_s > 0 else 0,
-        embed_time_total, n_batches, queue_wait_total, first_item_time or 0,
+        embed_time_total,
+        n_batches,
+        queue_wait_total,
+        first_item_time or 0,
     )
 
     if not hash_to_embedding:
         logger.warning("GPU %d: no embeddings produced", gpu_id)
         if gpu_dead:
-            raise RuntimeError(f"GPU {gpu_id}: CUDA dead after {_MAX_CONSECUTIVE_FAILURES} consecutive failures")
+            raise RuntimeError(
+                f"GPU {gpu_id}: CUDA dead after {_MAX_CONSECUTIVE_FAILURES} consecutive failures"
+            )
         return ""
 
     # Detect chunk mode from the type of items in tile_hashes
@@ -1040,7 +1143,12 @@ def _embed_tile_infos_with_engine(
     write_s = time.time() - t_write0
     logger.info(
         "GPU %d: wrote %d embeddings (%d unique) to %s [pipeline %.2fs, write %.2fs]",
-        gpu_id, len(all_embeddings), len(hash_to_embedding), partial_path, pipeline_s, write_s,
+        gpu_id,
+        len(all_embeddings),
+        len(hash_to_embedding),
+        partial_path,
+        pipeline_s,
+        write_s,
     )
     return partial_path
 
@@ -1078,17 +1186,21 @@ def _gpu_worker_entry(
             init_barrier=init_barrier,
             adapter_path=adapter_path,
         )
-        result_queue.put({
-            "gpu_id": gpu_id,
-            "partial_path": partial_path,
-            "error": "",
-        })
+        result_queue.put(
+            {
+                "gpu_id": gpu_id,
+                "partial_path": partial_path,
+                "error": "",
+            }
+        )
     except Exception:
-        result_queue.put({
-            "gpu_id": gpu_id,
-            "partial_path": "",
-            "error": traceback.format_exc(),
-        })
+        result_queue.put(
+            {
+                "gpu_id": gpu_id,
+                "partial_path": "",
+                "error": traceback.format_exc(),
+            }
+        )
 
 
 def _gpu_worker_persistent_entry(
@@ -1119,8 +1231,12 @@ def _gpu_worker_persistent_entry(
     engine = None
     try:
         if adapter_path and backend == "direct_gpu":
-            engine = init_fn(model_path, gpu_id, enforce_eager=enforce_eager,
-                             adapter_path=adapter_path)
+            engine = init_fn(
+                model_path,
+                gpu_id,
+                enforce_eager=enforce_eager,
+                adapter_path=adapter_path,
+            )
         else:
             engine = init_fn(model_path, gpu_id, enforce_eager=enforce_eager)
         if init_barrier is not None:
@@ -1139,7 +1255,13 @@ def _gpu_worker_persistent_entry(
                 break
             if task.get("task_id") is None:
                 # Round-end sentinel — signal done for this round, keep looping
-                result_queue.put({"gpu_id": gpu_id, "round_done": True, "round_id": task.get("round_id")})
+                result_queue.put(
+                    {
+                        "gpu_id": gpu_id,
+                        "round_done": True,
+                        "round_id": task.get("round_id"),
+                    }
+                )
                 continue
             task_id = task["task_id"]
             try:
@@ -1157,11 +1279,32 @@ def _gpu_worker_persistent_entry(
                     chunk_height=chunk_height,
                     task_id=task_id,
                 )
-                result_queue.put({"task_id": task_id, "gpu_id": gpu_id, "partial_path": partial_path, "error": ""})
+                result_queue.put(
+                    {
+                        "task_id": task_id,
+                        "gpu_id": gpu_id,
+                        "partial_path": partial_path,
+                        "error": "",
+                    }
+                )
             except Exception:
-                result_queue.put({"task_id": task_id, "gpu_id": gpu_id, "partial_path": "", "error": traceback.format_exc()})
+                result_queue.put(
+                    {
+                        "task_id": task_id,
+                        "gpu_id": gpu_id,
+                        "partial_path": "",
+                        "error": traceback.format_exc(),
+                    }
+                )
     except Exception:
-        result_queue.put({"task_id": "__init__", "gpu_id": gpu_id, "partial_path": "", "error": traceback.format_exc()})
+        result_queue.put(
+            {
+                "task_id": "__init__",
+                "gpu_id": gpu_id,
+                "partial_path": "",
+                "error": traceback.format_exc(),
+            }
+        )
     finally:
         if engine is not None:
             shutdown = getattr(engine, "shutdown", None)
@@ -1197,7 +1340,7 @@ class PersistentGpuWorkerPool:
         import torch.multiprocessing as mp
 
         self.ctx = mp.get_context("spawn")
-        self.work_queue = self.ctx.Queue()   # shared across all workers
+        self.work_queue = self.ctx.Queue()  # shared across all workers
         self.result_queue = self.ctx.Queue()
         self.gpu_ids = list(gpu_ids)
         self.workers: dict[int, "mp.Process"] = {}
@@ -1211,14 +1354,29 @@ class PersistentGpuWorkerPool:
         self._enforce_eager = enforce_eager
         self._adapter_path = adapter_path
         # Store barrier as instance var to prevent GC before children unpickle
-        self._init_barrier = self.ctx.Barrier(len(gpu_ids)) if len(gpu_ids) > 1 else None
+        self._init_barrier = (
+            self.ctx.Barrier(len(gpu_ids)) if len(gpu_ids) > 1 else None
+        )
         self._gpu_death_count: dict[int, int] = {}  # gid -> number of times worker died
         self._excluded_gpus: set[int] = set()  # permanently excluded GPUs
 
         for gid in gpu_ids:
             p = self.ctx.Process(
                 target=_gpu_worker_persistent_entry,
-                args=(self.work_queue, self.result_queue, gid, model_path, backend, io_workers, compress_npz, max_pixels, chunk_height, enforce_eager, self._init_barrier, adapter_path),
+                args=(
+                    self.work_queue,
+                    self.result_queue,
+                    gid,
+                    model_path,
+                    backend,
+                    io_workers,
+                    compress_npz,
+                    max_pixels,
+                    chunk_height,
+                    enforce_eager,
+                    self._init_barrier,
+                    adapter_path,
+                ),
                 daemon=False,
             )
             p.start()
@@ -1239,26 +1397,46 @@ class PersistentGpuWorkerPool:
         t_round_start = time.time()
 
         # Respawn dead workers from previous rounds (skip permanently excluded GPUs)
-        dead_before = [gid for gid, p in self.workers.items()
-                       if not p.is_alive() and gid not in self._excluded_gpus]
+        dead_before = [
+            gid
+            for gid, p in self.workers.items()
+            if not p.is_alive() and gid not in self._excluded_gpus
+        ]
         for gid in dead_before:
             self._gpu_death_count[gid] = self._gpu_death_count.get(gid, 0) + 1
             if self._gpu_death_count[gid] > 2:
-                logger.error("GPU %d: died %d times — permanently excluding from pool",
-                             gid, self._gpu_death_count[gid])
+                logger.error(
+                    "GPU %d: died %d times — permanently excluding from pool",
+                    gid,
+                    self._gpu_death_count[gid],
+                )
                 self._excluded_gpus.add(gid)
                 self.workers[gid].close()
                 del self.workers[gid]
                 continue
-            logger.warning("GPU %d: worker died (exitcode=%s), respawning (death #%d)",
-                           gid, self.workers[gid].exitcode, self._gpu_death_count[gid])
+            logger.warning(
+                "GPU %d: worker died (exitcode=%s), respawning (death #%d)",
+                gid,
+                self.workers[gid].exitcode,
+                self._gpu_death_count[gid],
+            )
             self.workers[gid].close()
             p = self.ctx.Process(
                 target=_gpu_worker_persistent_entry,
-                args=(self.work_queue, self.result_queue, gid,
-                      self._model_path, self._backend, self._io_workers,
-                      self._compress_npz, self._max_pixels, self._chunk_height,
-                      self._enforce_eager, None, self._adapter_path),  # no barrier for respawned workers
+                args=(
+                    self.work_queue,
+                    self.result_queue,
+                    gid,
+                    self._model_path,
+                    self._backend,
+                    self._io_workers,
+                    self._compress_npz,
+                    self._max_pixels,
+                    self._chunk_height,
+                    self._enforce_eager,
+                    None,
+                    self._adapter_path,
+                ),  # no barrier for respawned workers
                 daemon=False,
             )
             p.start()
@@ -1266,7 +1444,10 @@ class PersistentGpuWorkerPool:
             logger.info("GPU %d: respawned worker (pid=%d)", gid, p.pid)
         if dead_before:
             # Give respawned workers time to load model
-            logger.info("Waiting 30s for %d respawned workers to load model...", len(dead_before))
+            logger.info(
+                "Waiting 30s for %d respawned workers to load model...",
+                len(dead_before),
+            )
             time.sleep(30)
         n_workers = len(self.workers)
         if n_workers == 0:
@@ -1276,16 +1457,22 @@ class PersistentGpuWorkerPool:
         work_items = []
         for i in range(0, len(tile_infos), _WORK_CHUNK_SIZE):
             chunk = tile_infos[i : i + _WORK_CHUNK_SIZE]
-            work_items.append({
-                "task_id": f"{round_id}_{len(work_items)}",
-                "round_id": round_id,
-                "tile_infos": chunk,
-                "batch_size": batch_size,
-                "result_dir": result_dir,
-            })
+            work_items.append(
+                {
+                    "task_id": f"{round_id}_{len(work_items)}",
+                    "round_id": round_id,
+                    "tile_infos": chunk,
+                    "batch_size": batch_size,
+                    "result_dir": result_dir,
+                }
+            )
 
-        logger.info("Dynamic distribution: %d tiles -> %d work items for %d GPUs",
-                     len(tile_infos), len(work_items), n_workers)
+        logger.info(
+            "Dynamic distribution: %d tiles -> %d work items for %d GPUs",
+            len(tile_infos),
+            len(work_items),
+            n_workers,
+        )
 
         # Enqueue all work items (no sentinels — we count results instead)
         for item in work_items:
@@ -1313,18 +1500,28 @@ class PersistentGpuWorkerPool:
                     if gid not in dead_reported and not p.is_alive():
                         dead_reported.add(gid)
                         errors.append(f"GPU {gid}: worker died (exitcode={p.exitcode})")
-                        logger.error("GPU %d: worker died (exitcode=%s), %d/%d results so far",
-                                     gid, p.exitcode, results_received, n_work_items)
+                        logger.error(
+                            "GPU %d: worker died (exitcode=%s), %d/%d results so far",
+                            gid,
+                            p.exitcode,
+                            results_received,
+                            n_work_items,
+                        )
                 alive = [gid for gid, p in self.workers.items() if p.is_alive()]
                 if not alive:
                     remaining = n_work_items - results_received
-                    errors.append(f"All workers dead, {remaining} work items unprocessed")
+                    errors.append(
+                        f"All workers dead, {remaining} work items unprocessed"
+                    )
                     break
                 # If a worker died and we've stalled for 60s, remaining items
                 # were likely in that worker's pipeline — stop waiting
                 if dead_reported and stall_count >= 6:
                     remaining = n_work_items - results_received
-                    logger.warning("Stalled 60s after worker death, giving up on %d remaining items", remaining)
+                    logger.warning(
+                        "Stalled 60s after worker death, giving up on %d remaining items",
+                        remaining,
+                    )
                     break
                 continue
 
@@ -1341,14 +1538,19 @@ class PersistentGpuWorkerPool:
                 gpu_consecutive_errors[gid] = gpu_consecutive_errors.get(gid, 0) + 1
                 if gpu_consecutive_errors[gid] >= 3 and gid not in dead_reported:
                     dead_reported.add(gid)
-                    logger.error("GPU %d: %d consecutive task errors — treating as dead, "
-                                 "killing worker to prevent it from stealing work",
-                                 gid, gpu_consecutive_errors[gid])
+                    logger.error(
+                        "GPU %d: %d consecutive task errors — treating as dead, "
+                        "killing worker to prevent it from stealing work",
+                        gid,
+                        gpu_consecutive_errors[gid],
+                    )
                     # Kill the worker process so it stops pulling from the shared queue
                     p = self.workers.get(gid)
                     if p and p.is_alive():
                         p.kill()
-                errors.append(f"GPU {gid} task {msg.get('task_id')} failed:\n{msg['error']}")
+                errors.append(
+                    f"GPU {gid} task {msg.get('task_id')} failed:\n{msg['error']}"
+                )
                 continue
             # Successful result — reset error streak for this GPU
             gpu_consecutive_errors[gid] = 0
@@ -1361,9 +1563,17 @@ class PersistentGpuWorkerPool:
         total_chunks = len(tile_infos)
         throughput = total_chunks / round_elapsed if round_elapsed > 0 else 0
         per_gpu_tp = throughput / n_workers if n_workers > 0 else 0
-        gpu_summary = ", ".join(f"GPU {gid}: {gpu_work_counts.get(gid, 0)}" for gid in sorted(self.workers))
-        logger.info("Round done: %d chunks in %.1fs = %.1f chunks/s (%.1f/GPU) | %s",
-                     total_chunks, round_elapsed, throughput, per_gpu_tp, gpu_summary)
+        gpu_summary = ", ".join(
+            f"GPU {gid}: {gpu_work_counts.get(gid, 0)}" for gid in sorted(self.workers)
+        )
+        logger.info(
+            "Round done: %d chunks in %.1fs = %.1f chunks/s (%.1f/GPU) | %s",
+            total_chunks,
+            round_elapsed,
+            throughput,
+            per_gpu_tp,
+            gpu_summary,
+        )
 
         if errors:
             logger.error("Dynamic worker errors:\n%s", "\n".join(errors))
@@ -1376,7 +1586,11 @@ class PersistentGpuWorkerPool:
                     f"({len(partial_paths)} partial results from {n_work_items} work items). "
                     f"Caller should retry without dead GPU(s)."
                 )
-            logger.warning("%d errors, continuing with %d partial results", len(errors), len(partial_paths))
+            logger.warning(
+                "%d errors, continuing with %d partial results",
+                len(errors),
+                len(partial_paths),
+            )
 
         return partial_paths
 
@@ -1396,11 +1610,15 @@ class PersistentGpuWorkerPool:
         # landed in result_queue and partial_path files before close() runs.
         for gid, p in list(self.workers.items()):
             if p.is_alive():
-                logger.warning("GPU %d worker pid=%s didn't exit on sentinel, SIGTERM", gid, p.pid)
+                logger.warning(
+                    "GPU %d worker pid=%s didn't exit on sentinel, SIGTERM", gid, p.pid
+                )
                 p.terminate()
                 p.join(timeout=5)
             if p.is_alive():
-                logger.error("GPU %d worker pid=%s ignored SIGTERM, SIGKILL", gid, p.pid)
+                logger.error(
+                    "GPU %d worker pid=%s ignored SIGTERM, SIGKILL", gid, p.pid
+                )
                 p.kill()
                 p.join(timeout=5)
         # Drop queue background feeder threads so they don't block atexit.
@@ -1481,7 +1699,9 @@ def run_gpu_workers_parallel(
                 adapter_path=adapter_path,
             )
             _PERSISTENT_POOLS[key] = pool
-        return pool.run(tile_infos=all_tiles, batch_size=batch_size, result_dir=result_dir)
+        return pool.run(
+            tile_infos=all_tiles, batch_size=batch_size, result_dir=result_dir
+        )
 
     import torch.multiprocessing as mp
 
@@ -1498,9 +1718,20 @@ def run_gpu_workers_parallel(
         p = ctx.Process(
             target=_gpu_worker_entry,
             args=(
-                result_queue, gid, tiles, model_path, batch_size, result_dir,
-                backend, io_workers, compress_npz, max_pixels, chunk_height,
-                enforce_eager, init_barrier, adapter_path,
+                result_queue,
+                gid,
+                tiles,
+                model_path,
+                batch_size,
+                result_dir,
+                backend,
+                io_workers,
+                compress_npz,
+                max_pixels,
+                chunk_height,
+                enforce_eager,
+                init_barrier,
+                adapter_path,
             ),
             daemon=False,
         )
@@ -1544,8 +1775,12 @@ def run_gpu_workers_parallel(
         logger.error("Multi-GPU worker failures:\n%s", "\n".join(errors))
         if not partial_paths:
             raise RuntimeError("All GPU workers failed:\n" + "\n".join(errors))
-        logger.warning("%d/%d GPU workers failed, continuing with %d partial results",
-                       len(errors), len(procs), len(partial_paths))
+        logger.warning(
+            "%d/%d GPU workers failed, continuing with %d partial results",
+            len(errors),
+            len(procs),
+            len(partial_paths),
+        )
 
     return partial_paths
 
@@ -1553,6 +1788,7 @@ def run_gpu_workers_parallel(
 # ---------------------------------------------------------------------------
 # Multi-GPU orchestration
 # ---------------------------------------------------------------------------
+
 
 def embed_shard(
     shard_dir: str,
@@ -1620,34 +1856,51 @@ def embed_shard(
         try:
             npz_mtime = os.path.getmtime(output_path)
             existing_npz = np.load(output_path)
-            existing_keys = set(zip(
-                existing_npz["article_ids"].tolist(),
-                existing_npz["tile_indices"].tolist(),
-                existing_npz["chunk_indices"].tolist(),
-            ))
+            existing_keys = set(
+                zip(
+                    existing_npz["article_ids"].tolist(),
+                    existing_npz["tile_indices"].tolist(),
+                    existing_npz["chunk_indices"].tolist(),
+                )
+            )
             before = len(tile_infos)
 
             # Partition tile_infos into: new (not in npz) + updated (in npz but file is newer)
             new_infos = []
             for ti in tile_infos:
-                key = (ti.article_id, ti.tile_index,
-                       ti.chunk_index if hasattr(ti, "chunk_index") else 0)
+                key = (
+                    ti.article_id,
+                    ti.tile_index,
+                    ti.chunk_index if hasattr(ti, "chunk_index") else 0,
+                )
                 if key not in existing_keys:
                     new_infos.append(ti)
                 else:
                     # Check mtime — if chunk file is newer than npz, re-embed it
-                    chunk_path = ti.chunk_path if hasattr(ti, "chunk_path") else getattr(ti, "tile_path", None)
+                    chunk_path = (
+                        ti.chunk_path
+                        if hasattr(ti, "chunk_path")
+                        else getattr(ti, "tile_path", None)
+                    )
                     if chunk_path and os.path.getmtime(chunk_path) > npz_mtime:
                         new_infos.append(ti)
                         stale_keys.add(key)
 
             tile_infos = new_infos
-            logger.info("Incremental: %d existing, %d new, %d updated (was %d total) in %s",
-                        len(existing_keys), len(tile_infos) - len(stale_keys),
-                        len(stale_keys), before, shard_name)
+            logger.info(
+                "Incremental: %d existing, %d new, %d updated (was %d total) in %s",
+                len(existing_keys),
+                len(tile_infos) - len(stale_keys),
+                len(stale_keys),
+                before,
+                shard_name,
+            )
             if not tile_infos:
-                logger.info("Shard %d: all %d chunks up to date, skipping",
-                            shard_id, len(existing_keys))
+                logger.info(
+                    "Shard %d: all %d chunks up to date, skipping",
+                    shard_id,
+                    len(existing_keys),
+                )
                 return {
                     "shard_dir": shard_dir,
                     "output_path": output_path,
@@ -1656,7 +1909,9 @@ def embed_shard(
                     "elapsed_s": time.time() - t0,
                 }
         except Exception as e:
-            logger.warning("Could not load existing %s for incremental: %s", output_path, e)
+            logger.warning(
+                "Could not load existing %s for incremental: %s", output_path, e
+            )
             existing_npz = None
 
     num_gpus = len(gpu_ids)
@@ -1680,7 +1935,9 @@ def embed_shard(
     else:
         if reuse_workers:
             # Dynamic distribution — workers pull from shared queue
-            logger.info("Multi-GPU dynamic: %d tiles across %d GPUs", len(tile_infos), num_gpus)
+            logger.info(
+                "Multi-GPU dynamic: %d tiles across %d GPUs", len(tile_infos), num_gpus
+            )
             partial_paths = run_gpu_workers_parallel(
                 per_gpu=None,
                 gpu_ids=gpu_ids,
@@ -1709,8 +1966,12 @@ def embed_shard(
                 per_gpu[gpu_assignment[ti.article_id]].append(ti)
 
             for gid, tiles in per_gpu.items():
-                logger.info("GPU %d: assigned %d tiles from %d articles",
-                            gid, len(tiles), len({t.article_id for t in tiles}))
+                logger.info(
+                    "GPU %d: assigned %d tiles from %d articles",
+                    gid,
+                    len(tiles),
+                    len({t.article_id for t in tiles}),
+                )
 
             partial_paths = run_gpu_workers_parallel(
                 per_gpu=per_gpu,
@@ -1752,12 +2013,20 @@ def embed_shard(
             ex_aids = existing_npz["article_ids"]
             ex_tidx = existing_npz["tile_indices"]
             ex_cidx = existing_npz["chunk_indices"]
-            keep_mask = np.array([
-                (int(ex_aids[j]), int(ex_tidx[j]), int(ex_cidx[j])) not in stale_keys
-                for j in range(len(ex_aids))
-            ], dtype=bool)
-            logger.info("Incremental merge: keeping %d/%d existing rows (%d stale replaced)",
-                        keep_mask.sum(), len(keep_mask), len(stale_keys))
+            keep_mask = np.array(
+                [
+                    (int(ex_aids[j]), int(ex_tidx[j]), int(ex_cidx[j]))
+                    not in stale_keys
+                    for j in range(len(ex_aids))
+                ],
+                dtype=bool,
+            )
+            logger.info(
+                "Incremental merge: keeping %d/%d existing rows (%d stale replaced)",
+                keep_mask.sum(),
+                len(keep_mask),
+                len(stale_keys),
+            )
             all_emb.append(existing_npz["embeddings"][keep_mask])
             all_aids.append(ex_aids[keep_mask])
             all_tidx.append(ex_tidx[keep_mask])
@@ -1794,8 +2063,11 @@ def embed_shard(
             seen_pp.add(rp)
             unique_partial_paths.append(pp)
     if len(unique_partial_paths) < len(partial_paths):
-        logger.info("Deduplicated partial paths: %d -> %d unique",
-                     len(partial_paths), len(unique_partial_paths))
+        logger.info(
+            "Deduplicated partial paths: %d -> %d unique",
+            len(partial_paths),
+            len(unique_partial_paths),
+        )
 
     for pp in unique_partial_paths:
         data = np.load(pp)
@@ -1822,7 +2094,11 @@ def embed_shard(
     tile_paths = np.concatenate(all_tp)
 
     if is_chunk_mode:
-        y_offsets = np.concatenate(all_yo) if all_yo else np.zeros(len(embeddings), dtype=np.int32)
+        y_offsets = (
+            np.concatenate(all_yo)
+            if all_yo
+            else np.zeros(len(embeddings), dtype=np.int32)
+        )
         # Sort by (article_id, tile_index, chunk_index)
         sort_idx = np.lexsort((chunk_indices, tile_indices, article_ids))
     else:
@@ -1872,7 +2148,11 @@ def embed_shard(
     num_articles = len(set(article_ids.tolist()))
     logger.info(
         "Shard %d: %d embeddings (%d articles) in %.1fs -> %s",
-        shard_id, len(embeddings), num_articles, elapsed, output_path,
+        shard_id,
+        len(embeddings),
+        num_articles,
+        elapsed,
+        output_path,
     )
 
     return {
@@ -1887,6 +2167,7 @@ def embed_shard(
 # ---------------------------------------------------------------------------
 # Checkpoint for resume
 # ---------------------------------------------------------------------------
+
 
 def load_checkpoint(output_dir: str) -> set[int]:
     """Load set of already-embedded article IDs from checkpoint.json."""
@@ -1912,6 +2193,7 @@ def save_checkpoint(output_dir: str, article_ids: set[int]) -> None:
 # ---------------------------------------------------------------------------
 # Patch mode: diff hashes, re-embed only changed tiles, update npz in-place
 # ---------------------------------------------------------------------------
+
 
 def _hash_file(path: str) -> str:
     """Compute MD5 hex digest of a file. Returns empty string on error."""
@@ -1946,15 +2228,25 @@ def diff_shard_hashes(
     # Load stored index
     logger.info("Loading existing npz: %s", npz_path)
     data = np.load(npz_path)
-    stored_paths = data["tile_paths"]     # S512
+    stored_paths = data["tile_paths"]  # S512
     stored_hashes = data["image_hashes"]  # S32
-    logger.info("Loaded %d stored embeddings in %.1fs", len(stored_paths), time.time() - t0)
+    logger.info(
+        "Loaded %d stored embeddings in %.1fs", len(stored_paths), time.time() - t0
+    )
 
     # Build index: tile_path -> (row_index, stored_hash)
     path_to_row: dict[str, tuple[int, str]] = {}
     for i in range(len(stored_paths)):
-        p = stored_paths[i].decode() if isinstance(stored_paths[i], bytes) else str(stored_paths[i])
-        h = stored_hashes[i].decode() if isinstance(stored_hashes[i], bytes) else str(stored_hashes[i])
+        p = (
+            stored_paths[i].decode()
+            if isinstance(stored_paths[i], bytes)
+            else str(stored_paths[i])
+        )
+        h = (
+            stored_hashes[i].decode()
+            if isinstance(stored_hashes[i], bytes)
+            else str(stored_hashes[i])
+        )
         path_to_row[p] = (i, h)
 
     # Scan current tiles on disk
@@ -1975,13 +2267,24 @@ def diff_shard_hashes(
     # Parallel hash computation for known tiles
     stale_tiles: list[TileInfo] = []
     if tiles_to_hash:
-        logger.info("Hashing %d existing tiles (%d threads)...", len(tiles_to_hash), hash_workers)
+        logger.info(
+            "Hashing %d existing tiles (%d threads)...",
+            len(tiles_to_hash),
+            hash_workers,
+        )
         t1 = time.time()
         matched = 0
 
         with ThreadPoolExecutor(max_workers=hash_workers) as pool:
-            futures = {pool.submit(_hash_file, ti.tile_path): ti for ti in tiles_to_hash}
-            pbar = tqdm(as_completed(futures), total=len(futures), desc="Hashing tiles", unit="tile")
+            futures = {
+                pool.submit(_hash_file, ti.tile_path): ti for ti in tiles_to_hash
+            }
+            pbar = tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="Hashing tiles",
+                unit="tile",
+            )
             for fut in pbar:
                 ti = futures[fut]
                 current_hash = fut.result()
@@ -1994,8 +2297,14 @@ def diff_shard_hashes(
             pbar.close()
 
         hash_rate = len(tiles_to_hash) / max(time.time() - t1, 0.001)
-        logger.info("Hashed %d tiles in %.1fs (%.0f tiles/s): %d matched, %d stale",
-                     len(tiles_to_hash), time.time() - t1, hash_rate, matched, len(stale_tiles))
+        logger.info(
+            "Hashed %d tiles in %.1fs (%.0f tiles/s): %d matched, %d stale",
+            len(tiles_to_hash),
+            time.time() - t1,
+            hash_rate,
+            matched,
+            len(stale_tiles),
+        )
 
     # Rows whose source file was deleted
     removed_rows: set[int] = set()
@@ -2007,9 +2316,13 @@ def diff_shard_hashes(
     logger.info(
         "Diff complete in %.1fs: %d stale, %d new, %d removed, %d unchanged "
         "(stored=%d, on_disk=%d)",
-        elapsed, len(stale_tiles), len(new_tiles), len(removed_rows),
+        elapsed,
+        len(stale_tiles),
+        len(new_tiles),
+        len(removed_rows),
         len(tiles_to_hash) - len(stale_tiles),
-        len(stored_paths), len(disk_tiles),
+        len(stored_paths),
+        len(disk_tiles),
     )
     return stale_tiles, new_tiles, removed_rows
 
@@ -2052,23 +2365,31 @@ def patch_shard(
     tiles_to_embed = stale_tiles + new_tiles
     if not tiles_to_embed and not removed_rows:
         logger.info("Nothing to patch — all hashes match")
-        return {"npz_path": npz_path, "patched": 0, "added": 0, "removed": 0, "unchanged": True}
+        return {
+            "npz_path": npz_path,
+            "patched": 0,
+            "added": 0,
+            "removed": 0,
+            "unchanged": True,
+        }
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Patch summary for {os.path.basename(npz_path)}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Stale (hash changed):  {len(stale_tiles):>8}  → re-embed")
     print(f"  New (not in npz):      {len(new_tiles):>8}  → embed")
     print(f"  Removed (file gone):   {len(removed_rows):>8}  → drop")
     print(f"  Total to embed:        {len(tiles_to_embed):>8}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     if dry_run:
         logger.info("Dry run — stopping before embedding")
         return {
-            "npz_path": npz_path, "patched": len(stale_tiles),
-            "added": len(new_tiles), "removed": len(removed_rows),
+            "npz_path": npz_path,
+            "patched": len(stale_tiles),
+            "added": len(new_tiles),
+            "removed": len(removed_rows),
             "dry_run": True,
         }
 
@@ -2093,15 +2414,24 @@ def patch_shard(
     # Build stale path -> row index for replacement
     path_to_row: dict[str, int] = {}
     for i in range(len(old_tile_paths)):
-        p = old_tile_paths[i].decode() if isinstance(old_tile_paths[i], bytes) else str(old_tile_paths[i])
+        p = (
+            old_tile_paths[i].decode()
+            if isinstance(old_tile_paths[i], bytes)
+            else str(old_tile_paths[i])
+        )
         path_to_row[p] = i
     stale_row_indices = {path_to_row[ti.tile_path] for ti in stale_tiles}
 
     # Embed the changed + new tiles
     t_embed = time.time()
     if tiles_to_embed:
-        logger.info("Embedding %d tiles (%d stale + %d new) on GPUs %s",
-                     len(tiles_to_embed), len(stale_tiles), len(new_tiles), gpu_ids)
+        logger.info(
+            "Embedding %d tiles (%d stale + %d new) on GPUs %s",
+            len(tiles_to_embed),
+            len(stale_tiles),
+            len(new_tiles),
+            gpu_ids,
+        )
         output_dir = os.path.dirname(npz_path)
 
         num_gpus = len(gpu_ids)
@@ -2121,7 +2451,9 @@ def patch_shard(
             partial_paths = [partial_path] if partial_path else []
         else:
             article_ids_list = sorted(set(t.article_id for t in tiles_to_embed))
-            gpu_assignment = {aid: gpu_ids[i % num_gpus] for i, aid in enumerate(article_ids_list)}
+            gpu_assignment = {
+                aid: gpu_ids[i % num_gpus] for i, aid in enumerate(article_ids_list)
+            }
             per_gpu: dict[int, list[TileInfo]] = {gid: [] for gid in gpu_ids}
             for ti in tiles_to_embed:
                 per_gpu[gpu_assignment[ti.article_id]].append(ti)
@@ -2174,7 +2506,11 @@ def patch_shard(
     fresh_by_path: dict[str, int] = {}
     if tiles_to_embed:
         for i in range(len(fresh_tile_paths)):
-            p = fresh_tile_paths[i].decode() if isinstance(fresh_tile_paths[i], bytes) else str(fresh_tile_paths[i])
+            p = (
+                fresh_tile_paths[i].decode()
+                if isinstance(fresh_tile_paths[i], bytes)
+                else str(fresh_tile_paths[i])
+            )
             fresh_by_path[p] = i
 
     # Assemble final arrays: keep unchanged rows, replace stale, drop removed
@@ -2239,8 +2575,12 @@ def patch_shard(
     elapsed_total = time.time() - t_embed
     logger.info(
         "Patched %s in %.1fs: %d replaced, %d added, %d removed, %d total",
-        npz_path, elapsed_total,
-        len(stale_tiles), len(new_tiles), len(removed_rows), len(final_emb),
+        npz_path,
+        elapsed_total,
+        len(stale_tiles),
+        len(new_tiles),
+        len(removed_rows),
+        len(final_emb),
     )
     return {
         "npz_path": npz_path,
@@ -2256,57 +2596,126 @@ def patch_shard(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Embed tiles from a single shard using Qwen3-VL-Embedding-2B.",
     )
-    parser.add_argument("--shard-dir", required=True,
-                        help="Path to shard directory (e.g. output_coordinated/shard_042)")
-    parser.add_argument("--output-dir", required=True,
-                        help="Output directory for .npz file")
-    parser.add_argument("--gpu-ids", default="all",
-                        help="Comma-separated GPU IDs, or 'all' (default: all)")
-    parser.add_argument("--model", default="Qwen/Qwen3-VL-Embedding-2B",
-                        help="Model name or path (default: Qwen/Qwen3-VL-Embedding-2B)")
-    parser.add_argument("--batch-size", type=int, default=128,
-                        help="Tiles per embed() call (default: 128)")
-    parser.add_argument("--io-workers", type=int, default=8,
-                        help="Threads per GPU process for tile read/hash/decode (default: 8)")
-    parser.add_argument("--compress-npz", action="store_true",
-                        help="Compress output npz files (smaller but slower)")
-    parser.add_argument("--reuse-workers", action="store_true",
-                        help="Reuse persistent GPU workers across multiple embed_shard calls in-process")
-    parser.add_argument("--backend", choices=["vllm", "sglang", "direct_gpu"], default="sglang",
-                        help="Embedding backend (default: sglang)")
-    parser.add_argument("--resume", action="store_true",
-                        help="Resume from checkpoint (skip already embedded articles)")
-    parser.add_argument("--patch", action="store_true",
-                        help="Patch mode: diff hashes, re-embed only changed tiles")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="With --patch: only show diff, don't embed or write")
-    parser.add_argument("--yes", "-y", action="store_true",
-                        help="With --patch: skip confirmation prompt")
-    parser.add_argument("--hash-workers", type=int, default=32,
-                        help="Threads for parallel hashing in patch mode (default: 32)")
-    parser.add_argument("--max-pixels", type=int, default=None,
-                        help="Max pixels per tile image before resize (e.g. 200000). "
-                             "Reduces visual tokens for faster inference. None = no resize.")
-    parser.add_argument("--chunk-height", type=int, default=None,
-                        help="Split tall tiles into chunks of this height (e.g. 1024). "
-                             "Each chunk gets a separate embedding. None = no chunking.")
-    parser.add_argument("--enforce-eager", action="store_true",
-                        help="Disable CUDA graph capture in vLLM (fixes hangs on some GPUs).")
-    parser.add_argument("--redirects-json",
-                        default=None,
-                        help="Path to .redirects.json to skip redirect articles")
-    parser.add_argument("--mode", choices=["chunks", "tiles"], default="chunks",
-                        help="Embedding unit: 'chunks' (1024px strips, default) or 'tiles' (full 8192px tiles)")
-    parser.add_argument("--instruction", default=DEFAULT_INSTRUCTION,
-                        help="System prompt instruction for embedding (default: %(default)r)")
-    parser.add_argument("--adapter", default=None,
-                        help="Path to PEFT LoRA adapter checkpoint directory. "
-                             "Loaded and merged into base model weights before embedding. "
-                             "Only supported with direct_gpu backend.")
+    parser.add_argument(
+        "--shard-dir",
+        required=True,
+        help="Path to shard directory (e.g. output_coordinated/shard_042)",
+    )
+    parser.add_argument(
+        "--output-dir", required=True, help="Output directory for .npz file"
+    )
+    parser.add_argument(
+        "--gpu-ids",
+        default="all",
+        help="Comma-separated GPU IDs, or 'all' (default: all)",
+    )
+    parser.add_argument(
+        "--model",
+        default="Qwen/Qwen3-VL-Embedding-2B",
+        help="Model name or path (default: Qwen/Qwen3-VL-Embedding-2B)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=128,
+        help="Tiles per embed() call (default: 128)",
+    )
+    parser.add_argument(
+        "--io-workers",
+        type=int,
+        default=8,
+        help="Threads per GPU process for tile read/hash/decode (default: 8)",
+    )
+    parser.add_argument(
+        "--compress-npz",
+        action="store_true",
+        help="Compress output npz files (smaller but slower)",
+    )
+    parser.add_argument(
+        "--reuse-workers",
+        action="store_true",
+        help="Reuse persistent GPU workers across multiple embed_shard calls in-process",
+    )
+    parser.add_argument(
+        "--backend",
+        choices=["vllm", "sglang", "direct_gpu"],
+        default="sglang",
+        help="Embedding backend (default: sglang)",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from checkpoint (skip already embedded articles)",
+    )
+    parser.add_argument(
+        "--patch",
+        action="store_true",
+        help="Patch mode: diff hashes, re-embed only changed tiles",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="With --patch: only show diff, don't embed or write",
+    )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="With --patch: skip confirmation prompt",
+    )
+    parser.add_argument(
+        "--hash-workers",
+        type=int,
+        default=32,
+        help="Threads for parallel hashing in patch mode (default: 32)",
+    )
+    parser.add_argument(
+        "--max-pixels",
+        type=int,
+        default=None,
+        help="Max pixels per tile image before resize (e.g. 200000). "
+        "Reduces visual tokens for faster inference. None = no resize.",
+    )
+    parser.add_argument(
+        "--chunk-height",
+        type=int,
+        default=None,
+        help="Split tall tiles into chunks of this height (e.g. 1024). "
+        "Each chunk gets a separate embedding. None = no chunking.",
+    )
+    parser.add_argument(
+        "--enforce-eager",
+        action="store_true",
+        help="Disable CUDA graph capture in vLLM (fixes hangs on some GPUs).",
+    )
+    parser.add_argument(
+        "--redirects-json",
+        default=None,
+        help="Path to .redirects.json to skip redirect articles",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["chunks", "tiles"],
+        default="chunks",
+        help="Embedding unit: 'chunks' (1024px strips, default) or 'tiles' (full 8192px tiles)",
+    )
+    parser.add_argument(
+        "--instruction",
+        default=DEFAULT_INSTRUCTION,
+        help="System prompt instruction for embedding (default: %(default)r)",
+    )
+    parser.add_argument(
+        "--adapter",
+        default=None,
+        help="Path to PEFT LoRA adapter checkpoint directory. "
+        "Loaded and merged into base model weights before embedding. "
+        "Only supported with direct_gpu backend.",
+    )
     return parser.parse_args()
 
 
@@ -2316,7 +2725,10 @@ def main():
 
     if args.adapter:
         if args.backend != "direct_gpu":
-            logger.info("--adapter requires direct_gpu backend, overriding --backend=%s", args.backend)
+            logger.info(
+                "--adapter requires direct_gpu backend, overriding --backend=%s",
+                args.backend,
+            )
             args.backend = "direct_gpu"
 
     if args.instruction != DEFAULT_INSTRUCTION:

@@ -33,7 +33,6 @@ Usage:
 import argparse
 import json
 import os
-import sys
 
 # Match train_contrastors.py instructions exactly
 QUERY_INSTRUCTION = "Retrieve images or text relevant to the user's query."
@@ -79,7 +78,9 @@ def convert_line(item):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True, help="Input JSONL (contrastors format)")
+    parser.add_argument(
+        "--input", required=True, help="Input JSONL (contrastors format)"
+    )
     parser.add_argument("--output", required=True, help="Output JSONL (swift format)")
     args = parser.parse_args()
 

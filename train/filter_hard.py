@@ -86,7 +86,10 @@ async def classify_batch(client, queries, batch_idx, sem):
                         "model": "gpt-4.1-mini",
                         "messages": [
                             {"role": "system", "content": SYSTEM},
-                            {"role": "user", "content": USER_TPL.format(n=len(queries), block=block)},
+                            {
+                                "role": "user",
+                                "content": USER_TPL.format(n=len(queries), block=block),
+                            },
                         ],
                         "temperature": 0,
                         "max_tokens": 400,
@@ -101,13 +104,15 @@ async def classify_batch(client, queries, batch_idx, sem):
                 if isinstance(labels, list):
                     while len(labels) < len(queries):
                         labels.append("X")
-                    return batch_idx, [str(x).upper().strip('"')[:1] for x in labels[:len(queries)]]
+                    return batch_idx, [
+                        str(x).upper().strip('"')[:1] for x in labels[: len(queries)]
+                    ]
                 return batch_idx, ["X"] * len(queries)
             except Exception as e:
                 if attempt == 4:
                     logger.warning(f"Batch {batch_idx}: {e}")
                     return batch_idx, ["X"] * len(queries)
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
 
 
 def parse_pos(path):
@@ -145,7 +150,7 @@ async def main():
         r"\d{4}.*\b(award|prize|medal|trophy)\b|"
         r"\b(episode|season)\s+\d.*\b(air|viewer|rating|guest)\b|"
         r"\bhow many (goals|points|runs|votes|fouls|wickets|spectators|viewers)\b",
-        re.I
+        re.I,
     )
     PASSAGE_SIGNAL = re.compile(
         r"\b(nickname|called|referred to|according to|why did|why was|"
@@ -154,7 +159,7 @@ async def main():
         r"what was the (reason|cause|result|outcome|consequence)|"
         r"after the (battle|war|incident|death|resignation|defeat)|"
         r"during the (meeting|ceremony|trial|debate))\b",
-        re.I
+        re.I,
     )
 
     to_classify_idx = []
@@ -178,7 +183,7 @@ async def main():
     classify_pairs = [(idx, records[idx]["query"]) for idx in to_classify_idx]
     batches = []
     for i in range(0, len(classify_pairs), args.batch_size):
-        batches.append(classify_pairs[i:i + args.batch_size])
+        batches.append(classify_pairs[i : i + args.batch_size])
     logger.info(f"{len(batches)} batches")
 
     labels_map = {}  # idx -> label
@@ -189,8 +194,10 @@ async def main():
         headers={"Authorization": f"Bearer {api_key}"},
         timeout=90,
     ) as client:
-        tasks = [classify_batch(client, [q for _, q in b], bi, sem)
-                 for bi, b in enumerate(batches)]
+        tasks = [
+            classify_batch(client, [q for _, q in b], bi, sem)
+            for bi, b in enumerate(batches)
+        ]
         done = 0
         t0 = time.time()
         for coro in asyncio.as_completed(tasks):
@@ -205,8 +212,10 @@ async def main():
                 elapsed = time.time() - t0
                 rate = done / elapsed if elapsed > 0 else 1
                 eta = (len(tasks) - done) / rate
-                logger.info(f"{done}/{len(tasks)}: T={t_count} P={p_count} X={x_count} "
-                           f"ETA {eta:.0f}s")
+                logger.info(
+                    f"{done}/{len(tasks)}: T={t_count} P={p_count} X={x_count} "
+                    f"ETA {eta:.0f}s"
+                )
 
     # Collect results
     table_records = []
@@ -220,14 +229,15 @@ async def main():
 
     combined = table_records + passage_records
 
-    logger.info(f"\n=== RESULTS ===")
+    logger.info("\n=== RESULTS ===")
     logger.info(f"TABLE_DEEP:    {len(table_records)}")
     logger.info(f"PASSAGE_DENSE: {len(passage_records)}")
     logger.info(f"EXCLUDED:      {N - len(combined)}")
-    logger.info(f"COMBINED:      {len(combined)} ({len(combined)/N*100:.1f}%)")
+    logger.info(f"COMBINED:      {len(combined)} ({len(combined) / N * 100:.1f}%)")
 
     # Position breakdown
     from collections import Counter
+
     for tag, recs in [("TABLE", table_records), ("PASSAGE", passage_records)]:
         pos = Counter()
         for r in recs:
@@ -245,9 +255,11 @@ async def main():
     # Write outputs
     os.makedirs(args.output_dir, exist_ok=True)
 
-    for name, recs in [("train_table.jsonl", table_records),
-                       ("train_passage.jsonl", passage_records),
-                       ("train_hard.jsonl", combined)]:
+    for name, recs in [
+        ("train_table.jsonl", table_records),
+        ("train_passage.jsonl", passage_records),
+        ("train_hard.jsonl", combined),
+    ]:
         path = os.path.join(args.output_dir, name)
         with open(path, "w") as f:
             for r in recs:
@@ -259,6 +271,7 @@ async def main():
     os.makedirs(split_dir, exist_ok=True)
 
     import shutil
+
     src_split = "training/data/natrual_filtered_v2/split"
     shutil.copy2(f"{src_split}/eval_hn.jsonl", f"{split_dir}/eval_hn.jsonl")
     shutil.copy2(f"{src_split}/test_hn.jsonl", f"{split_dir}/test_hn.jsonl")
@@ -277,6 +290,7 @@ async def main():
 
     # Save samples for visual verification
     import random
+
     random.seed(42)
     for tag, recs in [("table", table_records), ("passage", passage_records)]:
         sample = random.sample(recs, min(100, len(recs)))

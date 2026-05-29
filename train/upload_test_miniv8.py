@@ -33,8 +33,10 @@ def retry_on_429(fn, max_retries=5, initial_wait=60):
             return fn()
         except HfHubHTTPError as e:
             if "429" in str(e) and attempt < max_retries - 1:
-                wait = initial_wait * (2 ** attempt)
-                print(f"Rate limited (429). Waiting {wait}s before retry {attempt + 2}/{max_retries}...")
+                wait = initial_wait * (2**attempt)
+                print(
+                    f"Rate limited (429). Waiting {wait}s before retry {attempt + 2}/{max_retries}..."
+                )
                 time.sleep(wait)
             else:
                 raise
@@ -72,13 +74,17 @@ def main() -> int:
         # Upload
         api = HfApi()
         print("Uploading test_miniv8/ to HF...")
-        retry_on_429(lambda: api.upload_folder(
-            repo_id=args.repo_id,
-            repo_type=args.repo_type,
-            folder_path=str(staging),
-            path_in_repo="test_miniv8",
-        ))
-        print(f"Done: https://huggingface.co/datasets/{args.repo_id}/tree/main/test_miniv8")
+        retry_on_429(
+            lambda: api.upload_folder(
+                repo_id=args.repo_id,
+                repo_type=args.repo_type,
+                folder_path=str(staging),
+                path_in_repo="test_miniv8",
+            )
+        )
+        print(
+            f"Done: https://huggingface.co/datasets/{args.repo_id}/tree/main/test_miniv8"
+        )
 
     return 0
 

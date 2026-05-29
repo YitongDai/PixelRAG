@@ -8,4 +8,9 @@ Usage:
     result = await bench.run(CDPSequentialStrategy(chrome_path=..., n_workers=32, fmt="raw"))
 """
 
-from .bench_throughput import Bench, prepare_articles, generate_ground_truth, run_and_verify
+from .bench_throughput import (
+    Bench as Bench,
+    prepare_articles as prepare_articles,
+    generate_ground_truth as generate_ground_truth,
+    run_and_verify as run_and_verify,
+)

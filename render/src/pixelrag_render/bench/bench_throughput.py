@@ -19,7 +19,6 @@ Usage (programmatic):
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import io
 import json
@@ -33,8 +32,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from pixelrag_render.strategies.base import ArticleCapture, TileCapture, CaptureStrategy
-from pixelrag_render.strategies.cdp_sequential import CDPSequentialStrategy, TILE_HEIGHT, VIEWPORT_WIDTH
+from pixelrag_render.strategies.base import TileCapture
+from pixelrag_render.strategies.cdp_sequential import (
+    CDPSequentialStrategy,
+    VIEWPORT_WIDTH,
+)
 
 
 CORRECT_THRESHOLD = 99.0
@@ -46,8 +48,10 @@ LOSSLESS_MAX_MEAN_DIFF = 3.0
 # Article preparation
 # ---------------------------------------------------------------------------
 
-def prepare_articles(zim_path: str, n: int, seed: int = 42,
-                     kiwix_url: str | None = None) -> list[dict]:
+
+def prepare_articles(
+    zim_path: str, n: int, seed: int = 42, kiwix_url: str | None = None
+) -> list[dict]:
     """Sample articles from ZIM.
 
     kiwix_url can be:
@@ -84,7 +88,7 @@ def prepare_articles(zim_path: str, n: int, seed: int = 42,
             if "html" not in item.mimetype:
                 continue
             html = bytes(item.content).decode("utf-8")
-            if "http-equiv=\"refresh\"" in html.lower() or len(html) < 300:
+            if 'http-equiv="refresh"' in html.lower() or len(html) < 300:
                 continue
 
             if kiwix_urls:
@@ -124,6 +128,7 @@ def cleanup_articles(articles: list[dict]):
 # Ground truth (cached)
 # ---------------------------------------------------------------------------
 
+
 def gt_cache_key(articles: list[dict], seed: int) -> str:
     paths = sorted(a["path"] for a in articles)
     content = f"seed={seed}\n" + "\n".join(paths)
@@ -131,7 +136,10 @@ def gt_cache_key(articles: list[dict], seed: int) -> str:
 
 
 async def generate_ground_truth(
-    articles: list[dict], chrome_path: str, cache_dir: Path, seed: int,
+    articles: list[dict],
+    chrome_path: str,
+    cache_dir: Path,
+    seed: int,
     timeout_ms: int = 5000,
 ) -> dict[str, list[Path]]:
     cache_key = gt_cache_key(articles, seed)
@@ -139,14 +147,14 @@ async def generate_ground_truth(
 
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
-        all_exist = all(
-            Path(p).exists() for paths in manifest.values() for p in paths
-        )
+        all_exist = all(Path(p).exists() for paths in manifest.values() for p in paths)
         if all_exist:
             result = {k: [Path(p) for p in v] for k, v in manifest.items()}
             total = sum(len(v) for v in result.values())
-            print(f"Ground truth cache hit: {len(result)} articles, {total} tiles",
-                  flush=True)
+            print(
+                f"Ground truth cache hit: {len(result)} articles, {total} tiles",
+                flush=True,
+            )
             return result
 
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -161,7 +169,10 @@ async def generate_ground_truth(
     for ac in results:
         tile_paths = []
         for tc in ac.tiles:
-            tile_path = cache_dir / f"gt_{cache_key}_{ac.article_path.replace('/', '_')}_{tc.tile_index:02d}.png"
+            tile_path = (
+                cache_dir
+                / f"gt_{cache_key}_{ac.article_path.replace('/', '_')}_{tc.tile_index:02d}.png"
+            )
             if tc.image_bytes:
                 tile_path.write_bytes(tc.image_bytes)
             tile_paths.append(tile_path)
@@ -171,8 +182,10 @@ async def generate_ground_truth(
     manifest_path.write_text(json.dumps(manifest))
 
     total = sum(len(v) for v in ground_truth.values())
-    print(f"Ground truth generated: {len(ground_truth)} articles, {total} tiles",
-          flush=True)
+    print(
+        f"Ground truth generated: {len(ground_truth)} articles, {total} tiles",
+        flush=True,
+    )
     return ground_truth
 
 
@@ -204,7 +217,9 @@ def validate_gt(ground_truth: dict[str, list[Path]]) -> tuple[int, int, list[str
                 if arr.std() < 1.0:
                     bad += 1
                     if len(examples) < 10:
-                        examples.append(f"{article_path} {tp.name}: blank (std={arr.std():.1f})")
+                        examples.append(
+                            f"{article_path} {tp.name}: blank (std={arr.std():.1f})"
+                        )
                     continue
                 ok += 1
             except Exception as e:
@@ -217,6 +232,7 @@ def validate_gt(ground_truth: dict[str, list[Path]]) -> tuple[int, int, list[str
 # ---------------------------------------------------------------------------
 # Decode + verify (NOT timed)
 # ---------------------------------------------------------------------------
+
 
 def decode_tile(tc: TileCapture) -> Image.Image | None:
     try:
@@ -234,7 +250,9 @@ def decode_tile(tc: TileCapture) -> Image.Image | None:
     return None
 
 
-def verify_tile(captured: Image.Image, gt_path: Path, is_lossy: bool) -> tuple[bool, float]:
+def verify_tile(
+    captured: Image.Image, gt_path: Path, is_lossy: bool
+) -> tuple[bool, float]:
     gt = Image.open(gt_path).convert("RGB")
     cap_arr = np.array(captured, dtype=np.float32)
     gt_arr = np.array(gt, dtype=np.float32)
@@ -249,6 +267,7 @@ def verify_tile(captured: Image.Image, gt_path: Path, is_lossy: bool) -> tuple[b
 # ---------------------------------------------------------------------------
 # Run one strategy: time capture, then verify separately
 # ---------------------------------------------------------------------------
+
 
 async def run_and_verify(strategy, articles, ground_truth) -> dict:
     await strategy.setup()
@@ -293,7 +312,9 @@ async def run_and_verify(strategy, articles, ground_truth) -> dict:
             img = decode_tile(tc)
             if img is None:
                 tiles_bad += 1
-                bad_examples.append(f"{ac.article_path} tile {tc.tile_index}: decode failed")
+                bad_examples.append(
+                    f"{ac.article_path} tile {tc.tile_index}: decode failed"
+                )
                 continue
 
             ok, mean_diff = verify_tile(img, gt_tiles[tc.tile_index], is_lossy)
@@ -319,7 +340,11 @@ async def run_and_verify(strategy, articles, ground_truth) -> dict:
     ms_per_tile = total_shot_ms / tiles_total if tiles_total > 0 else 0
     articles_per_s = len(article_captures) / wall_s if wall_s > 0 else 0
     mpix_per_s = (total_pixels / 1_000_000) / wall_s if wall_s > 0 else 0
-    shot_share = total_shot_ms / (total_shot_ms + total_nav_ms) if (total_shot_ms + total_nav_ms) > 0 else 0
+    shot_share = (
+        total_shot_ms / (total_shot_ms + total_nav_ms)
+        if (total_shot_ms + total_nav_ms) > 0
+        else 0
+    )
 
     # Latency percentiles
     sorted_shots = sorted(per_tile_shot_ms) if per_tile_shot_ms else [0]
@@ -358,6 +383,7 @@ async def run_and_verify(strategy, articles, ground_truth) -> dict:
 # Bench: clean harness that takes any CaptureStrategy
 # ---------------------------------------------------------------------------
 
+
 class Bench:
     """Benchmark harness. Measures throughput/latency and verifies correctness.
 
@@ -366,10 +392,14 @@ class Bench:
         result = await bench.run(strategy, articles=200, seed=42)
     """
 
-    def __init__(self, zim_path: str, chrome_path: str,
-                 output_dir: str = "./bench_results",
-                 kiwix_url: str | None = None,
-                 gt_timeout_ms: int = 5000):
+    def __init__(
+        self,
+        zim_path: str,
+        chrome_path: str,
+        output_dir: str = "./bench_results",
+        kiwix_url: str | None = None,
+        gt_timeout_ms: int = 5000,
+    ):
         self.zim_path = zim_path
         self.chrome_path = chrome_path
         self.output_dir = Path(output_dir)
@@ -381,17 +411,20 @@ class Bench:
     def prepare(self, n_articles: int = 200, seed: int = 42) -> list[dict]:
         if self._articles is None:
             self._articles = prepare_articles(
-                self.zim_path, n_articles, seed, kiwix_url=self.kiwix_url)
+                self.zim_path, n_articles, seed, kiwix_url=self.kiwix_url
+            )
         return self._articles
 
-    async def ensure_gt(self, n_articles: int = 200, seed: int = 42) -> dict[str, list[Path]]:
+    async def ensure_gt(
+        self, n_articles: int = 200, seed: int = 42
+    ) -> dict[str, list[Path]]:
         if self._gt is not None:
             return self._gt
         articles = self.prepare(n_articles, seed)
         gt_dir = self.output_dir / "ground_truth"
         self._gt = await generate_ground_truth(
-            articles, self.chrome_path, gt_dir, seed,
-            timeout_ms=self.gt_timeout_ms)
+            articles, self.chrome_path, gt_dir, seed, timeout_ms=self.gt_timeout_ms
+        )
         ok, bad, examples = validate_gt(self._gt)
         total = ok + bad
         print(f"GT validation: {ok}/{total} OK, {bad} bad", flush=True)
@@ -403,11 +436,11 @@ class Bench:
             if pct < CORRECT_THRESHOLD:
                 raise RuntimeError(
                     f"GT itself is only {pct:.1f}% valid ({bad} bad tiles). "
-                    f"Fix image loading or increase gt_timeout_ms.")
+                    f"Fix image loading or increase gt_timeout_ms."
+                )
         return self._gt
 
-    async def run(self, strategy, n_articles: int = 200,
-                  seed: int = 42) -> dict:
+    async def run(self, strategy, n_articles: int = 200, seed: int = 42) -> dict:
         articles = self.prepare(n_articles, seed)
         gt = await self.ensure_gt(n_articles, seed)
         result = await run_and_verify(strategy, articles, gt)
@@ -419,8 +452,9 @@ class Bench:
             print(f"Warning: failed to save experiment: {e}", flush=True)
         return result
 
-    def _build_experiment(self, strategy, result: dict,
-                          n_articles: int, seed: int) -> dict:
+    def _build_experiment(
+        self, strategy, result: dict, n_articles: int, seed: int
+    ) -> dict:
         config = {
             "strategy_class": type(strategy).__name__,
             "strategy_name": strategy.name,
@@ -456,12 +490,15 @@ class Bench:
 # Display
 # ---------------------------------------------------------------------------
 
+
 def format_result_line(r: dict) -> str:
     status = "PASS" if r["correct_pct"] >= CORRECT_THRESHOLD else "FAIL"
     ok = f"{r['tiles_ok']}/{r['tiles_total']}"
-    return (f"  {r['name']:<25} {ok:>7} {r['correct_pct']:>5.1f}% "
-            f"{r['tiles_per_s']:>6.1f} {r['ms_per_tile']:>5.0f} "
-            f"{r['shot_pct']:>4.0f}%  {status}")
+    return (
+        f"  {r['name']:<25} {ok:>7} {r['correct_pct']:>5.1f}% "
+        f"{r['tiles_per_s']:>6.1f} {r['ms_per_tile']:>5.0f} "
+        f"{r['shot_pct']:>4.0f}%  {status}"
+    )
 
 
 def print_results(results: list[dict]):

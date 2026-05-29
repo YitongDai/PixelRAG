@@ -54,24 +54,25 @@ def build_retriever(args, examples, model, api_base, api_key):
     """
     tile_size = (TILE_WIDTH, args.tile_height)
 
-    retrieval_mode_count = sum([
-        args.url_screenshot,
-        args.url_tiled_screenshot,
-        args.url_text,
-        args.url_jina_reader,
-        args.retrieval_augment,
-        args.use_tiled_retrieval,
-        args.text_vector,
-        args.local_api,
-        args.text_api,
-        args.html_dom_lookup,
-        args.hybrid,
-    ])
+    retrieval_mode_count = sum(
+        [
+            args.url_screenshot,
+            args.url_tiled_screenshot,
+            args.url_text,
+            args.url_jina_reader,
+            args.retrieval_augment,
+            args.use_tiled_retrieval,
+            args.text_vector,
+            args.local_api,
+            args.text_api,
+            args.html_dom_lookup,
+            args.hybrid,
+        ]
+    )
 
     if args.url_screenshot:
         retriever = ScreenshotRetriever(
-            screenshot_dir=args.screenshot_dir,
-            max_pixels=args.max_pixels
+            screenshot_dir=args.screenshot_dir, max_pixels=args.max_pixels
         )
         mode = f"Screenshot (Ground Truth, max_pixels={args.max_pixels or 'None'})"
 
@@ -100,26 +101,36 @@ def build_retriever(args, examples, model, api_base, api_key):
             text_cache = load_text_cache(args.text_cache)
             logger.info(f"Loaded {len(text_cache)} cached items from {args.text_cache}")
         elif args.text_cache:
-            logger.info(f"Cache file not found: {args.text_cache} (will fetch from source)")
+            logger.info(
+                f"Cache file not found: {args.text_cache} (will fetch from source)"
+            )
         if args.text_source == "jina":
             retriever = JinaReaderRetriever(
-                max_chars=args.max_context_chars, api_key=args.jina_api_key,
-                text_cache=text_cache, cache_path=args.text_cache
+                max_chars=args.max_context_chars,
+                api_key=args.jina_api_key,
+                text_cache=text_cache,
+                cache_path=args.text_cache,
             )
             mode = "Text RAG (Jina)"
         elif args.text_source == "wikipedia":
             retriever = WikipediaAPIRetriever(
-                max_chars=args.max_context_chars, text_cache=text_cache, cache_path=args.text_cache
+                max_chars=args.max_context_chars,
+                text_cache=text_cache,
+                cache_path=args.text_cache,
             )
             mode = "Text RAG (Wikipedia API)"
         else:
             retriever = TextRetriever(
-                max_chars=args.max_context_chars, text_cache=text_cache, cache_path=args.text_cache
+                max_chars=args.max_context_chars,
+                text_cache=text_cache,
+                cache_path=args.text_cache,
             )
             mode = "Text RAG (Crawl)"
 
     elif args.url_jina_reader:
-        logger.warning("--url-jina-reader is deprecated, use --url-text --text-source jina instead")
+        logger.warning(
+            "--url-jina-reader is deprecated, use --url-text --text-source jina instead"
+        )
         retriever = JinaReaderRetriever(
             max_chars=args.max_context_chars, api_key=args.jina_api_key
         )
@@ -152,7 +163,9 @@ def build_retriever(args, examples, model, api_base, api_key):
 
     elif args.use_tiled_retrieval:
         if args.use_colqwen_retrieval:
-            tiled_index_path = args.colqwen_index_path.replace(".leann", f"_tiled_{args.tile_height}.leann")
+            tiled_index_path = args.colqwen_index_path.replace(
+                ".leann", f"_tiled_{args.tile_height}.leann"
+            )
             retriever = TiledColQwenVectorRetriever(
                 index_path=tiled_index_path,
                 screenshot_dir=args.screenshot_dir,
@@ -176,8 +189,13 @@ def build_retriever(args, examples, model, api_base, api_key):
             qwen3vl_gpu_ids = [int(x.strip()) for x in args.qwen3vl_gpu_ids.split(",")]
 
             pixel_query_map = None
-            if args.task == "encyclopedic_vqa" and not args.evqa_multimodal_query and not args.evqa_multi_image_query:
+            if (
+                args.task == "encyclopedic_vqa"
+                and not args.evqa_multimodal_query
+                and not args.evqa_multi_image_query
+            ):
                 from .pixel_query import QueryImageTextRenderer
+
                 tiles_dir = args.tiles_dir or "tiles/evqa"
                 renderer = QueryImageTextRenderer(
                     output_dir="query_cards/evqa",
@@ -186,14 +204,19 @@ def build_retriever(args, examples, model, api_base, api_key):
                 pixel_query_map = {}
                 for ex in examples:
                     inat_path = _get_query_image_path_for_example(ex, tiles_dir)
-                    path = renderer.render(ex["id"], ex["problem"], inat_path, force=args.force)
+                    path = renderer.render(
+                        ex["id"], ex["problem"], inat_path, force=args.force
+                    )
                     pixel_query_map[ex["id"]] = path
                 logger.info(f"EVQA query cards: {len(pixel_query_map)} rendered")
             elif args.pixel_query:
                 from .pixel_query import PixelQueryRenderer
+
                 pq_renderer = PixelQueryRenderer(output_dir=args.pixel_query_dir)
                 pixel_query_map = pq_renderer.render_all(examples)
-                logger.info(f"Pixel query mode: rendered {len(pixel_query_map)} query images")
+                logger.info(
+                    f"Pixel query mode: rendered {len(pixel_query_map)} query images"
+                )
 
             retriever = TiledQwen3VLEmbeddingRetriever(
                 screenshot_dir=args.screenshot_dir,
@@ -212,12 +235,12 @@ def build_retriever(args, examples, model, api_base, api_key):
                 local_wiki=args.local_wiki,
                 local_wiki_screenshot_dir=args.local_wiki_screenshot_dir,
                 multi_image_query=args.evqa_multi_image_query,
-                prebuilt_tiles_dir=getattr(args, 'prebuilt_tiles_dir', None),
-                embedding_backend=getattr(args, 'embedding_backend', 'vllm'),
-                peft_adapter=getattr(args, 'peft_adapter', None),
+                prebuilt_tiles_dir=getattr(args, "prebuilt_tiles_dir", None),
+                embedding_backend=getattr(args, "embedding_backend", "vllm"),
+                peft_adapter=getattr(args, "peft_adapter", None),
             )
             mode = "Tiled Qwen3-VL-Embedding Retrieval"
-            if getattr(args, 'prebuilt_tiles_dir', None):
+            if getattr(args, "prebuilt_tiles_dir", None):
                 mode += " (prebuilt hard-mini)"
             elif args.local_wiki:
                 mode += " (local-wiki)"
@@ -262,19 +285,33 @@ def build_retriever(args, examples, model, api_base, api_key):
         if args.reranker:
             logger.info(f"Loading reranker on GPU {args.reranker_gpu_id}")
             from .reranker import Qwen3VLReranker
+
             reranker_obj = Qwen3VLReranker(
                 model_name=args.reranker_model,
                 gpu_id=args.reranker_gpu_id,
             )
         query_image_fn = None
         if args.no_query_image:
-            logger.info("--no-query-image set: retrieval queries will be text-only (reader still sees query image)")
+            logger.info(
+                "--no-query-image set: retrieval queries will be text-only (reader still sees query image)"
+            )
         elif args.task == "encyclopedic_vqa":
             _tiles_dir = args.tiles_dir or "tiles/evqa"
-            query_image_fn = lambda ex, _td=_tiles_dir: _get_query_image_path_for_example(ex, _td, quiet=True)
-        elif args.task in ("worldvqa", "simplevqa", "factualvqa", "mmsearch", "webqa", "multimodalqa"):
+
+            def query_image_fn(ex, _td=_tiles_dir):
+                return _get_query_image_path_for_example(ex, _td, quiet=True)
+        elif args.task in (
+            "worldvqa",
+            "simplevqa",
+            "factualvqa",
+            "mmsearch",
+            "webqa",
+            "multimodalqa",
+        ):
             _task = args.task
-            query_image_fn = lambda ex, _t=_task: _save_task_query_image(ex, _t, base_dir="tiles")
+
+            def query_image_fn(ex, _t=_task):
+                return _save_task_query_image(ex, _t, base_dir="tiles")
 
         retriever = LocalAPIRetriever(
             api_url=args.local_api_url,
@@ -313,10 +350,22 @@ def build_retriever(args, examples, model, api_base, api_key):
         if not args.no_query_image:
             if args.task == "encyclopedic_vqa":
                 _tiles_dir = args.tiles_dir or "tiles/evqa"
-                text_query_image_fn = lambda ex, _td=_tiles_dir: _get_query_image_path_for_example(ex, _td, quiet=True)
-            elif args.task in ("worldvqa", "simplevqa", "factualvqa", "mmsearch", "webqa", "multimodalqa"):
+
+                def text_query_image_fn(ex, _td=_tiles_dir):
+                    return _get_query_image_path_for_example(ex, _td, quiet=True)
+            elif args.task in (
+                "worldvqa",
+                "simplevqa",
+                "factualvqa",
+                "mmsearch",
+                "webqa",
+                "multimodalqa",
+            ):
                 _task = args.task
-                text_query_image_fn = lambda ex, _t=_task: _save_task_query_image(ex, _t, base_dir="tiles")
+
+                def text_query_image_fn(ex, _t=_task):
+                    return _save_task_query_image(ex, _t, base_dir="tiles")
+
         retriever = TextAPIRetriever(
             api_url=args.text_api_url,
             top_k=args.retrieval_top_k,
@@ -346,7 +395,9 @@ def build_retriever(args, examples, model, api_base, api_key):
 
     elif args.hybrid:
         if args.read_as_text_ocr or args.render_as_image:
-            print("Error: --hybrid is not compatible with --read-as-text-ocr or --render-as-image.")
+            print(
+                "Error: --hybrid is not compatible with --read-as-text-ocr or --render-as-image."
+            )
             sys.exit(1)
         image_base = LocalAPIRetriever(
             api_url=args.local_api_url,
@@ -373,8 +424,7 @@ def build_retriever(args, examples, model, api_base, api_key):
     elif args.text_vector:
         if args.text_source == "ds-serve":
             retriever = DsServeRetriever(
-                api_url=args.ds_serve_api_url,
-                top_k=args.retrieval_top_k
+                api_url=args.ds_serve_api_url, top_k=args.retrieval_top_k
             )
             mode = "Text Vector (ds-serve)"
         else:
@@ -382,7 +432,9 @@ def build_retriever(args, examples, model, api_base, api_key):
             text_cache = load_text_cache(text_cache_path)
             if not text_cache:
                 print(f"Error: Text cache not found at {text_cache_path}")
-                print(f"Run with --url-text --text-source {args.text_source} first to build the cache.")
+                print(
+                    f"Run with --url-text --text-source {args.text_source} first to build the cache."
+                )
                 sys.exit(1)
 
             if args.text_embed_preset == "qwen":
@@ -409,7 +461,9 @@ def build_retriever(args, examples, model, api_base, api_key):
                 embedding_options = {"batch_size": args.embed_batch_size}
                 preset_name = "contriever"
 
-            index_path = f"indexes/text_{args.text_source}_{preset_name}_c{args.chunk_size}"
+            index_path = (
+                f"indexes/text_{args.text_source}_{preset_name}_c{args.chunk_size}"
+            )
             retriever = TextVectorRetriever(
                 text_cache=text_cache,
                 index_path=index_path,
@@ -431,7 +485,10 @@ def build_retriever(args, examples, model, api_base, api_key):
         retriever = WorldVQANoRetrievalRetriever()
         mode = "WorldVQA no retrieval (query + image only)"
 
-    elif args.task in ("simplevqa", "factualvqa", "mmsearch", "webqa", "multimodalqa") and retrieval_mode_count == 0:
+    elif (
+        args.task in ("simplevqa", "factualvqa", "mmsearch", "webqa", "multimodalqa")
+        and retrieval_mode_count == 0
+    ):
         retriever = WorldVQANoRetrievalRetriever()
         mode = f"{args.task} no retrieval (query + image only)"
 
@@ -441,16 +498,25 @@ def build_retriever(args, examples, model, api_base, api_key):
 
     # Ablation A: wrap image retriever with OCR
     if args.read_as_text_ocr:
-        image_modes = (args.local_api or args.use_tiled_retrieval or args.retrieval_augment
-                       or args.url_screenshot or args.url_tiled_screenshot)
+        image_modes = (
+            args.local_api
+            or args.use_tiled_retrieval
+            or args.retrieval_augment
+            or args.url_screenshot
+            or args.url_tiled_screenshot
+        )
         if not image_modes:
-            print("Error: --read-as-text-ocr requires an image retrieval mode "
-                  "(--local-api, --use-tiled-retrieval, --retrieval-augment, "
-                  "--url-screenshot, or --url-tiled-screenshot).")
+            print(
+                "Error: --read-as-text-ocr requires an image retrieval mode "
+                "(--local-api, --use-tiled-retrieval, --retrieval-augment, "
+                "--url-screenshot, or --url-tiled-screenshot)."
+            )
             sys.exit(1)
         if args.react:
-            print("Error: --read-as-text-ocr is not compatible with --react "
-                  "(react bypasses the retriever wrapper on subsequent turns).")
+            print(
+                "Error: --read-as-text-ocr is not compatible with --react "
+                "(react bypasses the retriever wrapper on subsequent turns)."
+            )
             sys.exit(1)
         retriever = OCRWrappedRetriever(
             base=retriever,
@@ -461,13 +527,17 @@ def build_retriever(args, examples, model, api_base, api_key):
             reader_top_k=args.reader_top_k,
         )
         mode += f" + OCR({args.ocr_url})"
-        logger.info(f"Ablation A: OCR wrapper enabled ({args.ocr_url}, cache={args.ocr_cache})")
+        logger.info(
+            f"Ablation A: OCR wrapper enabled ({args.ocr_url}, cache={args.ocr_cache})"
+        )
 
     # Ablation B: wrap text retriever with renderer
     if args.render_as_image:
         if not args.text_api:
-            print("Error: --render-as-image requires --text-api (needs a text retriever "
-                  "exposing get_hits()).")
+            print(
+                "Error: --render-as-image requires --text-api (needs a text retriever "
+                "exposing get_hits())."
+            )
             sys.exit(1)
         retriever = RenderedTextWrapper(
             base=retriever,

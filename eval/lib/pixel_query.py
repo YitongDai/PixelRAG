@@ -124,9 +124,7 @@ class PixelQueryRenderer:
 
         img = self._render_image(query_text)
         img.save(out_path)
-        logger.debug(
-            f"Rendered pixel query: {out_path} ({img.size[0]}x{img.size[1]})"
-        )
+        logger.debug(f"Rendered pixel query: {out_path} ({img.size[0]}x{img.size[1]})")
         return out_path
 
     def render_all(self, examples: list[dict]) -> dict[str, str]:
@@ -205,15 +203,17 @@ class QueryImageTextRenderer:
             f"font_size={font_size}"
         )
 
-    def _render_query_text_centered(self, text: str, width: int | None = None) -> Image.Image:
+    def _render_query_text_centered(
+        self, text: str, width: int | None = None
+    ) -> Image.Image:
         """Render query text centered, reusing wrap logic from PixelQueryRenderer."""
         width = width or self.card_width
         max_text_width = width - 2 * self.padding_x
-        
+
         # Calculate dynamic font size based on width
         # Ratio: width / 30 seems reasonable (600px -> 20px, 1500px -> 50px)
         dynamic_font_size = max(22, int(width / 30))
-        
+
         # Use dynamic font if size is different from default
         if dynamic_font_size != self.font_size:
             try:
@@ -228,12 +228,12 @@ class QueryImageTextRenderer:
         line_height = font.getbbox("Ay")[3] - font.getbbox("Ay")[1]
         # Scale spacing proportionally
         spacing = max(4, int(self.line_spacing * (dynamic_font_size / self.font_size)))
-        
-        total_text_height = (
-            len(lines) * line_height + (len(lines) - 1) * spacing
-        )
+
+        total_text_height = len(lines) * line_height + (len(lines) - 1) * spacing
         # Scale padding proportionally
-        padding_y = max(self.padding_y, int(self.padding_y * (dynamic_font_size / self.font_size)))
+        padding_y = max(
+            self.padding_y, int(self.padding_y * (dynamic_font_size / self.font_size))
+        )
         text_height = total_text_height + 2 * padding_y
 
         img = Image.new("RGB", (width, text_height), color=(255, 255, 255))
@@ -282,7 +282,10 @@ class QueryImageTextRenderer:
                 max_dim = 1536  # Standard reasonable max dimension
                 if max(query_img.size) > max_dim:
                     ratio = max_dim / max(query_img.size)
-                    new_size = (int(query_img.width * ratio), int(query_img.height * ratio))
+                    new_size = (
+                        int(query_img.width * ratio),
+                        int(query_img.height * ratio),
+                    )
                     query_img = query_img.resize(new_size, Image.Resampling.LANCZOS)
             except Exception as e:
                 logger.warning(f"Failed to load query image {query_image_path}: {e}")
@@ -292,7 +295,9 @@ class QueryImageTextRenderer:
 
         # Card width adapts to image: expand if image is wider than card_width
         if query_img is not None:
-            effective_width = max(self.card_width, query_img.width + 2 * self.image_padding)
+            effective_width = max(
+                self.card_width, query_img.width + 2 * self.image_padding
+            )
         else:
             effective_width = self.card_width
 
@@ -305,13 +310,11 @@ class QueryImageTextRenderer:
         else:
             img_section_height = 0
 
-        text_section_height = (
-            text_img.height + 2 * self.text_section_padding
-        )
+        text_section_height = text_img.height + 2 * self.text_section_padding
         total_height = img_section_height + text_section_height
 
         card = Image.new("RGB", (effective_width, total_height), color=(255, 255, 255))
-        draw = ImageDraw.Draw(card)
+        ImageDraw.Draw(card)
 
         y_offset = 0
         if query_img is not None:
@@ -338,7 +341,5 @@ class QueryImageTextRenderer:
             pass
 
         card.save(out_path)
-        logger.debug(
-            f"Rendered query card: {out_path} ({card.size[0]}x{card.size[1]})"
-        )
+        logger.debug(f"Rendered query card: {out_path} ({card.size[0]}x{card.size[1]})")
         return out_path

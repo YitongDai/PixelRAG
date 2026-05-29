@@ -52,7 +52,9 @@ def main() -> int:
             naturalness = int(item.get("naturalness", 0) or 0)
             style_fit = int(item.get("simpleqa_style_fit", 0) or 0)
             if naturalness >= args.min_naturalness and style_fit >= args.min_style_fit:
-                selected_lines_by_file[item["source_file"]].add(int(item["source_line"]))
+                selected_lines_by_file[item["source_file"]].add(
+                    int(item["source_line"])
+                )
                 selected_rows += 1
 
     output_dir.mkdir(parents=True, exist_ok=True)

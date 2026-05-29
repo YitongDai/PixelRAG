@@ -10,8 +10,12 @@ import tarfile
 from pathlib import Path
 
 
-DEFAULT_SOURCE_DIR = Path("/home/user/wiki-screenshot-training/hf_dataset_export/screenshot-training")
-DEFAULT_OUTPUT_DIR = Path("/home/user/wiki-screenshot-training/hf_dataset_export_sharded/screenshot-training")
+DEFAULT_SOURCE_DIR = Path(
+    "/home/user/wiki-screenshot-training/hf_dataset_export/screenshot-training"
+)
+DEFAULT_OUTPUT_DIR = Path(
+    "/home/user/wiki-screenshot-training/hf_dataset_export_sharded/screenshot-training"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -110,7 +114,9 @@ def main() -> int:
         json.dumps(summary, indent=2, sort_keys=True)
     )
 
-    extract_script_src = Path("/home/user/wiki-screenshot-training/extract_hf_image_shards.py")
+    extract_script_src = Path(
+        "/home/user/wiki-screenshot-training/extract_hf_image_shards.py"
+    )
     if extract_script_src.exists():
         shutil.copy2(extract_script_src, output_dir / "extract_hf_image_shards.py")
 

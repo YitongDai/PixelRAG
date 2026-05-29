@@ -179,7 +179,9 @@ class PlaywrightConnection:
 
 
 async def launch_websocket(
-    chrome_path: str, port: int, headless_shell: bool = False,
+    chrome_path: str,
+    port: int,
+    headless_shell: bool = False,
     extra_args: list[str] | None = None,
 ) -> WebsocketConnection:
     """Launch Chrome via subprocess, connect via websocket."""
@@ -204,7 +206,9 @@ async def launch_websocket(
             pass
 
     proc = subprocess.Popen(
-        args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        args,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         preexec_fn=_preexec,
     )
 

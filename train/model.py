@@ -7,15 +7,22 @@ from peft import LoraConfig, get_peft_model
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 
 
-def load_model_for_training(model_path: str, gpu_id: int, lora_r: int = 32,
-                            lora_alpha: int = 32, lora_dropout: float = 0.05):
+def load_model_for_training(
+    model_path: str,
+    gpu_id: int,
+    lora_r: int = 32,
+    lora_alpha: int = 32,
+    lora_dropout: float = 0.05,
+):
     """Load Qwen3-VL with LoRA adapters for fine-tuning.
 
     Uses Qwen3VLForConditionalGeneration (NOT AutoModel, which loads
     Qwen3VLModel with random language_model weights).
     """
     model = Qwen3VLForConditionalGeneration.from_pretrained(
-        model_path, dtype=torch.bfloat16, trust_remote_code=True,
+        model_path,
+        dtype=torch.bfloat16,
+        trust_remote_code=True,
     )
     lora_config = LoraConfig(
         r=lora_r,
@@ -31,8 +38,9 @@ def load_model_for_training(model_path: str, gpu_id: int, lora_r: int = 32,
     return model
 
 
-def load_processor(model_path: str, min_pixels: int = 128 * 28 * 28,
-                    max_pixels: int = 256 * 28 * 28):
+def load_processor(
+    model_path: str, min_pixels: int = 128 * 28 * 28, max_pixels: int = 256 * 28 * 28
+):
     """Load the processor with configurable image resolution.
 
     Default resolution is reduced from the model default (~1.3M pixels) to
@@ -40,8 +48,10 @@ def load_processor(model_path: str, min_pixels: int = 128 * 28 * 28,
     for inference by setting max_pixels=1280*28*28.
     """
     return AutoProcessor.from_pretrained(
-        model_path, trust_remote_code=True,
-        min_pixels=min_pixels, max_pixels=max_pixels,
+        model_path,
+        trust_remote_code=True,
+        min_pixels=min_pixels,
+        max_pixels=max_pixels,
     )
 
 

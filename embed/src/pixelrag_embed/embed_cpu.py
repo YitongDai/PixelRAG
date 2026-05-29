@@ -15,7 +15,6 @@ import argparse
 import json
 import logging
 import os
-import time
 from pathlib import Path
 
 import numpy as np
@@ -44,7 +43,11 @@ def scan_chunks(shard_dir: str) -> list[dict]:
         if entry.name.endswith(".png.tiles"):
             tile_dirs = [entry]
         else:
-            tile_dirs = sorted(d for d in entry.iterdir() if d.is_dir() and d.name.endswith(".png.tiles"))
+            tile_dirs = sorted(
+                d
+                for d in entry.iterdir()
+                if d.is_dir() and d.name.endswith(".png.tiles")
+            )
 
         for td in tile_dirs:
             dir_name = td.name
@@ -63,33 +66,39 @@ def scan_chunks(shard_dir: str) -> list[dict]:
                 for chunk_info in manifest.get("chunks", []):
                     chunk_path = td / chunk_info["file"]
                     if chunk_path.exists():
-                        items.append({
-                            "path": str(chunk_path),
-                            "article_id": article_id,
-                            "tile_index": chunk_info.get("tile_index", 0),
-                            "chunk_index": chunk_info.get("chunk_index", 0),
-                            "y_offset": chunk_info.get("y_offset", 0),
-                            "height": chunk_info.get("height", 1024),
-                        })
+                        items.append(
+                            {
+                                "path": str(chunk_path),
+                                "article_id": article_id,
+                                "tile_index": chunk_info.get("tile_index", 0),
+                                "chunk_index": chunk_info.get("chunk_index", 0),
+                                "y_offset": chunk_info.get("y_offset", 0),
+                                "height": chunk_info.get("height", 1024),
+                            }
+                        )
             elif tiles_json.exists():
                 with open(tiles_json) as f:
                     manifest = json.load(f)
                 for i, tile_name in enumerate(manifest.get("tiles", [])):
                     tile_path = td / tile_name
                     if tile_path.exists():
-                        items.append({
-                            "path": str(tile_path),
-                            "article_id": article_id,
-                            "tile_index": i,
-                            "chunk_index": 0,
-                            "y_offset": 0,
-                            "height": 0,
-                        })
+                        items.append(
+                            {
+                                "path": str(tile_path),
+                                "article_id": article_id,
+                                "tile_index": i,
+                                "chunk_index": 0,
+                                "y_offset": 0,
+                                "height": 0,
+                            }
+                        )
 
     return items
 
 
-def embed_items(items: list[dict], model_name: str, instruction: str = "") -> np.ndarray:
+def embed_items(
+    items: list[dict], model_name: str, instruction: str = ""
+) -> np.ndarray:
     """Embed a list of image items using transformers on CPU."""
     import torch
     from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
@@ -97,7 +106,8 @@ def embed_items(items: list[dict], model_name: str, instruction: str = "") -> np
     logger.info("Loading model %s on CPU...", model_name)
     processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
     model = Qwen3VLForConditionalGeneration.from_pretrained(
-        model_name, trust_remote_code=True,
+        model_name,
+        trust_remote_code=True,
         dtype=torch.float32,
         attn_implementation="sdpa",
     ).eval()
@@ -111,12 +121,19 @@ def embed_items(items: list[dict], model_name: str, instruction: str = "") -> np
     for i, item in enumerate(tqdm(items, desc="Embedding")):
         img = Image.open(item["path"]).convert("RGB")
 
-        messages = [{"role": "user", "content": [
-            {"type": "image", "image": img},
-            {"type": "text", "text": prefix + "What is shown in this image?"},
-        ]}]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": img},
+                    {"type": "text", "text": prefix + "What is shown in this image?"},
+                ],
+            }
+        ]
 
-        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        text = processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
         inputs = processor(text=[text], images=[img], return_tensors="pt", padding=True)
 
         with torch.no_grad():
@@ -138,10 +155,14 @@ def embed_items(items: list[dict], model_name: str, instruction: str = "") -> np
 
 def main():
     parser = argparse.ArgumentParser(description="CPU embedding for tile chunks")
-    parser.add_argument("--shard-dir", required=True, help="Directory with *.png.tiles/ subdirs")
+    parser.add_argument(
+        "--shard-dir", required=True, help="Directory with *.png.tiles/ subdirs"
+    )
     parser.add_argument("--output-dir", required=True, help="Output directory for .npz")
     parser.add_argument("--model", default="Qwen/Qwen3-VL-Embedding-2B")
-    parser.add_argument("--instruction", default="", help="Instruction prefix for queries")
+    parser.add_argument(
+        "--instruction", default="", help="Instruction prefix for queries"
+    )
     parser.add_argument("--limit", type=int, default=None, help="Max chunks to embed")
     args = parser.parse_args()
 
@@ -154,7 +175,7 @@ def main():
 
     if args.limit and len(items) > args.limit:
         logger.info("Found %d chunks, limiting to %d", len(items), args.limit)
-        items = items[:args.limit]
+        items = items[: args.limit]
     else:
         logger.info("Found %d chunks to embed", len(items))
     embeddings = embed_items(items, args.model, args.instruction)

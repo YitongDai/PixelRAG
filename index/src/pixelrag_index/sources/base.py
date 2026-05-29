@@ -1,4 +1,5 @@
 """Base class for document sources."""
+
 from dataclasses import dataclass, field
 from typing import Iterator
 

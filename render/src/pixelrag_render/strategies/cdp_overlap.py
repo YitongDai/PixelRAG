@@ -53,8 +53,7 @@ WAIT_FONTS_IMGS = """new Promise(resolve => {
 })"""
 
 
-async def _launch_two_tabs(chrome_path: str, port: int,
-                           headless_shell: bool = False):
+async def _launch_two_tabs(chrome_path: str, port: int, headless_shell: bool = False):
     """Launch one Chrome process, return 2 independent CDP connections (tabs)."""
     import websockets
 
@@ -62,8 +61,10 @@ async def _launch_two_tabs(chrome_path: str, port: int,
     if not headless_shell:
         args.append("--headless")
     args += [
-        "--no-sandbox", "--disable-dev-shm-usage",
-        "--enable-gpu-rasterization", "--force-gpu-rasterization",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--enable-gpu-rasterization",
+        "--force-gpu-rasterization",
         "about:blank",
     ]
 
@@ -74,7 +75,8 @@ async def _launch_two_tabs(chrome_path: str, port: int,
         await asyncio.sleep(1)
         try:
             data = urllib.request.urlopen(
-                f"http://localhost:{port}/json", timeout=3).read()
+                f"http://localhost:{port}/json", timeout=3
+            ).read()
             targets = json.loads(data)
             ws_url_a = targets[0]["webSocketDebuggerUrl"]
             break
@@ -83,7 +85,9 @@ async def _launch_two_tabs(chrome_path: str, port: int,
                 proc.kill()
                 raise ConnectionError(f"Chrome port {port}")
 
-    ws_a = await websockets.connect(ws_url_a, open_timeout=10, max_size=50*1024*1024)
+    ws_a = await websockets.connect(
+        ws_url_a, open_timeout=10, max_size=50 * 1024 * 1024
+    )
     tab_a = WebsocketConnection(ws_a, proc)
 
     r = await tab_a.cdp("Target.createTarget", {"url": "about:blank"})
@@ -104,11 +108,18 @@ async def _launch_two_tabs(chrome_path: str, port: int,
 
     # Create a dummy proc wrapper for tab_b (so close() doesn't double-kill)
     class NoopProc:
-        def send_signal(self, _): pass
-        def wait(self, timeout=None): pass
-        def kill(self): pass
+        def send_signal(self, _):
+            pass
 
-    ws_b = await websockets.connect(ws_url_b, open_timeout=10, max_size=50*1024*1024)
+        def wait(self, timeout=None):
+            pass
+
+        def kill(self):
+            pass
+
+    ws_b = await websockets.connect(
+        ws_url_b, open_timeout=10, max_size=50 * 1024 * 1024
+    )
     tab_b = WebsocketConnection(ws_b, NoopProc())
 
     return tab_a, tab_b, proc
@@ -145,17 +156,25 @@ class CDPOverlapStrategy:
         self._procs = []
         for i in range(self.n_workers):
             tab_a, tab_b, proc = await _launch_two_tabs(
-                self.chrome_path, self._base_port + i,
-                headless_shell=self.headless_shell)
+                self.chrome_path,
+                self._base_port + i,
+                headless_shell=self.headless_shell,
+            )
             self._tabs.append((tab_a, tab_b))
             self._procs.append(proc)
 
         for tab_a, tab_b in self._tabs:
             for tab in [tab_a, tab_b]:
                 await tab.cdp("Page.enable")
-                await tab.cdp("Emulation.setDeviceMetricsOverride", {
-                    "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                    "deviceScaleFactor": 1, "mobile": False})
+                await tab.cdp(
+                    "Emulation.setDeviceMetricsOverride",
+                    {
+                        "width": VIEWPORT_WIDTH,
+                        "height": TILE_HEIGHT,
+                        "deviceScaleFactor": 1,
+                        "mobile": False,
+                    },
+                )
 
         if self.fmt == "raw":
             os.makedirs("/dev/shm/pixelrag_bench", exist_ok=True)
@@ -204,8 +223,7 @@ class CDPOverlapStrategy:
                 nxt_tab = tab_b if i % 2 == 0 else tab_a
 
                 if i + 1 < len(arts):
-                    nav_task = asyncio.create_task(
-                        self._navigate(nxt_tab, arts[i + 1]))
+                    nav_task = asyncio.create_task(self._navigate(nxt_tab, arts[i + 1]))
                 else:
                     nav_task = None
 
@@ -216,7 +234,8 @@ class CDPOverlapStrategy:
                     page_h = await nav_task
 
         await asyncio.gather(
-            *[worker_task(i) for i in range(n)], return_exceptions=True)
+            *[worker_task(i) for i in range(n)], return_exceptions=True
+        )
         return [r for r in all_results if r is not None]
 
     async def _navigate(self, tab, article: dict) -> int:
@@ -226,16 +245,21 @@ class CDPOverlapStrategy:
             return TILE_HEIGHT
 
         try:
-            r = await tab.cdp("Runtime.evaluate", {
-                "expression": WAIT_FONTS_IMGS,
-                "awaitPromise": True, "returnByValue": True,
-            })
+            r = await tab.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": WAIT_FONTS_IMGS,
+                    "awaitPromise": True,
+                    "returnByValue": True,
+                },
+            )
             return max(r["result"]["result"]["value"], 1)
         except Exception:
             return TILE_HEIGHT
 
-    async def _capture(self, tab, article: dict, page_h: int,
-                       wi: int) -> ArticleCapture:
+    async def _capture(
+        self, tab, article: dict, page_h: int, wi: int
+    ) -> ArticleCapture:
         ac = ArticleCapture(article_path=article["path"])
         ac.page_height = page_h
         n_tiles = max(1, (page_h + TILE_HEIGHT - 1) // TILE_HEIGHT)
@@ -250,8 +274,10 @@ class CDPOverlapStrategy:
                 if t > 0:
                     y = t * TILE_HEIGHT
                     try:
-                        await tab.cdp("Runtime.evaluate", {
-                            "expression": f"""new Promise(resolve => {{
+                        await tab.cdp(
+                            "Runtime.evaluate",
+                            {
+                                "expression": f"""new Promise(resolve => {{
                                 window.scrollTo(0, {y});
                                 requestAnimationFrame(() => requestAnimationFrame(() => {{
                                     const imgs = Array.from(document.images).filter(i => {{
@@ -268,15 +294,22 @@ class CDPOverlapStrategy:
                                     Promise.race([loaded, timeout]).then(resolve);
                                 }}));
                             }})""",
-                            "awaitPromise": True})
+                                "awaitPromise": True,
+                            },
+                        )
                     except Exception:
                         pass
 
                 params = {
                     "fromSurface": self.from_surface,
                     "optimizeForSpeed": True,
-                    "clip": {"x": 0, "y": t * TILE_HEIGHT,
-                             "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1},
+                    "clip": {
+                        "x": 0,
+                        "y": t * TILE_HEIGHT,
+                        "width": VIEWPORT_WIDTH,
+                        "height": clip_h,
+                        "scale": 1,
+                    },
                 }
 
                 raw_path = None
@@ -302,8 +335,12 @@ class CDPOverlapStrategy:
                     continue
 
                 tc = TileCapture(
-                    shot_ms=shot_ms, nav_ms=0.0,
-                    tile_index=t, clip_y=t * TILE_HEIGHT, clip_h=clip_h)
+                    shot_ms=shot_ms,
+                    nav_ms=0.0,
+                    tile_index=t,
+                    clip_y=t * TILE_HEIGHT,
+                    clip_h=clip_h,
+                )
                 if self.fmt == "raw":
                     tc.raw_file_path = raw_path
                 else:

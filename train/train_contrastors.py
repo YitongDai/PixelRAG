@@ -39,18 +39,28 @@ import torch.distributed.nn
 import torch.nn.functional as F
 from peft import LoraConfig, get_peft_model
 from PIL import Image, ImageFile
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # tolerate truncated images in external datasets
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.checkpoint import get_device_states, set_device_states
-from torch.utils.data import ConcatDataset, DataLoader, Dataset, DistributedSampler, Sampler
+from torch.utils.data import (
+    ConcatDataset,
+    DataLoader,
+    Dataset,
+    DistributedSampler,
+    Sampler,
+)
 from transformers import (
     get_constant_schedule_with_warmup,
     get_cosine_schedule_with_warmup,
     get_cosine_with_hard_restarts_schedule_with_warmup,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
-                    stream=sys.stdout)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    stream=sys.stdout,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -58,8 +68,10 @@ logger = logging.getLogger(__name__)
 # Contrastors core: GradCache + distributed gather (adapted from nomic-ai/contrastors)
 # ---------------------------------------------------------------------------
 
+
 class RandContext:
     """Save/restore RNG state for GradCache replay (from contrastors/rand_state.py)."""
+
     def __init__(self, tensors):
         if isinstance(tensors, dict):
             tensors = list(tensors.values())
@@ -94,7 +106,8 @@ class LogitScale(torch.nn.Module):
     matching contrastors' approach. Clamping in forward would create a dead zone
     where gradients are zero when log_scale exceeds the limit.
     """
-    def __init__(self, init_value=1/0.07, max_value=100.0):
+
+    def __init__(self, init_value=1 / 0.07, max_value=100.0):
         super().__init__()
         self.log_scale = torch.nn.Parameter(torch.log(torch.tensor(init_value)))
         self.max_log = float(torch.log(torch.tensor(max_value)))
@@ -110,9 +123,12 @@ class LogitScale(torch.nn.Module):
 
 class EMAModel:
     """Exponential Moving Average of model parameters for better generalization."""
+
     def __init__(self, model, decay=0.999):
         self.decay = decay
-        self.shadow = {n: p.data.clone() for n, p in model.named_parameters() if p.requires_grad}
+        self.shadow = {
+            n: p.data.clone() for n, p in model.named_parameters() if p.requires_grad
+        }
 
     @torch.no_grad()
     def update(self, model):
@@ -187,7 +203,14 @@ def siglip_loss(query, document, logit_scale, gather_enabled=False, hardness_alp
     return loss, accuracy
 
 
-def clip_loss(query, document, logit_scale, gather_enabled=False, hardness_alpha=0.0, label_smoothing=0.0):
+def clip_loss(
+    query,
+    document,
+    logit_scale,
+    gather_enabled=False,
+    hardness_alpha=0.0,
+    label_smoothing=0.0,
+):
     """InfoNCE contrastive loss with hard negative support (from contrastors/loss.py).
 
     Inspired by: https://github.com/mlfoundations/open_clip/blob/main/src/open_clip/loss.py#L66
@@ -227,7 +250,8 @@ def clip_loss(query, document, logit_scale, gather_enabled=False, hardness_alpha
     # Scale for hard negatives: docs_per_query_per_rank = doc.size(0) / (N * W)
     assert document.size(0) % (num_queries * world_size) == 0, (
         f"document.size(0)={document.size(0)} not divisible by "
-        f"num_queries*world_size={num_queries}*{world_size}")
+        f"num_queries*world_size={num_queries}*{world_size}"
+    )
     labels = labels * (document.size(0) // (num_queries * world_size))
 
     # LLaVE hardness weighting: upweight harder negatives in softmax
@@ -252,7 +276,7 @@ def get_chunked_embeddings(model, chunks, process_fn):
     embeddings = []
     rand_states = []
     # Use the unwrapped model for no-grad forward (avoids DDP overhead)
-    raw_model = model.module if hasattr(model, 'module') else model
+    raw_model = model.module if hasattr(model, "module") else model
     with torch.autocast("cuda", dtype=torch.bfloat16):
         with torch.no_grad():
             for chunk in chunks:
@@ -262,9 +286,16 @@ def get_chunked_embeddings(model, chunks, process_fn):
     return torch.cat(embeddings, dim=0), rand_states
 
 
-def grad_cache_loss(model, query_chunks, doc_chunks, logit_scale,
-                    query_process_fn, doc_process_fn, hardness_alpha=0.0,
-                    loss_fn=None):
+def grad_cache_loss(
+    model,
+    query_chunks,
+    doc_chunks,
+    logit_scale,
+    query_process_fn,
+    doc_process_fn,
+    hardness_alpha=0.0,
+    loss_fn=None,
+):
     """GradCache: large effective batch with constant memory (from contrastors/loss.py).
 
     1. Forward all chunks WITHOUT grad → cache embeddings
@@ -276,10 +307,12 @@ def grad_cache_loss(model, query_chunks, doc_chunks, logit_scale,
     """
     if loss_fn is None:
         loss_fn = clip_loss
-    raw_model = model.module if hasattr(model, 'module') else model
+    raw_model = model.module if hasattr(model, "module") else model
 
     # Step 1: get all embeddings without grad (no DDP involvement)
-    query_embs, query_states = get_chunked_embeddings(model, query_chunks, query_process_fn)
+    query_embs, query_states = get_chunked_embeddings(
+        model, query_chunks, query_process_fn
+    )
     doc_embs, doc_states = get_chunked_embeddings(model, doc_chunks, doc_process_fn)
 
     # Step 2: compute loss, get gradient w.r.t. embeddings
@@ -290,7 +323,13 @@ def grad_cache_loss(model, query_chunks, doc_chunks, logit_scale,
     doc_embs_d = doc_embs.detach().requires_grad_()
 
     with torch.autocast("cuda", dtype=torch.bfloat16):
-        loss, accuracy = loss_fn(query_embs_d, doc_embs_d, logit_scale, gather_enabled=True, hardness_alpha=hardness_alpha)
+        loss, accuracy = loss_fn(
+            query_embs_d,
+            doc_embs_d,
+            logit_scale,
+            gather_enabled=True,
+            hardness_alpha=hardness_alpha,
+        )
         loss.backward()
 
     query_cache = query_embs_d.grad
@@ -310,13 +349,15 @@ def grad_cache_loss(model, query_chunks, doc_chunks, logit_scale,
     all_chunks = list(query_chunks) + list(doc_chunks)
     all_grads = list(query_grad_chunks) + list(doc_grad_chunks)
     all_states = list(query_states) + list(doc_states)
-    all_fns = [query_process_fn] * len(query_chunks) + [doc_process_fn] * len(doc_chunks)
+    all_fns = [query_process_fn] * len(query_chunks) + [doc_process_fn] * len(
+        doc_chunks
+    )
 
     # All backward calls use no_sync to avoid DDP reducer confusion (query chunks
     # skip visual encoder while doc chunks use it → different "used" parameter sets
     # across chunks causes intermittent NCCL deadlocks with find_unused_parameters).
     # We manually all_reduce gradients after all backward calls.
-    has_ddp = hasattr(model, 'no_sync')
+    has_ddp = hasattr(model, "no_sync")
     for chunk, grad, state, fn in zip(all_chunks, all_grads, all_states, all_fns):
         sync_ctx = model.no_sync() if has_ddp else nullcontext()
         with sync_ctx:
@@ -387,16 +428,28 @@ def preflight_simpleqa_client(vllm_url="", model_name=""):
         return False
 
 
-def grad_cache_loss_query_side(query_model, frozen_doc_model, query_chunks, doc_chunks,
-                               logit_scale, query_process_fn, doc_process_fn,
-                               debug_enabled=False, hardness_alpha=0.0):
+def grad_cache_loss_query_side(
+    query_model,
+    frozen_doc_model,
+    query_chunks,
+    doc_chunks,
+    logit_scale,
+    query_process_fn,
+    doc_process_fn,
+    debug_enabled=False,
+    hardness_alpha=0.0,
+):
     """GradCache variant for query-only tuning with a frozen document tower."""
-    raw_query_model = query_model.module if hasattr(query_model, 'module') else query_model
+    raw_query_model = (
+        query_model.module if hasattr(query_model, "module") else query_model
+    )
 
     # Step 1: query embeddings come from the trainable tower; document embeddings
     # come from the frozen base tower so the datastore stays valid.
     debug_trace(debug_enabled, "gradcache_query_side: start query no-grad pass")
-    query_embs, query_states = get_chunked_embeddings(query_model, query_chunks, query_process_fn)
+    query_embs, query_states = get_chunked_embeddings(
+        query_model, query_chunks, query_process_fn
+    )
 
     debug_trace(debug_enabled, "gradcache_query_side: start doc frozen pass")
     doc_embs = []
@@ -407,11 +460,19 @@ def grad_cache_loss_query_side(query_model, frozen_doc_model, query_chunks, doc_
     doc_embs = torch.cat(doc_embs, dim=0)
 
     # Step 2: compute loss and cache only the query-side gradients.
-    debug_trace(debug_enabled, "gradcache_query_side: start loss backward on detached embs")
+    debug_trace(
+        debug_enabled, "gradcache_query_side: start loss backward on detached embs"
+    )
     query_embs_d = query_embs.detach().requires_grad_()
     doc_embs_d = doc_embs.detach().requires_grad_()
     with torch.autocast("cuda", dtype=torch.bfloat16):
-        loss, accuracy = clip_loss(query_embs_d, doc_embs_d, logit_scale, gather_enabled=True, hardness_alpha=hardness_alpha)
+        loss, accuracy = clip_loss(
+            query_embs_d,
+            doc_embs_d,
+            logit_scale,
+            gather_enabled=True,
+            hardness_alpha=hardness_alpha,
+        )
         loss.backward()
 
     query_cache = query_embs_d.grad
@@ -421,7 +482,7 @@ def grad_cache_loss_query_side(query_model, frozen_doc_model, query_chunks, doc_
     q_chunk_sizes = [c["input_ids"].shape[0] for c in query_chunks]
     query_grad_chunks = query_cache.split(q_chunk_sizes)
 
-    has_ddp = hasattr(query_model, 'no_sync')
+    has_ddp = hasattr(query_model, "no_sync")
     debug_trace(debug_enabled, "gradcache_query_side: replay query chunks")
     for chunk, grad, state in zip(query_chunks, query_grad_chunks, query_states):
         sync_ctx = query_model.no_sync() if has_ddp else nullcontext()
@@ -440,10 +501,20 @@ def grad_cache_loss_query_side(query_model, frozen_doc_model, query_chunks, doc_
     return loss_val, accuracy.detach()
 
 
-def direct_loss_query_side(query_model, frozen_doc_model, q_inputs, d_inputs, logit_scale,
-                           gather_enabled=True, debug_enabled=False, hardness_alpha=0.0):
+def direct_loss_query_side(
+    query_model,
+    frozen_doc_model,
+    q_inputs,
+    d_inputs,
+    logit_scale,
+    gather_enabled=True,
+    debug_enabled=False,
+    hardness_alpha=0.0,
+):
     """Simpler query-side training path without GradCache."""
-    raw_query_model = query_model.module if hasattr(query_model, 'module') else query_model
+    raw_query_model = (
+        query_model.module if hasattr(query_model, "module") else query_model
+    )
     debug_trace(debug_enabled, "direct_query_side: query forward")
     with torch.autocast("cuda", dtype=torch.bfloat16):
         _clear_rope_deltas(raw_query_model)
@@ -455,7 +526,13 @@ def direct_loss_query_side(query_model, frozen_doc_model, q_inputs, d_inputs, lo
             d_emb = frozen_doc_model(**d_inputs)
     debug_trace(debug_enabled, "direct_query_side: loss backward")
     with torch.autocast("cuda", dtype=torch.bfloat16):
-        loss, accuracy = clip_loss(q_emb, d_emb, logit_scale, gather_enabled=gather_enabled, hardness_alpha=hardness_alpha)
+        loss, accuracy = clip_loss(
+            q_emb,
+            d_emb,
+            logit_scale,
+            gather_enabled=gather_enabled,
+            hardness_alpha=hardness_alpha,
+        )
         loss.backward()
     if dist.is_initialized():
         debug_trace(debug_enabled, "direct_query_side: manual all_reduce grads")
@@ -468,6 +545,7 @@ def direct_loss_query_side(query_model, frozen_doc_model, q_inputs, d_inputs, lo
 # Data
 # ---------------------------------------------------------------------------
 
+
 class QueryImageDataset(Dataset):
     """Dataset of (query, positive_path, [negative_paths...]) from JSONL.
 
@@ -479,8 +557,15 @@ class QueryImageDataset(Dataset):
     to succeed — critical for DDP where all ranks must process the same
     number of batches (a None/skipped batch on one rank deadlocks NCCL).
     """
-    def __init__(self, jsonl_path, max_pairs=None, num_hard_negatives=0,
-                 skip_image_verify=False, reverse=False):
+
+    def __init__(
+        self,
+        jsonl_path,
+        max_pairs=None,
+        num_hard_negatives=0,
+        skip_image_verify=False,
+        reverse=False,
+    ):
         self.pairs = []  # (query, pos_path, [neg_path1, neg_path2, ...])
         self.num_hard_negatives = num_hard_negatives
         jsonl_dir = Path(jsonl_path).resolve().parent
@@ -527,9 +612,17 @@ class QueryImageDataset(Dataset):
             self.pairs = self.pairs[:max_pairs]
         if skipped:
             logger.warning(f"Skipped {skipped} missing/bad images at init")
-        n_with_negs = sum(1 for _, _, negs in self.pairs if any(n is not None for n in negs))
-        logger.info(f"Loaded {len(self.pairs)} valid pairs from {jsonl_path}"
-                     + (f" ({n_with_negs} with hard negatives)" if num_hard_negatives > 0 else ""))
+        n_with_negs = sum(
+            1 for _, _, negs in self.pairs if any(n is not None for n in negs)
+        )
+        logger.info(
+            f"Loaded {len(self.pairs)} valid pairs from {jsonl_path}"
+            + (
+                f" ({n_with_negs} with hard negatives)"
+                if num_hard_negatives > 0
+                else ""
+            )
+        )
 
     def __len__(self):
         return len(self.pairs)
@@ -551,6 +644,7 @@ class MixedBatchSampler(Sampler):
         seed: base random seed
         rank/world_size: for distributed training (each rank gets disjoint batches)
     """
+
     def __init__(self, source_ranges, shuffle=True, seed=42, rank=0, world_size=1):
         self.source_ranges = source_ranges
         self.shuffle = shuffle
@@ -600,12 +694,15 @@ class TextQueryDataset(Dataset):
 
     Each row has: query, passage (positive), neg_passages (list of hard negative texts).
     """
+
     def __init__(self, jsonl_paths, max_pairs=None, num_hard_negatives=0):
         self.pairs = []
         self.num_hard_negatives = num_hard_negatives
         skipped = 0
 
-        for jsonl_path in (jsonl_paths if isinstance(jsonl_paths, list) else [jsonl_paths]):
+        for jsonl_path in (
+            jsonl_paths if isinstance(jsonl_paths, list) else [jsonl_paths]
+        ):
             with open(jsonl_path) as f:
                 for line in f:
                     item = json.loads(line)
@@ -627,8 +724,10 @@ class TextQueryDataset(Dataset):
             if max_pairs and len(self.pairs) >= max_pairs:
                 break
 
-        logger.info(f"Loaded {len(self.pairs)} text pairs from {jsonl_paths} "
-                    f"(skipped {skipped})")
+        logger.info(
+            f"Loaded {len(self.pairs)} text pairs from {jsonl_paths} "
+            f"(skipped {skipped})"
+        )
 
     def __len__(self):
         return len(self.pairs)
@@ -642,40 +741,51 @@ QUERY_INSTRUCTION = "Retrieve images or text relevant to the user's query."
 DOC_INSTRUCTION = "Represent the user's input."
 
 # Pre-computed chat template strings (filled by init_chat_templates).
-_QUERY_PREFIX = None   # e.g. "<|im_start|>system\n...query instruction...<|im_end|>\n<|im_start|>user\n"
-_QUERY_SUFFIX = None   # e.g. "<|im_end|>\n<|im_start|>assistant\n"
-_DOC_IMAGE_TMPL = None # static template for image docs
-_DOC_TEXT_PREFIX = None # prefix for text doc template
-_DOC_TEXT_SUFFIX = None # suffix for text doc template
+_QUERY_PREFIX = None  # e.g. "<|im_start|>system\n...query instruction...<|im_end|>\n<|im_start|>user\n"
+_QUERY_SUFFIX = None  # e.g. "<|im_end|>\n<|im_start|>assistant\n"
+_DOC_IMAGE_TMPL = None  # static template for image docs
+_DOC_TEXT_PREFIX = None  # prefix for text doc template
+_DOC_TEXT_SUFFIX = None  # suffix for text doc template
 
 
 def init_chat_templates(processor):
     """Pre-compute chat template strings once to avoid per-batch overhead."""
-    global _QUERY_PREFIX, _QUERY_SUFFIX, _DOC_IMAGE_TMPL, _DOC_TEXT_PREFIX, _DOC_TEXT_SUFFIX
+    global \
+        _QUERY_PREFIX, \
+        _QUERY_SUFFIX, \
+        _DOC_IMAGE_TMPL, \
+        _DOC_TEXT_PREFIX, \
+        _DOC_TEXT_SUFFIX
     # Query template with placeholder
     q_msgs = [
         {"role": "system", "content": [{"type": "text", "text": QUERY_INSTRUCTION}]},
         {"role": "user", "content": [{"type": "text", "text": "PLACEHOLDER"}]},
     ]
-    q_text = processor.apply_chat_template(q_msgs, tokenize=False, add_generation_prompt=True)
+    q_text = processor.apply_chat_template(
+        q_msgs, tokenize=False, add_generation_prompt=True
+    )
     idx = q_text.index("PLACEHOLDER")
     _QUERY_PREFIX = q_text[:idx]
-    _QUERY_SUFFIX = q_text[idx + len("PLACEHOLDER"):]
+    _QUERY_SUFFIX = q_text[idx + len("PLACEHOLDER") :]
     # Image doc template is fully static (no per-sample text)
     d_msgs = [
         {"role": "system", "content": [{"type": "text", "text": DOC_INSTRUCTION}]},
         {"role": "user", "content": [{"type": "image"}]},
     ]
-    _DOC_IMAGE_TMPL = processor.apply_chat_template(d_msgs, tokenize=False, add_generation_prompt=True)
+    _DOC_IMAGE_TMPL = processor.apply_chat_template(
+        d_msgs, tokenize=False, add_generation_prompt=True
+    )
     # Text doc template with placeholder (for text-only training)
     dt_msgs = [
         {"role": "system", "content": [{"type": "text", "text": DOC_INSTRUCTION}]},
         {"role": "user", "content": [{"type": "text", "text": "PLACEHOLDER"}]},
     ]
-    dt_text = processor.apply_chat_template(dt_msgs, tokenize=False, add_generation_prompt=True)
+    dt_text = processor.apply_chat_template(
+        dt_msgs, tokenize=False, add_generation_prompt=True
+    )
     dt_idx = dt_text.index("PLACEHOLDER")
     _DOC_TEXT_PREFIX = dt_text[:dt_idx]
-    _DOC_TEXT_SUFFIX = dt_text[dt_idx + len("PLACEHOLDER"):]
+    _DOC_TEXT_SUFFIX = dt_text[dt_idx + len("PLACEHOLDER") :]
     logger.info(f"Query prefix: {repr(_QUERY_PREFIX)}")
     logger.info(f"Doc image template: {repr(_DOC_IMAGE_TMPL[:80])}...")
     logger.info(f"Doc text prefix: {repr(_DOC_TEXT_PREFIX)}")
@@ -709,13 +819,15 @@ def process_doc_images(processor, images):
         offsets = batch["image_grid_thw"].prod(dim=1).tolist()
         pixel_chunks = list(torch.split(batch["pixel_values"], offsets))
         batch["pixel_values"] = torch.nn.utils.rnn.pad_sequence(
-            pixel_chunks, batch_first=True)
+            pixel_chunks, batch_first=True
+        )
 
     return batch
 
 
 def make_text_collate_fn(processor, num_hard_negatives=0):
     """Collate for text-only training: queries and doc texts both as text."""
+
     def collate(batch):
         queries = [item[0] for item in batch]
         doc_texts = []
@@ -739,6 +851,7 @@ def make_collate_fn(processor, num_hard_negatives=0):
         [pos1, neg1a, neg1b, pos2, neg2a, neg2b, ...]
     so that document.size(0) = batch_size * (1 + num_hard_negatives).
     """
+
     def _load_image(path):
         with Image.open(path) as im:
             return im.convert("RGB")
@@ -766,8 +879,10 @@ def make_collate_fn(processor, num_hard_negatives=0):
         t_d = time.time()
         total = t_d - t_start
         if total > 5:
-            logger.warning(f"Slow collate: io={t_io-t_start:.1f}s q={t_q-t_io:.1f}s "
-                           f"img={t_d-t_q:.1f}s total={total:.1f}s")
+            logger.warning(
+                f"Slow collate: io={t_io - t_start:.1f}s q={t_q - t_io:.1f}s "
+                f"img={t_d - t_q:.1f}s total={total:.1f}s"
+            )
         return query_inputs, image_inputs
 
     return collate
@@ -776,6 +891,7 @@ def make_collate_fn(processor, num_hard_negatives=0):
 # ---------------------------------------------------------------------------
 # Model helpers
 # ---------------------------------------------------------------------------
+
 
 def _clear_rope_deltas(model):
     """Clear stale rope_deltas state on Qwen3VL model.
@@ -787,9 +903,9 @@ def _clear_rope_deltas(model):
     """
     inner = model
     # Unwrap PeftModel → BiQwen3 → Qwen3VLModel
-    while hasattr(inner, 'model'):
+    while hasattr(inner, "model"):
         inner = inner.model
-    if hasattr(inner, 'rope_deltas'):
+    if hasattr(inner, "rope_deltas"):
         inner.rope_deltas = None
 
 
@@ -811,18 +927,24 @@ def chunk_inputs(inputs, chunk_size):
     Only includes tensor values in chunks (non-tensors are dropped) so that
     RandContext's get_device_states doesn't crash on non-tensor dict values.
     """
-    batch_size = next(v.shape[0] for v in inputs.values() if isinstance(v, torch.Tensor))
+    batch_size = next(
+        v.shape[0] for v in inputs.values() if isinstance(v, torch.Tensor)
+    )
     # Verify all tensors are batch-major (first dim == batch_size).
     # pixel_values must be (B, max_patches, dim), not flattened (sum_patches, dim).
     for k, v in inputs.items():
         if isinstance(v, torch.Tensor) and v.shape[0] != batch_size:
             raise ValueError(
                 f"chunk_inputs: {k}.shape[0]={v.shape[0]} != batch_size={batch_size}. "
-                f"All tensors must be batch-major for chunking.")
+                f"All tensors must be batch-major for chunking."
+            )
     chunks = []
     for start in range(0, batch_size, chunk_size):
-        chunk = {k: v[start:start + chunk_size] for k, v in inputs.items()
-                 if isinstance(v, torch.Tensor)}
+        chunk = {
+            k: v[start : start + chunk_size]
+            for k, v in inputs.items()
+            if isinstance(v, torch.Tensor)
+        }
         chunks.append(chunk)
     return chunks
 
@@ -830,6 +952,7 @@ def chunk_inputs(inputs, chunk_size):
 # ---------------------------------------------------------------------------
 # Retrieval evaluation (global QxM retrieval with expanded doc pool)
 # ---------------------------------------------------------------------------
+
 
 def compute_retrieval_metrics(q_embs, i_embs, gold_doc_indices):
     """Compute retrieval metrics for a query set against a larger document pool."""
@@ -891,10 +1014,12 @@ def load_retrieval_queries(jsonl_path, max_examples=0):
         for line in f:
             item = json.loads(line)
             chunk_path = resolve_jsonl_path(jsonl_path, item["chunk_path"])
-            examples.append({
-                "query": item["query"],
-                "gold_path": chunk_path,
-            })
+            examples.append(
+                {
+                    "query": item["query"],
+                    "gold_path": chunk_path,
+                }
+            )
             if max_examples > 0 and len(examples) >= max_examples:
                 break
     logger.info(f"Loaded {len(examples)} retrieval queries from {jsonl_path}")
@@ -920,13 +1045,15 @@ def load_simpleqa_queryset(jsonl_path=None, max_examples=1000, articles_json=Non
                         if aid is not None and aid not in seen:
                             seen.add(aid)
                             gold_article_ids.append(aid)
-                examples.append({
-                    "id": item.get("id", str(len(examples))),
-                    "query": item.get("query", item.get("problem", "")),
-                    "answer": item.get("answer", ""),
-                    "urls": item.get("urls", []),
-                    "gold_article_ids": gold_article_ids,
-                })
+                examples.append(
+                    {
+                        "id": item.get("id", str(len(examples))),
+                        "query": item.get("query", item.get("problem", "")),
+                        "answer": item.get("answer", ""),
+                        "urls": item.get("urls", []),
+                        "gold_article_ids": gold_article_ids,
+                    }
+                )
                 if max_examples > 0 and len(examples) >= max_examples:
                     break
         logger.info(f"Loaded {len(examples)} SimpleQA queries from {jsonl_path}")
@@ -938,15 +1065,15 @@ def load_simpleqa_queryset(jsonl_path=None, max_examples=1000, articles_json=Non
 @torch.no_grad()
 def embed_query_texts(model, processor, queries, device, batch_size=128):
     """Embed text queries with the current query tower."""
-    raw = model.module if hasattr(model, 'module') else model
+    raw = model.module if hasattr(model, "module") else model
     all_embs = []
     for i in range(0, len(queries), batch_size):
-        batch = queries[i:i + batch_size]
+        batch = queries[i : i + batch_size]
         inputs = process_queries(processor, batch)
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.autocast("cuda", dtype=torch.bfloat16):
             _clear_rope_deltas(raw)
-            emb = raw(**inputs, bidirectional=getattr(raw, '_bidirectional', False))
+            emb = raw(**inputs, bidirectional=getattr(raw, "_bidirectional", False))
         all_embs.append(emb.cpu().float().numpy())
     if not all_embs:
         return np.zeros((0, 0), dtype=np.float32)
@@ -961,7 +1088,9 @@ def fetch_tile_image(search_api_url, path, timeout=30, retries=3):
     """
     if os.path.exists(path):
         return Image.open(path)
-    tile_url = search_api_url.rstrip("/") + "/tile?" + urllib.parse.urlencode({"path": path})
+    tile_url = (
+        search_api_url.rstrip("/") + "/tile?" + urllib.parse.urlencode({"path": path})
+    )
     for attempt in range(retries):
         try:
             req = urlrequest.Request(tile_url, method="GET")
@@ -969,8 +1098,10 @@ def fetch_tile_image(search_api_url, path, timeout=30, retries=3):
                 return Image.open(io.BytesIO(resp.read()))
         except (TimeoutError, OSError) as e:
             if attempt < retries - 1:
-                wait = 2 ** attempt
-                logger.warning(f"fetch_tile_image attempt {attempt+1}/{retries} failed for {path}: {e}, retrying in {wait}s")
+                wait = 2**attempt
+                logger.warning(
+                    f"fetch_tile_image attempt {attempt + 1}/{retries} failed for {path}: {e}, retrying in {wait}s"
+                )
                 time.sleep(wait)
             else:
                 raise
@@ -979,7 +1110,9 @@ def fetch_tile_image(search_api_url, path, timeout=30, retries=3):
 def search_api_by_embeddings(search_api_url, query_embeddings, n_docs=3, timeout=120):
     """Search the wiki-screenshot index using pre-computed query embeddings."""
     if query_embeddings.ndim != 2:
-        raise ValueError(f"Expected 2D query embeddings, got shape={query_embeddings.shape}")
+        raise ValueError(
+            f"Expected 2D query embeddings, got shape={query_embeddings.shape}"
+        )
     payload = {
         "queries": [{"embedding": emb.tolist()} for emb in query_embeddings],
         "n_docs": n_docs,
@@ -1001,8 +1134,9 @@ def search_api_by_embeddings(search_api_url, query_embeddings, n_docs=3, timeout
 
 
 @torch.no_grad()
-def run_search_api_retrieval_eval(model, processor, examples, device, search_api_url,
-                                  batch_size=32, n_docs=3):
+def run_search_api_retrieval_eval(
+    model, processor, examples, device, search_api_url, batch_size=32, n_docs=3
+):
     """Compute exact-image Recall@1/3 against the full search datastore."""
     was_training = model.training
     model.eval()
@@ -1043,11 +1177,15 @@ def run_search_api_retrieval_eval(model, processor, examples, device, search_api
     recall3 = 0
     total = 0
     for i in range(0, len(examples), batch_size):
-        batch = examples[i:i + batch_size]
+        batch = examples[i : i + batch_size]
         queries = [item["query"] for item in batch]
         gold_paths = [_normalize_tile_path(item["gold_path"]) for item in batch]
-        query_embs = embed_query_texts(model, processor, queries, device, batch_size=batch_size)
-        search_resp = search_api_by_embeddings(search_api_url, query_embs, n_docs=n_docs)
+        query_embs = embed_query_texts(
+            model, processor, queries, device, batch_size=batch_size
+        )
+        search_resp = search_api_by_embeddings(
+            search_api_url, query_embs, n_docs=n_docs
+        )
         for gold_path, result in zip(gold_paths, search_resp["results"]):
             hit_paths = [hit["path"] for hit in result["hits"]]
             total += 1
@@ -1066,10 +1204,20 @@ def run_search_api_retrieval_eval(model, processor, examples, device, search_api
     }
 
 
-def run_simpleqa_search_api_eval(model, processor, examples, device, search_api_url,
-                                 vllm_url="", vllm_model="", batch_size=32, n_docs=3,
-                                 grader_model="gpt-4.1-2025-04-14",
-                                 vllm_max_tokens=200, vllm_enable_thinking=False):
+def run_simpleqa_search_api_eval(
+    model,
+    processor,
+    examples,
+    device,
+    search_api_url,
+    vllm_url="",
+    vllm_model="",
+    batch_size=32,
+    n_docs=3,
+    grader_model="gpt-4.1-2025-04-14",
+    vllm_max_tokens=200,
+    vllm_enable_thinking=False,
+):
     """Run SimpleQA retrieval, compute article recall, then judge QA correctness."""
     import base64
     import io
@@ -1078,7 +1226,9 @@ def run_simpleqa_search_api_eval(model, processor, examples, device, search_api_
     metrics = {}
 
     queries = [item["query"] for item in examples]
-    query_embs = embed_query_texts(model, processor, queries, device, batch_size=batch_size)
+    query_embs = embed_query_texts(
+        model, processor, queries, device, batch_size=batch_size
+    )
     search_resp = search_api_by_embeddings(search_api_url, query_embs, n_docs=n_docs)
 
     if not vllm_url:
@@ -1114,7 +1264,11 @@ def run_simpleqa_search_api_eval(model, processor, examples, device, search_api_
         for part in all_parts:
             if "en.wikipedia.org/wiki/" in part:
                 return part
-        return all_parts[0] if all_parts else (urls[0].split("#")[0].lstrip("- ").strip() if urls else None)
+        return (
+            all_parts[0]
+            if all_parts
+            else (urls[0].split("#")[0].lstrip("- ").strip() if urls else None)
+        )
 
     for example, result in zip(examples, search_resp["results"]):
         gt_url = _find_wikipedia_url(example.get("urls", []))
@@ -1140,38 +1294,57 @@ def run_simpleqa_search_api_eval(model, processor, examples, device, search_api_
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
                 b64 = base64.b64encode(buf.getvalue()).decode()
-                content_parts.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{b64}"},
-                })
+                content_parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{b64}"},
+                    }
+                )
             resp = answer_client.chat.completions.create(
                 model=vllm_model,
                 messages=[
-                    {"role": "system", "content": "You are a research assistant who answers questions based on provided evidence.\nUse <think></think> tags to show your reasoning if needed.\nAnswer the question directly and concisely based ONLY on the provided evidence."},
+                    {
+                        "role": "system",
+                        "content": "You are a research assistant who answers questions based on provided evidence.\nUse <think></think> tags to show your reasoning if needed.\nAnswer the question directly and concisely based ONLY on the provided evidence.",
+                    },
                     {"role": "user", "content": content_parts},
                 ],
                 max_tokens=vllm_max_tokens,
                 temperature=0,
-                **({"extra_body": {"chat_template_kwargs": {"enable_thinking": vllm_enable_thinking}}} if "Qwen3.5" in vllm_model or vllm_enable_thinking else {}),
+                **(
+                    {
+                        "extra_body": {
+                            "chat_template_kwargs": {
+                                "enable_thinking": vllm_enable_thinking
+                            }
+                        }
+                    }
+                    if "Qwen3.5" in vllm_model or vllm_enable_thinking
+                    else {}
+                ),
             )
             predicted = resp.choices[0].message.content.strip()
         except Exception as e:
-            logger.warning(f"SimpleQA [{idx+1}] VQA failed: {e}")
+            logger.warning(f"SimpleQA [{idx + 1}] VQA failed: {e}")
             predicted = ""
         return idx, predicted
 
     # vLLM concurrency limited to avoid OOM on the single GPU
     vqa_concurrency = 4
     predictions = [""] * len(examples)
-    logger.info(f"SimpleQA: sending {len(examples)} VQA requests to vLLM (concurrency={vqa_concurrency})")
+    logger.info(
+        f"SimpleQA: sending {len(examples)} VQA requests to vLLM (concurrency={vqa_concurrency})"
+    )
     with ThreadPoolExecutor(max_workers=vqa_concurrency) as pool:
-        futures = [pool.submit(_do_vqa, i, ex, res)
-                   for i, (ex, res) in enumerate(zip(examples, search_resp["results"]))]
+        futures = [
+            pool.submit(_do_vqa, i, ex, res)
+            for i, (ex, res) in enumerate(zip(examples, search_resp["results"]))
+        ]
         for fut in as_completed(futures):
             idx, pred = fut.result()
             predictions[idx] = pred
             if (idx + 1) % 20 == 0:
-                logger.info(f"SimpleQA VQA: {idx+1}/{len(examples)} done")
+                logger.info(f"SimpleQA VQA: {idx + 1}/{len(examples)} done")
     logger.info(f"SimpleQA VQA: all {len(examples)} done")
 
     # --- Phase 3: grade with OpenAI (concurrent) ---
@@ -1179,24 +1352,28 @@ def run_simpleqa_search_api_eval(model, processor, examples, device, search_api_
         try:
             grade_resp = grader_client.chat.completions.create(
                 model=grader_model,
-                messages=[{
-                    "role": "user",
-                    "content": _GRADER_TEMPLATE.format(
-                        question=example["query"],
-                        target=example["answer"],
-                        predicted_answer=predicted,
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": _GRADER_TEMPLATE.format(
+                            question=example["query"],
+                            target=example["answer"],
+                            predicted_answer=predicted,
+                        ),
+                    }
+                ],
                 max_tokens=5,
                 temperature=0,
             )
             grade = grade_resp.choices[0].message.content.strip()
             return idx, bool(re.search(r"A", grade))
         except Exception as e:
-            logger.warning(f"SimpleQA [{idx+1}] grading failed: {e}")
+            logger.warning(f"SimpleQA [{idx + 1}] grading failed: {e}")
             return idx, False
 
-    gradeable = [(i, ex, predictions[i]) for i, ex in enumerate(examples) if ex.get("answer")]
+    gradeable = [
+        (i, ex, predictions[i]) for i, ex in enumerate(examples) if ex.get("answer")
+    ]
     total = len(gradeable)
     if total > 0:
         logger.info(f"SimpleQA: grading {total} answers via OpenAI ({grader_model})")
@@ -1299,11 +1476,19 @@ Just return the letters "A", "B", or "C", with no text around it."""
 
 
 @torch.no_grad()
-def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
-                    vllm_url="", vllm_model="",
-                    grader_model="gpt-4.1-2025-04-14",
-                    output_path=None,
-                    vllm_max_tokens=200, vllm_enable_thinking=False):
+def run_miniv6_eval(
+    model,
+    processor,
+    test_data,
+    device,
+    batch_size=64,
+    vllm_url="",
+    vllm_model="",
+    grader_model="gpt-4.1-2025-04-14",
+    output_path=None,
+    vllm_max_tokens=200,
+    vllm_enable_thinking=False,
+):
     """Evaluate on mini-v6 tiles: R@1, R@3, and optional QA score via vLLM.
 
     Args:
@@ -1312,7 +1497,7 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import re
 
-    raw = model.module if hasattr(model, 'module') else model
+    raw = model.module if hasattr(model, "module") else model
     raw.eval()
 
     questions = test_data["questions"]
@@ -1328,27 +1513,33 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
     query_texts = [q["problem"] for q in questions]
     q_embs = []
     for i in range(0, len(query_texts), batch_size * 2):
-        batch = query_texts[i:i + batch_size * 2]
+        batch = query_texts[i : i + batch_size * 2]
         inputs = process_queries(processor, batch)
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.autocast("cuda", dtype=torch.bfloat16):
             _clear_rope_deltas(raw)
-            _bidir = getattr(raw, '_bidirectional', False)
+            _bidir = getattr(raw, "_bidirectional", False)
             emb = raw(**inputs, bidirectional=_bidir)
         q_embs.append(emb.cpu().float().numpy())
     t_query_emb = time.time()
-    logger.info(f"  [profile] query embed: {t_query_emb - t_eval_start:.1f}s ({len(query_texts)} queries)")
+    logger.info(
+        f"  [profile] query embed: {t_query_emb - t_eval_start:.1f}s ({len(query_texts)} queries)"
+    )
 
     # Embed images — use cached preprocessed tensors if available
     max_px = processor.image_processor.max_pixels
-    cache_path = os.path.join(os.path.dirname(doc_paths[0]),
-                              f".tile_cache_n{len(doc_paths)}_px{max_px}_bs{batch_size}.pt")
+    cache_path = os.path.join(
+        os.path.dirname(doc_paths[0]),
+        f".tile_cache_n{len(doc_paths)}_px{max_px}_bs{batch_size}.pt",
+    )
 
     i_embs = []
     if os.path.exists(cache_path):
         # Fast path: load preprocessed batches from cache
         cached_batches = torch.load(cache_path, map_location="cpu", weights_only=True)
-        logger.info(f"  [cache] loaded {len(cached_batches)} preprocessed tile batches from {cache_path}")
+        logger.info(
+            f"  [cache] loaded {len(cached_batches)} preprocessed tile batches from {cache_path}"
+        )
         for inputs in cached_batches:
             inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -1359,16 +1550,23 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
         # Slow path: preprocess from images, then save cache
         cached_batches = []
         pool = ThreadPoolExecutor(max_workers=4)
-        batched_paths = [doc_paths[i:i + batch_size]
-                         for i in range(0, len(doc_paths), batch_size)]
-        future = pool.submit(lambda paths: list(pool.map(_load_image, paths)),
-                             batched_paths[0]) if batched_paths else None
+        batched_paths = [
+            doc_paths[i : i + batch_size] for i in range(0, len(doc_paths), batch_size)
+        ]
+        future = (
+            pool.submit(
+                lambda paths: list(pool.map(_load_image, paths)), batched_paths[0]
+            )
+            if batched_paths
+            else None
+        )
         for idx, _ in enumerate(batched_paths):
             images = future.result()
             if idx + 1 < len(batched_paths):
                 next_paths = batched_paths[idx + 1]
-                future = pool.submit(lambda paths: list(pool.map(_load_image, paths)),
-                                     next_paths)
+                future = pool.submit(
+                    lambda paths: list(pool.map(_load_image, paths)), next_paths
+                )
             inputs = process_doc_images(processor, images)
             # Save CPU tensors for cache
             cached_batches.append({k: v.cpu() for k, v in inputs.items()})
@@ -1383,12 +1581,16 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
         # Save cache for future evals
         try:
             torch.save(cached_batches, cache_path)
-            logger.info(f"  [cache] saved {len(cached_batches)} preprocessed tile batches to {cache_path}")
+            logger.info(
+                f"  [cache] saved {len(cached_batches)} preprocessed tile batches to {cache_path}"
+            )
         except Exception as e:
             logger.warning(f"  [cache] failed to save: {e}")
 
     t_doc_emb = time.time()
-    logger.info(f"  [profile] doc embed: {t_doc_emb - t_query_emb:.1f}s ({len(doc_paths)} tiles)")
+    logger.info(
+        f"  [profile] doc embed: {t_doc_emb - t_query_emb:.1f}s ({len(doc_paths)} tiles)"
+    )
 
     q_embs = np.concatenate(q_embs, axis=0)
     i_embs = np.concatenate(i_embs, axis=0)
@@ -1403,8 +1605,10 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
         top3_paths = [doc_paths[i] for i in top_idx]
         top3_per_query.append(top3_paths)
         gids = golden_mapping.get(q["id"], [])
-        rids = [os.path.basename(p).replace("dist_", "").split("_chunk_")[0]
-                for p in top3_paths]
+        rids = [
+            os.path.basename(p).replace("dist_", "").split("_chunk_")[0]
+            for p in top3_paths
+        ]
         hit1 = bool(gids and rids[0] in gids)
         hit3 = bool(gids and any(rid in gids for rid in rids))
         if gids:
@@ -1413,12 +1617,18 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
                 r1 += 1
             if hit3:
                 r3 += 1
-        per_example_results.append({
-            "id": q["id"], "problem": q["problem"],
-            "answer": q.get("answer", ""),
-            "top3_paths": top3_paths, "top3_article_ids": rids,
-            "golden_ids": gids, "hit@1": hit1, "hit@3": hit3,
-        })
+        per_example_results.append(
+            {
+                "id": q["id"],
+                "problem": q["problem"],
+                "answer": q.get("answer", ""),
+                "top3_paths": top3_paths,
+                "top3_article_ids": rids,
+                "golden_ids": gids,
+                "hit@1": hit1,
+                "hit@3": hit3,
+            }
+        )
 
     t_ranking = time.time()
     logger.info(f"  [profile] ranking: {t_ranking - t_doc_emb:.1f}s")
@@ -1431,8 +1641,9 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
     # QA scoring: VQA via vLLM, grading via OpenAI (GPT-4.1)
     if vllm_url:
         try:
-            import base64, io
-            vllm_key = os.environ.get("VLLM_API_KEY", "dummy")
+            import base64
+
+            os.environ.get("VLLM_API_KEY", "dummy")
             answer_client = build_openai_client(vllm_url, timeout=180)
             grader_client = build_openai_client("", timeout=60)
 
@@ -1446,17 +1657,35 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
                 for p in top3_per_query[qi]:
                     with open(p, "rb") as f:
                         b64 = base64.b64encode(f.read()).decode()
-                    content_parts.append({"type": "image_url",
-                                          "image_url": {"url": f"data:image/png;base64,{b64}"}})
+                    content_parts.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{b64}"},
+                        }
+                    )
                 try:
                     resp = answer_client.chat.completions.create(
                         model=vllm_model,
                         messages=[
-                            {"role": "system", "content": "You are a research assistant who answers questions based on provided evidence.\nUse <think></think> tags to show your reasoning if needed.\nAnswer the question directly and concisely based ONLY on the provided evidence."},
+                            {
+                                "role": "system",
+                                "content": "You are a research assistant who answers questions based on provided evidence.\nUse <think></think> tags to show your reasoning if needed.\nAnswer the question directly and concisely based ONLY on the provided evidence.",
+                            },
                             {"role": "user", "content": content_parts},
                         ],
-                        max_tokens=vllm_max_tokens, temperature=0,
-                        **({"extra_body": {"chat_template_kwargs": {"enable_thinking": vllm_enable_thinking}}} if "Qwen3.5" in vllm_model or vllm_enable_thinking else {}),
+                        max_tokens=vllm_max_tokens,
+                        temperature=0,
+                        **(
+                            {
+                                "extra_body": {
+                                    "chat_template_kwargs": {
+                                        "enable_thinking": vllm_enable_thinking
+                                    }
+                                }
+                            }
+                            if "Qwen3.5" in vllm_model or vllm_enable_thinking
+                            else {}
+                        ),
                     )
                     predicted = resp.choices[0].message.content.strip()
                 except Exception:
@@ -1466,9 +1695,18 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
                 try:
                     grade_resp = grader_client.chat.completions.create(
                         model=grader_model,
-                        messages=[{"role": "user", "content": _GRADER_TEMPLATE.format(
-                            question=q["problem"], target=answer, predicted_answer=predicted)}],
-                        max_tokens=5, temperature=0,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": _GRADER_TEMPLATE.format(
+                                    question=q["problem"],
+                                    target=answer,
+                                    predicted_answer=predicted,
+                                ),
+                            }
+                        ],
+                        max_tokens=5,
+                        temperature=0,
                     )
                     grade = grade_resp.choices[0].message.content.strip()
                     if re.search(r"A", grade):
@@ -1479,8 +1717,11 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
 
             correct = total = 0
             with ThreadPoolExecutor(max_workers=4) as qa_pool:
-                futures = [qa_pool.submit(_do_qa, qi) for qi in range(len(questions))
-                           if questions[qi].get("answer")]
+                futures = [
+                    qa_pool.submit(_do_qa, qi)
+                    for qi in range(len(questions))
+                    if questions[qi].get("answer")
+                ]
                 for fut in as_completed(futures):
                     qi, predicted, grade, is_correct = fut.result()
                     per_example_results[qi]["predicted"] = predicted
@@ -1493,8 +1734,10 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
             if total > 0:
                 metrics["qa_score"] = correct / total
                 t_qa = time.time()
-                logger.info(f"  QA: {correct}/{total} = {correct/total:.3f} "
-                           f"[profile: {t_qa - t_ranking:.1f}s]")
+                logger.info(
+                    f"  QA: {correct}/{total} = {correct / total:.3f} "
+                    f"[profile: {t_qa - t_ranking:.1f}s]"
+                )
         except Exception as e:
             logger.warning(f"QA eval failed: {e}")
 
@@ -1515,16 +1758,28 @@ def run_miniv6_eval(model, processor, test_data, device, batch_size=64,
 # Training
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="Qwen/Qwen3-VL-Embedding-2B")
-    parser.add_argument("--mode", choices=["standard", "query-side-tune"], default="standard",
-                        help="standard = shared query/doc tower, query-side-tune = "
-                             "train LoRA only on query tower while freezing doc tower")
-    parser.add_argument("--query-side-backward", choices=["gradcache", "direct"], default="direct",
-                        help="Backward path for query-side-tune: direct (default, more stable) or gradcache")
-    parser.add_argument("--debug-trace", action="store_true",
-                        help="Emit detailed per-rank trace logs around suspicious sync points")
+    parser.add_argument(
+        "--mode",
+        choices=["standard", "query-side-tune"],
+        default="standard",
+        help="standard = shared query/doc tower, query-side-tune = "
+        "train LoRA only on query tower while freezing doc tower",
+    )
+    parser.add_argument(
+        "--query-side-backward",
+        choices=["gradcache", "direct"],
+        default="direct",
+        help="Backward path for query-side-tune: direct (default, more stable) or gradcache",
+    )
+    parser.add_argument(
+        "--debug-trace",
+        action="store_true",
+        help="Emit detailed per-rank trace logs around suspicious sync points",
+    )
     parser.add_argument("--gpu-id", type=int, default=3)
     parser.add_argument("--train-jsonl", default="training/data/train.jsonl")
     parser.add_argument(
@@ -1535,129 +1790,302 @@ def main():
             "If set, overrides --train-jsonl/--eval-jsonl."
         ),
     )
-    parser.add_argument("--img-mix", nargs="+", metavar="SPEC", default=None,
-                        help=("Mixed-source image training. Each SPEC is name:jsonl_path:count. "
-                              "Counts must sum to --batch-size. "
-                              "Example: wiki:data/wiki.jsonl:44 moca:data/moca.jsonl:5"))
-    parser.add_argument("--skip-image-verify", action="store_true", default=True,
-                        help="Skip Image.open().verify() during data init (default: True, data is pre-validated)")
+    parser.add_argument(
+        "--img-mix",
+        nargs="+",
+        metavar="SPEC",
+        default=None,
+        help=(
+            "Mixed-source image training. Each SPEC is name:jsonl_path:count. "
+            "Counts must sum to --batch-size. "
+            "Example: wiki:data/wiki.jsonl:44 moca:data/moca.jsonl:5"
+        ),
+    )
+    parser.add_argument(
+        "--skip-image-verify",
+        action="store_true",
+        default=True,
+        help="Skip Image.open().verify() during data init (default: True, data is pre-validated)",
+    )
     parser.add_argument("--eval-jsonl", default="training/data/eval.jsonl")
-    parser.add_argument("--test-jsonl", default="training/data/test.jsonl",
-                        help="Held-out retrieval test split used by query-side-tune mode")
-    parser.add_argument("--test-data", nargs='+', default=["training/data/test_miniv6.json"],
-                        help="One or more test JSONs (each with questions, golden_mapping, tiles_dir). "
-                             "Each set is evaluated separately; metrics logged as test_<name>/* "
-                             "where <name> is derived from the filename (e.g. test_miniv6.json -> miniv6).")
-    parser.add_argument("--test-batch-size", type=int, default=32,
-                        help="Batch size for mini-v6/v7 test eval (lower to avoid OOM)")
-    parser.add_argument("--test-eval-steps", type=int, default=250,
-                        help="Run mini-v6 retrieval eval every N steps (0=disable)")
-    parser.add_argument("--search-api-url", default="http://localhost:30888",
-                        help="wiki-screenshot search API base URL for query-side-tune evals")
-    parser.add_argument("--articles-json",
-                        default="/opt/dlami/nvme/kiwix/wikipedia_en_all_maxi_2025-08.zim.articles.json",
-                        help="Wikipedia articles.json used to map SimpleQA URLs to article ids")
-    parser.add_argument("--search-api-batch-size", type=int, default=32,
-                        help="Batch size for local query embedding before hitting search API")
-    parser.add_argument("--simpleqa-jsonl",
-                        default="training/data/simpleqa_wiki_1k_queryset.jsonl",
-                        help="Bundled SimpleQA queryset JSONL")
-    parser.add_argument("--simpleqa-max-examples", type=int, default=1000,
-                        help="Number of SimpleQA examples to evaluate in query-side-tune mode")
-    parser.add_argument("--simpleqa-grader-model", default="gpt-4.1-2025-04-14",
-                        help="LLM-as-judge model used by PixelRAG SimpleQA evaluation")
-    parser.add_argument("--vllm-url", default="http://localhost:8201/v1",
-                        help="vLLM OpenAI-compatible URL for QA grading (empty to disable)")
+    parser.add_argument(
+        "--test-jsonl",
+        default="training/data/test.jsonl",
+        help="Held-out retrieval test split used by query-side-tune mode",
+    )
+    parser.add_argument(
+        "--test-data",
+        nargs="+",
+        default=["training/data/test_miniv6.json"],
+        help="One or more test JSONs (each with questions, golden_mapping, tiles_dir). "
+        "Each set is evaluated separately; metrics logged as test_<name>/* "
+        "where <name> is derived from the filename (e.g. test_miniv6.json -> miniv6).",
+    )
+    parser.add_argument(
+        "--test-batch-size",
+        type=int,
+        default=32,
+        help="Batch size for mini-v6/v7 test eval (lower to avoid OOM)",
+    )
+    parser.add_argument(
+        "--test-eval-steps",
+        type=int,
+        default=250,
+        help="Run mini-v6 retrieval eval every N steps (0=disable)",
+    )
+    parser.add_argument(
+        "--search-api-url",
+        default="http://localhost:30888",
+        help="wiki-screenshot search API base URL for query-side-tune evals",
+    )
+    parser.add_argument(
+        "--articles-json",
+        default="/opt/dlami/nvme/kiwix/wikipedia_en_all_maxi_2025-08.zim.articles.json",
+        help="Wikipedia articles.json used to map SimpleQA URLs to article ids",
+    )
+    parser.add_argument(
+        "--search-api-batch-size",
+        type=int,
+        default=32,
+        help="Batch size for local query embedding before hitting search API",
+    )
+    parser.add_argument(
+        "--simpleqa-jsonl",
+        default="training/data/simpleqa_wiki_1k_queryset.jsonl",
+        help="Bundled SimpleQA queryset JSONL",
+    )
+    parser.add_argument(
+        "--simpleqa-max-examples",
+        type=int,
+        default=1000,
+        help="Number of SimpleQA examples to evaluate in query-side-tune mode",
+    )
+    parser.add_argument(
+        "--simpleqa-grader-model",
+        default="gpt-4.1-2025-04-14",
+        help="LLM-as-judge model used by PixelRAG SimpleQA evaluation",
+    )
+    parser.add_argument(
+        "--vllm-url",
+        default="http://localhost:8201/v1",
+        help="vLLM OpenAI-compatible URL for QA grading (empty to disable)",
+    )
     parser.add_argument("--vllm-model", default="Qwen/Qwen3-VL-4B-Instruct")
-    parser.add_argument("--vllm-enable-thinking", action="store_true",
-                        help="Enable thinking mode for Qwen3.5/Qwen3 VLLM reader")
-    parser.add_argument("--vllm-max-tokens", type=int, default=200,
-                        help="Max tokens for VLLM reader response")
-    parser.add_argument("--eval-only", action="store_true",
-                        help="Skip training; just load model (and --resume ckpt) and run mini-v6 eval, then exit")
+    parser.add_argument(
+        "--vllm-enable-thinking",
+        action="store_true",
+        help="Enable thinking mode for Qwen3.5/Qwen3 VLLM reader",
+    )
+    parser.add_argument(
+        "--vllm-max-tokens",
+        type=int,
+        default=200,
+        help="Max tokens for VLLM reader response",
+    )
+    parser.add_argument(
+        "--eval-only",
+        action="store_true",
+        help="Skip training; just load model (and --resume ckpt) and run mini-v6 eval, then exit",
+    )
     parser.add_argument("--output-dir", default="training/output_contrastors")
     parser.add_argument("--resume", type=str, default=None)
     # Training
     parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--num-workers", type=int, default=4,
-                        help="DataLoader worker count per GPU process")
-    parser.add_argument("--prefetch-factor", type=int, default=2,
-                        help="DataLoader prefetch factor per worker")
-    parser.add_argument("--grad-cache-chunk", type=int, default=2,
-                        help="GradCache chunk size (forward this many at a time)")
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="DataLoader worker count per GPU process",
+    )
+    parser.add_argument(
+        "--prefetch-factor",
+        type=int,
+        default=2,
+        help="DataLoader prefetch factor per worker",
+    )
+    parser.add_argument(
+        "--grad-cache-chunk",
+        type=int,
+        default=2,
+        help="GradCache chunk size (forward this many at a time)",
+    )
     parser.add_argument("--lr", type=float, default=2e-5)
-    parser.add_argument("--warmup-steps", type=int, default=None,
-                        help="Warmup steps (default: 5% of max_steps)")
+    parser.add_argument(
+        "--warmup-steps",
+        type=int,
+        default=None,
+        help="Warmup steps (default: 5% of max_steps)",
+    )
     parser.add_argument("--max-steps", type=int, default=500)
-    parser.add_argument("--scheduler", choices=["cosine", "constant", "cosine-restarts"], default="constant",
-                        help="LR scheduler: 'constant', 'cosine' (decay to 0), or 'cosine-restarts' (periodic restarts)")
-    parser.add_argument("--num-cycles", type=int, default=2,
-                        help="Number of cosine cycles for cosine-restarts scheduler")
-    parser.add_argument("--temperature", type=float, default=0.07,
-                        help="Initial temperature for learnable logit scale (1/temp = init scale)")
-    parser.add_argument("--weight-decay", type=float, default=0.01,
-                        help="AdamW weight decay (default 0.01)")
+    parser.add_argument(
+        "--scheduler",
+        choices=["cosine", "constant", "cosine-restarts"],
+        default="constant",
+        help="LR scheduler: 'constant', 'cosine' (decay to 0), or 'cosine-restarts' (periodic restarts)",
+    )
+    parser.add_argument(
+        "--num-cycles",
+        type=int,
+        default=2,
+        help="Number of cosine cycles for cosine-restarts scheduler",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.07,
+        help="Initial temperature for learnable logit scale (1/temp = init scale)",
+    )
+    parser.add_argument(
+        "--weight-decay",
+        type=float,
+        default=0.01,
+        help="AdamW weight decay (default 0.01)",
+    )
     parser.add_argument("--eval-steps", type=int, default=100)
     parser.add_argument("--save-steps", type=int, default=100)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
-    parser.add_argument("--max-eval-batches", type=int, default=20,
-                        help="Max eval batches to run (0=all)")
-    parser.add_argument("--num-hard-negatives", type=int, default=0,
-                        help="Number of hard negatives per query (requires neg_chunk_paths in JSONL)")
-    parser.add_argument("--in-batch-only", action="store_true",
-                        help="Ablation flag: force in-batch negatives only (forces --num-hard-negatives=0). "
-                             "Overrides --num-hard-negatives if both are passed.")
-    parser.add_argument("--hardness-alpha", type=float, default=0.0,
-                        help="LLaVE hardness weighting alpha (0=off). Upweights harder negatives in softmax. Try 5-9.")
+    parser.add_argument(
+        "--max-eval-batches",
+        type=int,
+        default=20,
+        help="Max eval batches to run (0=all)",
+    )
+    parser.add_argument(
+        "--num-hard-negatives",
+        type=int,
+        default=0,
+        help="Number of hard negatives per query (requires neg_chunk_paths in JSONL)",
+    )
+    parser.add_argument(
+        "--in-batch-only",
+        action="store_true",
+        help="Ablation flag: force in-batch negatives only (forces --num-hard-negatives=0). "
+        "Overrides --num-hard-negatives if both are passed.",
+    )
+    parser.add_argument(
+        "--hardness-alpha",
+        type=float,
+        default=0.0,
+        help="LLaVE hardness weighting alpha (0=off). Upweights harder negatives in softmax. Try 5-9.",
+    )
     # Text warmup
-    parser.add_argument("--text-warmup-steps", type=int, default=0,
-                        help="Number of text-only warmup steps before image training (0=disabled)")
-    parser.add_argument("--text-data-dir", type=str, default=None,
-                        help="Directory containing text-qa-pair JSONL files (chunk_*/filtered_hn.jsonl)")
-    parser.add_argument("--text-mix-ratio", type=float, default=0.0,
-                        help="Fraction of steps that use text batches during image phase (0=none, 0.2=every 5th step)")
-    parser.add_argument("--text-curriculum", action="store_true",
-                        help="Gradually decrease text ratio: 50%% → 33%% → 20%% → 0%% over 4 equal phases")
+    parser.add_argument(
+        "--text-warmup-steps",
+        type=int,
+        default=0,
+        help="Number of text-only warmup steps before image training (0=disabled)",
+    )
+    parser.add_argument(
+        "--text-data-dir",
+        type=str,
+        default=None,
+        help="Directory containing text-qa-pair JSONL files (chunk_*/filtered_hn.jsonl)",
+    )
+    parser.add_argument(
+        "--text-mix-ratio",
+        type=float,
+        default=0.0,
+        help="Fraction of steps that use text batches during image phase (0=none, 0.2=every 5th step)",
+    )
+    parser.add_argument(
+        "--text-curriculum",
+        action="store_true",
+        help="Gradually decrease text ratio: 50%% → 33%% → 20%% → 0%% over 4 equal phases",
+    )
     # LoRA
     parser.add_argument("--lora-r", type=int, default=32)
     parser.add_argument("--lora-alpha", type=int, default=32)
-    parser.add_argument("--no-lora-vit", action="store_false", dest="lora_vit",
-                        help="Disable LoRA on ViT (use LLM-only LoRA)")
-    parser.add_argument("--lora-vit", action="store_true", default=True,
-                        help="Also apply LoRA to ViT vision encoder (attn + MLP) and merger. On by default.")
-    parser.add_argument("--lora-mlp", action="store_true",
-                        help="Also apply LoRA to LLM MLP layers (down_proj, gate_proj, up_proj)")
-    parser.add_argument("--lora-vit-r", type=int, default=None,
-                        help="Separate LoRA rank for ViT layers (default: same as --lora-r)")
-    parser.add_argument("--unfreeze-vit", action="store_true",
-                        help="Fully unfreeze ViT (no LoRA), only apply LoRA to LLM")
-    parser.add_argument("--bidirectional", action="store_true",
-                        help="Use bidirectional attention instead of causal for embedding (like Nemotron ColEmbed V2)")
-    parser.add_argument("--two-stage-lr", action="store_true",
-                        help="Reset LR scheduler after text warmup (independent cosine for text and image phases)")
-    parser.add_argument("--lora-vit-attn-only", action="store_true",
-                        help="Only apply ViT LoRA to attention (qkv, proj), skip MLP layers")
-    parser.add_argument("--reverse-data", action="store_true",
-                        help="Reverse training data order (later=higher quality data seen first) and disable shuffle")
-    parser.add_argument("--dora", action="store_true",
-                        help="Use DoRA (Weight-Decomposed LoRA) instead of standard LoRA")
-    parser.add_argument("--rslora", action="store_true",
-                        help="Use rsLoRA (Rank-Stabilized LoRA, alpha/sqrt(r) scaling) — useful for higher LoRA ranks")
-    parser.add_argument("--lora-dropout", type=float, default=0.05,
-                        help="LoRA dropout rate (default 0.05)")
-    parser.add_argument("--ema", action="store_true",
-                        help="Use EMA (Exponential Moving Average) of model params for eval")
-    parser.add_argument("--ema-decay", type=float, default=0.999,
-                        help="EMA decay rate (default 0.999)")
-    parser.add_argument("--loss", choices=["infonce", "siglip"], default="infonce",
-                        help="Loss function: 'infonce' (standard softmax CE) or 'siglip' (pairwise sigmoid)")
-    parser.add_argument("--label-smoothing", type=float, default=0.0,
-                        help="Label smoothing for InfoNCE loss (0=off, try 0.05-0.1 for regularization)")
+    parser.add_argument(
+        "--no-lora-vit",
+        action="store_false",
+        dest="lora_vit",
+        help="Disable LoRA on ViT (use LLM-only LoRA)",
+    )
+    parser.add_argument(
+        "--lora-vit",
+        action="store_true",
+        default=True,
+        help="Also apply LoRA to ViT vision encoder (attn + MLP) and merger. On by default.",
+    )
+    parser.add_argument(
+        "--lora-mlp",
+        action="store_true",
+        help="Also apply LoRA to LLM MLP layers (down_proj, gate_proj, up_proj)",
+    )
+    parser.add_argument(
+        "--lora-vit-r",
+        type=int,
+        default=None,
+        help="Separate LoRA rank for ViT layers (default: same as --lora-r)",
+    )
+    parser.add_argument(
+        "--unfreeze-vit",
+        action="store_true",
+        help="Fully unfreeze ViT (no LoRA), only apply LoRA to LLM",
+    )
+    parser.add_argument(
+        "--bidirectional",
+        action="store_true",
+        help="Use bidirectional attention instead of causal for embedding (like Nemotron ColEmbed V2)",
+    )
+    parser.add_argument(
+        "--two-stage-lr",
+        action="store_true",
+        help="Reset LR scheduler after text warmup (independent cosine for text and image phases)",
+    )
+    parser.add_argument(
+        "--lora-vit-attn-only",
+        action="store_true",
+        help="Only apply ViT LoRA to attention (qkv, proj), skip MLP layers",
+    )
+    parser.add_argument(
+        "--reverse-data",
+        action="store_true",
+        help="Reverse training data order (later=higher quality data seen first) and disable shuffle",
+    )
+    parser.add_argument(
+        "--dora",
+        action="store_true",
+        help="Use DoRA (Weight-Decomposed LoRA) instead of standard LoRA",
+    )
+    parser.add_argument(
+        "--rslora",
+        action="store_true",
+        help="Use rsLoRA (Rank-Stabilized LoRA, alpha/sqrt(r) scaling) — useful for higher LoRA ranks",
+    )
+    parser.add_argument(
+        "--lora-dropout",
+        type=float,
+        default=0.05,
+        help="LoRA dropout rate (default 0.05)",
+    )
+    parser.add_argument(
+        "--ema",
+        action="store_true",
+        help="Use EMA (Exponential Moving Average) of model params for eval",
+    )
+    parser.add_argument(
+        "--ema-decay", type=float, default=0.999, help="EMA decay rate (default 0.999)"
+    )
+    parser.add_argument(
+        "--loss",
+        choices=["infonce", "siglip"],
+        default="infonce",
+        help="Loss function: 'infonce' (standard softmax CE) or 'siglip' (pairwise sigmoid)",
+    )
+    parser.add_argument(
+        "--label-smoothing",
+        type=float,
+        default=0.0,
+        help="Label smoothing for InfoNCE loss (0=off, try 0.05-0.1 for regularization)",
+    )
     # Resolution
     parser.add_argument("--max-num-visual-tokens", type=int, default=4096)
     # Wandb
     parser.add_argument("--wandb-project", default="wiki-screenshot-training")
-    parser.add_argument("--wandb-run-name", default=None, help="Run name (auto-generated if not set)")
+    parser.add_argument(
+        "--wandb-run-name", default=None, help="Run name (auto-generated if not set)"
+    )
     parser.add_argument("--no-wandb", action="store_true", help="Disable wandb logging")
     args = parser.parse_args()
     if args.data_split_dir:
@@ -1686,8 +2114,10 @@ def main():
     if args.warmup_steps is None:
         args.warmup_steps = max(1, (args.max_steps + 19) // 20)
     if args.in_batch_only and args.num_hard_negatives != 0:
-        print(f"[--in-batch-only] forcing --num-hard-negatives 0 "
-              f"(was {args.num_hard_negatives})")
+        print(
+            f"[--in-batch-only] forcing --num-hard-negatives 0 "
+            f"(was {args.num_hard_negatives})"
+        )
         args.num_hard_negatives = 0
 
     # Distributed setup
@@ -1718,7 +2148,8 @@ def main():
             # Also check that OPENAI_API_KEY is set for the grader
             if simpleqa_api_ready and not os.environ.get("OPENAI_API_KEY"):
                 logger.warning(
-                    "OPENAI_API_KEY not set — SimpleQA grading (judge) will be disabled.")
+                    "OPENAI_API_KEY not set — SimpleQA grading (judge) will be disabled."
+                )
                 simpleqa_api_ready = False
         if distributed:
             ready_tensor = torch.tensor([1 if simpleqa_api_ready else 0], device=device)
@@ -1736,6 +2167,7 @@ def main():
     use_wandb = is_main and not args.no_wandb
     if use_wandb:
         import wandb
+
         wandb_config = vars(args).copy()
         wandb_config["world_size"] = world_size
         wandb_config["distributed"] = distributed
@@ -1752,13 +2184,21 @@ def main():
             project=args.wandb_project,
             name=run_name,
             config=wandb_config,
-            tags=[f"{world_size}gpu", f"lora-r{args.lora_r}", f"vt{args.max_num_visual_tokens}"],
+            tags=[
+                f"{world_size}gpu",
+                f"lora-r{args.lora_r}",
+                f"vt{args.max_num_visual_tokens}",
+            ],
         )
 
     if is_main:
-        logger.info(f"Training with {world_size} GPU(s), GradCache chunk={args.grad_cache_chunk}")
+        logger.info(
+            f"Training with {world_size} GPU(s), GradCache chunk={args.grad_cache_chunk}"
+        )
         if args.mode == "query-side-tune" and args.query_side_backward == "gradcache":
-            logger.warning("query-side-tune with GradCache is experimental; direct mode is the stable default")
+            logger.warning(
+                "query-side-tune with GradCache is experimental; direct mode is the stable default"
+            )
 
     # Model
     from models.biqwen3 import BiQwen3
@@ -1771,13 +2211,20 @@ def main():
     # Each visual token covers (patch_size * spatial_merge_size)^2 = 28^2 = 784 pixels.
     pixels_per_token = (model.patch_size * model.spatial_merge_size) ** 2
     processor.image_processor.max_pixels = args.max_num_visual_tokens * pixels_per_token
-    processor.image_processor.min_pixels = max(processor.image_processor.min_pixels,
-                                                4 * pixels_per_token)
-    processor.image_processor.size["longest_edge"] = processor.image_processor.max_pixels
-    processor.image_processor.size["shortest_edge"] = processor.image_processor.min_pixels
+    processor.image_processor.min_pixels = max(
+        processor.image_processor.min_pixels, 4 * pixels_per_token
+    )
+    processor.image_processor.size["longest_edge"] = (
+        processor.image_processor.max_pixels
+    )
+    processor.image_processor.size["shortest_edge"] = (
+        processor.image_processor.min_pixels
+    )
     if is_main:
-        logger.info(f"Visual tokens: max={args.max_num_visual_tokens} "
-                     f"→ max_pixels={processor.image_processor.max_pixels}")
+        logger.info(
+            f"Visual tokens: max={args.max_num_visual_tokens} "
+            f"→ max_pixels={processor.image_processor.max_pixels}"
+        )
     init_chat_templates(processor)
 
     doc_model = None
@@ -1795,12 +2242,12 @@ def main():
 
     # Determine ViT LoRA rank (may differ from LLM rank)
     vit_r = args.lora_vit_r if args.lora_vit_r is not None else args.lora_r
-    dora_kwargs = {"use_dora": True} if getattr(args, 'dora', False) else {}
-    rslora_kwargs = {"use_rslora": True} if getattr(args, 'rslora', False) else {}
+    dora_kwargs = {"use_dora": True} if getattr(args, "dora", False) else {}
+    rslora_kwargs = {"use_rslora": True} if getattr(args, "rslora", False) else {}
     extra_lora_kwargs = {**dora_kwargs, **rslora_kwargs}
-    if getattr(args, 'dora', False) and rank == 0:
+    if getattr(args, "dora", False) and rank == 0:
         logger.info("Using DoRA (Weight-Decomposed LoRA)")
-    if getattr(args, 'rslora', False) and rank == 0:
+    if getattr(args, "rslora", False) and rank == 0:
         logger.info("Using rsLoRA (Rank-Stabilized LoRA, alpha/sqrt(r) scaling)")
 
     if args.unfreeze_vit:
@@ -1847,8 +2294,10 @@ def main():
             )
             model = get_peft_model(model, lora_config)
             if is_main:
-                logger.info(f"LoRA targets include ViT + merger layers "
-                           f"(LLM r={args.lora_r}, ViT r={vit_r})")
+                logger.info(
+                    f"LoRA targets include ViT + merger layers "
+                    f"(LLM r={args.lora_r}, ViT r={vit_r})"
+                )
         else:
             lora_targets += vit_targets
             lora_config = LoraConfig(
@@ -1876,17 +2325,17 @@ def main():
         model.print_trainable_parameters()
     model = model.to(device)
     # Set bidirectional flag on the underlying BiQwen3 model for eval functions
-    raw_for_flag = model.module if hasattr(model, 'module') else model
-    if hasattr(raw_for_flag, 'base_model'):  # PEFT wrapped
+    raw_for_flag = model.module if hasattr(model, "module") else model
+    if hasattr(raw_for_flag, "base_model"):  # PEFT wrapped
         raw_for_flag = raw_for_flag.base_model.model
-    raw_for_flag._bidirectional = getattr(args, 'bidirectional', False)
+    raw_for_flag._bidirectional = getattr(args, "bidirectional", False)
     if args.bidirectional and is_main:
         logger.info("Bidirectional attention enabled for embedding")
 
     # EMA initialization
     ema = None
-    if getattr(args, 'ema', False):
-        ema = EMAModel(model, decay=getattr(args, 'ema_decay', 0.999))
+    if getattr(args, "ema", False):
+        ema = EMAModel(model, decay=getattr(args, "ema_decay", 0.999))
         if is_main:
             logger.info(f"EMA enabled (decay={args.ema_decay})")
 
@@ -1895,22 +2344,26 @@ def main():
         doc_model.eval()
         doc_model.requires_grad_(False)
         if is_main:
-            logger.info("Query-side tune enabled: trainable query tower + frozen base doc tower")
+            logger.info(
+                "Query-side tune enabled: trainable query tower + frozen base doc tower"
+            )
 
     # Learnable logit scale (contrastors/OpenCLIP pattern)
     logit_scale = LogitScale(init_value=1.0 / args.temperature).to(device)
 
     # Loss function selection
-    if getattr(args, 'loss', 'infonce') == 'siglip':
+    if getattr(args, "loss", "infonce") == "siglip":
         active_loss_fn = siglip_loss
-    elif getattr(args, 'label_smoothing', 0.0) > 0:
-        active_loss_fn = functools.partial(clip_loss, label_smoothing=args.label_smoothing)
+    elif getattr(args, "label_smoothing", 0.0) > 0:
+        active_loss_fn = functools.partial(
+            clip_loss, label_smoothing=args.label_smoothing
+        )
     else:
         active_loss_fn = clip_loss
     if rank == 0:
-        loss_desc = 'pairwise sigmoid' if args.loss == 'siglip' else 'softmax InfoNCE'
-        if getattr(args, 'label_smoothing', 0.0) > 0:
-            loss_desc += f' + label_smoothing={args.label_smoothing}'
+        loss_desc = "pairwise sigmoid" if args.loss == "siglip" else "softmax InfoNCE"
+        if getattr(args, "label_smoothing", 0.0) > 0:
+            loss_desc += f" + label_smoothing={args.label_smoothing}"
         logger.info(f"Loss function: {args.loss} ({loss_desc})")
 
     # DDP: gradient sync is handled manually after all GradCache backward calls.
@@ -1920,15 +2373,24 @@ def main():
     # which confuses DDP's reducer and causes intermittent NCCL deadlocks.
     if distributed:
         model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=[local_rank], broadcast_buffers=False,
-            find_unused_parameters=False)
+            model,
+            device_ids=[local_rank],
+            broadcast_buffers=False,
+            find_unused_parameters=False,
+        )
 
     # Log model info to wandb
     if use_wandb:
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in model.parameters())
-        wandb.config.update({"trainable_params": trainable, "total_params": total,
-                             "trainable_pct": trainable / total * 100}, allow_val_change=True)
+        wandb.config.update(
+            {
+                "trainable_params": trainable,
+                "total_params": total,
+                "trainable_pct": trainable / total * 100,
+            },
+            allow_val_change=True,
+        )
 
     # Data
     if args.img_mix:
@@ -1937,20 +2399,26 @@ def main():
         for spec in args.img_mix:
             parts = spec.rsplit(":", 2)
             if len(parts) != 3:
-                raise ValueError(f"Invalid --img-mix spec '{spec}', expected name:jsonl_path:count")
+                raise ValueError(
+                    f"Invalid --img-mix spec '{spec}', expected name:jsonl_path:count"
+                )
             name, jsonl_path, count = parts[0], parts[1], int(parts[2])
             mix_sources.append((name, jsonl_path, count))
         total_count = sum(c for _, _, c in mix_sources)
         if total_count != args.batch_size:
-            raise ValueError(f"--img-mix counts sum to {total_count}, but --batch-size is {args.batch_size}")
+            raise ValueError(
+                f"--img-mix counts sum to {total_count}, but --batch-size is {args.batch_size}"
+            )
 
         sub_datasets = []
         source_ranges = []
         offset = 0
         for name, jsonl_path, count in mix_sources:
             ds = QueryImageDataset(
-                jsonl_path, num_hard_negatives=args.num_hard_negatives,
-                skip_image_verify=args.skip_image_verify)
+                jsonl_path,
+                num_hard_negatives=args.num_hard_negatives,
+                skip_image_verify=args.skip_image_verify,
+            )
             sub_datasets.append(ds)
             source_ranges.append((offset, len(ds), count))
             offset += len(ds)
@@ -1958,24 +2426,35 @@ def main():
                 logger.info(f"img-mix source '{name}': {len(ds)} pairs, {count}/batch")
         train_dataset = ConcatDataset(sub_datasets)
         train_sampler = MixedBatchSampler(
-            source_ranges, shuffle=True, seed=42,
+            source_ranges,
+            shuffle=True,
+            seed=42,
             rank=rank if distributed else 0,
-            world_size=world_size if distributed else 1)
+            world_size=world_size if distributed else 1,
+        )
         train_loader = DataLoader(
             train_dataset,
             batch_sampler=train_sampler,
             num_workers=args.num_workers,
             prefetch_factor=args.prefetch_factor,
             persistent_workers=True,
-            collate_fn=make_collate_fn(processor, num_hard_negatives=args.num_hard_negatives),
+            collate_fn=make_collate_fn(
+                processor, num_hard_negatives=args.num_hard_negatives
+            ),
         )
     else:
         train_dataset = QueryImageDataset(
-            args.train_jsonl, num_hard_negatives=args.num_hard_negatives,
+            args.train_jsonl,
+            num_hard_negatives=args.num_hard_negatives,
             skip_image_verify=args.skip_image_verify,
-            reverse=getattr(args, 'reverse_data', False))
-        do_shuffle = not getattr(args, 'reverse_data', False)
-        train_sampler = DistributedSampler(train_dataset, shuffle=do_shuffle) if distributed else None
+            reverse=getattr(args, "reverse_data", False),
+        )
+        do_shuffle = not getattr(args, "reverse_data", False)
+        train_sampler = (
+            DistributedSampler(train_dataset, shuffle=do_shuffle)
+            if distributed
+            else None
+        )
         train_loader = DataLoader(
             train_dataset,
             batch_size=args.batch_size,
@@ -1984,12 +2463,17 @@ def main():
             num_workers=args.num_workers,
             prefetch_factor=args.prefetch_factor,
             persistent_workers=True,
-            collate_fn=make_collate_fn(processor, num_hard_negatives=args.num_hard_negatives),
+            collate_fn=make_collate_fn(
+                processor, num_hard_negatives=args.num_hard_negatives
+            ),
             drop_last=True,
         )
 
-    eval_dataset = QueryImageDataset(args.eval_jsonl, num_hard_negatives=args.num_hard_negatives,
-                                     skip_image_verify=args.skip_image_verify)
+    eval_dataset = QueryImageDataset(
+        args.eval_jsonl,
+        num_hard_negatives=args.num_hard_negatives,
+        skip_image_verify=args.skip_image_verify,
+    )
 
     eval_batch_size = min(args.batch_size, args.grad_cache_chunk)
     eval_loader = DataLoader(
@@ -1999,7 +2483,9 @@ def main():
         num_workers=args.num_workers,
         prefetch_factor=args.prefetch_factor,
         persistent_workers=True,
-        collate_fn=make_collate_fn(processor, num_hard_negatives=args.num_hard_negatives),
+        collate_fn=make_collate_fn(
+            processor, num_hard_negatives=args.num_hard_negatives
+        ),
         drop_last=True,
     )
 
@@ -2013,8 +2499,11 @@ def main():
             text_jsonl_files = sorted(text_data_dir.glob("*.jsonl"))
         if text_jsonl_files:
             text_dataset = TextQueryDataset(
-                text_jsonl_files, num_hard_negatives=args.num_hard_negatives)
-            text_sampler = DistributedSampler(text_dataset, shuffle=True) if distributed else None
+                text_jsonl_files, num_hard_negatives=args.num_hard_negatives
+            )
+            text_sampler = (
+                DistributedSampler(text_dataset, shuffle=True) if distributed else None
+            )
             text_loader = DataLoader(
                 text_dataset,
                 batch_size=args.batch_size,
@@ -2023,15 +2512,20 @@ def main():
                 num_workers=args.num_workers,
                 prefetch_factor=args.prefetch_factor,
                 persistent_workers=True,
-                collate_fn=make_text_collate_fn(processor, num_hard_negatives=args.num_hard_negatives),
+                collate_fn=make_text_collate_fn(
+                    processor, num_hard_negatives=args.num_hard_negatives
+                ),
                 drop_last=True,
             )
             if is_main:
-                logger.info(f"Text warmup: {len(text_dataset)} pairs, "
-                            f"{args.text_warmup_steps} steps")
+                logger.info(
+                    f"Text warmup: {len(text_dataset)} pairs, "
+                    f"{args.text_warmup_steps} steps"
+                )
         else:
-            logger.warning(f"No text JSONL files found in {text_data_dir}, "
-                           f"skipping text warmup")
+            logger.warning(
+                f"No text JSONL files found in {text_data_dir}, skipping text warmup"
+            )
 
     # Load test datasets: list of {name, questions, golden_mapping, doc_paths}.
     # Multiple test sets are evaluated independently each test_eval step.
@@ -2043,7 +2537,9 @@ def main():
             if os.path.exists(args.test_jsonl):
                 test_split_queries = load_retrieval_queries(args.test_jsonl)
             else:
-                logger.warning(f"Query-side retrieval test skipped: missing {args.test_jsonl}")
+                logger.warning(
+                    f"Query-side retrieval test skipped: missing {args.test_jsonl}"
+                )
             if args.simpleqa_max_examples > 0:
                 try:
                     simpleqa_queries = load_simpleqa_queryset(
@@ -2060,46 +2556,72 @@ def main():
                 with open(tpath) as f:
                     td = json.load(f)
                 tiles_dir = td["tiles_dir"]
-                doc_paths = sorted([os.path.join(tiles_dir, fn)
-                                    for fn in os.listdir(tiles_dir) if fn.endswith(".png")])
+                doc_paths = sorted(
+                    [
+                        os.path.join(tiles_dir, fn)
+                        for fn in os.listdir(tiles_dir)
+                        if fn.endswith(".png")
+                    ]
+                )
                 # name = filename stem with leading "test_" stripped (test_miniv6.json -> miniv6)
                 stem = os.path.splitext(os.path.basename(tpath))[0]
                 name = stem[5:] if stem.startswith("test_") else stem
-                test_datasets.append({
-                    "name": name,
-                    "questions": td["questions"],
-                    "golden_mapping": td["golden_mapping"],
-                    "doc_paths": doc_paths,
-                })
+                test_datasets.append(
+                    {
+                        "name": name,
+                        "questions": td["questions"],
+                        "golden_mapping": td["golden_mapping"],
+                        "doc_paths": doc_paths,
+                    }
+                )
                 logger.info(
                     f"Loaded test '{name}': {len(td['questions'])} questions, "
-                    f"{len(doc_paths)} tiles")
+                    f"{len(doc_paths)} tiles"
+                )
 
     if use_wandb:
-        wandb_test_cfg = {f"test_{td['name']}_queries": len(td['questions']) for td in test_datasets}
-        wandb_test_cfg.update({f"test_{td['name']}_tiles": len(td['doc_paths']) for td in test_datasets})
-        wandb.config.update({"train_pairs": len(train_dataset),
-                             "eval_pairs": len(eval_dataset),
-                             **wandb_test_cfg,
-                             "test_queries": len(test_split_queries or []),
-                             "simpleqa_queries": len(simpleqa_queries or []),
-                             "effective_batch_size": args.batch_size * world_size},
-                            allow_val_change=True)
+        wandb_test_cfg = {
+            f"test_{td['name']}_queries": len(td["questions"]) for td in test_datasets
+        }
+        wandb_test_cfg.update(
+            {f"test_{td['name']}_tiles": len(td["doc_paths"]) for td in test_datasets}
+        )
+        wandb.config.update(
+            {
+                "train_pairs": len(train_dataset),
+                "eval_pairs": len(eval_dataset),
+                **wandb_test_cfg,
+                "test_queries": len(test_split_queries or []),
+                "simpleqa_queries": len(simpleqa_queries or []),
+                "effective_batch_size": args.batch_size * world_size,
+            },
+            allow_val_change=True,
+        )
 
     # Optimizer + scheduler
     optimizer = torch.optim.AdamW(
-        list(filter(lambda p: p.requires_grad, model.parameters())) + list(logit_scale.parameters()),
-        lr=args.lr, weight_decay=args.weight_decay)
+        list(filter(lambda p: p.requires_grad, model.parameters()))
+        + list(logit_scale.parameters()),
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+    )
     if args.scheduler == "cosine":
         scheduler = get_cosine_schedule_with_warmup(
-            optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=args.max_steps)
+            optimizer,
+            num_warmup_steps=args.warmup_steps,
+            num_training_steps=args.max_steps,
+        )
     elif args.scheduler == "cosine-restarts":
         scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
-            optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=args.max_steps,
-            num_cycles=args.num_cycles)
+            optimizer,
+            num_warmup_steps=args.warmup_steps,
+            num_training_steps=args.max_steps,
+            num_cycles=args.num_cycles,
+        )
     else:  # constant
         scheduler = get_constant_schedule_with_warmup(
-            optimizer, num_warmup_steps=args.warmup_steps)
+            optimizer, num_warmup_steps=args.warmup_steps
+        )
 
     # Resume
     start_step = 0
@@ -2122,8 +2644,11 @@ def main():
             # Adapter-only checkpoint (e.g. downloaded from HF) — load LoRA weights via safetensors
             adapter_path = Path(args.resume) / "adapter_model.safetensors"
             if not adapter_path.exists():
-                raise FileNotFoundError(f"Neither training_state.pt nor adapter_model.safetensors found in {args.resume}")
+                raise FileNotFoundError(
+                    f"Neither training_state.pt nor adapter_model.safetensors found in {args.resume}"
+                )
             from safetensors.torch import load_file
+
             adapter_state = load_file(str(adapter_path))
             # Some PEFT versions save LoRA without the adapter-name suffix (".weight" vs ".default.weight")
             # Convert if needed by checking model's actual key format.
@@ -2134,24 +2659,37 @@ def main():
                 # Add ".default" before ".weight" if adapter_state lacks it
                 converted = {}
                 for k, v in adapter_state.items():
-                    if k.endswith(".weight") and ".default." not in k and ("lora_A" in k or "lora_B" in k or "lora_magnitude_vector" in k):
-                        nk = k[:-len(".weight")] + ".default.weight"
+                    if (
+                        k.endswith(".weight")
+                        and ".default." not in k
+                        and (
+                            "lora_A" in k
+                            or "lora_B" in k
+                            or "lora_magnitude_vector" in k
+                        )
+                    ):
+                        nk = k[: -len(".weight")] + ".default.weight"
                         converted[nk] = v
                     else:
                         converted[k] = v
                 adapter_state = converted
             missing, unexpected = raw.load_state_dict(adapter_state, strict=False)
             # Filter out base-model "missing" keys (those aren't in adapter)
-            real_missing = [k for k in missing if "lora_" in k or "modules_to_save" in k]
+            real_missing = [
+                k for k in missing if "lora_" in k or "modules_to_save" in k
+            ]
             if is_main:
-                logger.info(f"Loaded adapter from {adapter_path}: {len(adapter_state)} tensors. "
-                            f"Missing LoRA keys: {len(real_missing)}, unexpected: {len(unexpected)}")
+                logger.info(
+                    f"Loaded adapter from {adapter_path}: {len(adapter_state)} tensors. "
+                    f"Missing LoRA keys: {len(real_missing)}, unexpected: {len(unexpected)}"
+                )
                 if real_missing[:3]:
                     logger.warning(f"Sample missing LoRA: {real_missing[:3]}")
                 if unexpected[:3]:
                     logger.warning(f"Sample unexpected: {unexpected[:3]}")
             # Try to infer step from path (e.g. .../checkpoint-150 or .../ckpt250)
             import re as _re
+
             m = _re.search(r"(?:checkpoint-|ckpt)(\d+)", str(args.resume))
             start_step = int(m.group(1)) if m else 0
             if is_main:
@@ -2159,9 +2697,11 @@ def main():
 
     # Graceful shutdown
     shutdown = False
+
     def handle_signal(*_):
         nonlocal shutdown
         shutdown = True
+
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
@@ -2175,14 +2715,17 @@ def main():
         # Save LoRA adapter
         raw.save_pretrained(str(ckpt_dir))
         # Save training state
-        torch.save({
-            "step": step,
-            "epoch": epoch,
-            "model_state_dict": raw.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "scheduler_state_dict": scheduler.state_dict(),
-            "logit_scale_state_dict": logit_scale.state_dict(),
-        }, ckpt_dir / "training_state.pt")
+        torch.save(
+            {
+                "step": step,
+                "epoch": epoch,
+                "model_state_dict": raw.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "logit_scale_state_dict": logit_scale.state_dict(),
+            },
+            ckpt_dir / "training_state.pt",
+        )
         logger.info(f"Checkpoint saved: {ckpt_dir}")
 
     # Eval helper
@@ -2196,7 +2739,9 @@ def main():
         n_batches = 0
         raw = model.module if distributed else model
         raw_doc = doc_model if doc_model is not None else raw
-        max_batches = args.max_eval_batches if args.max_eval_batches > 0 else float('inf')
+        max_batches = (
+            args.max_eval_batches if args.max_eval_batches > 0 else float("inf")
+        )
         for batch in eval_loader:
             q_inputs, d_inputs = batch
             q_inputs = {k: v.to(device) for k, v in q_inputs.items()}
@@ -2206,7 +2751,9 @@ def main():
                 q_emb = raw(**q_inputs)
                 _clear_rope_deltas(raw_doc)
                 d_emb = raw_doc(**d_inputs)
-                loss, acc = active_loss_fn(q_emb, d_emb, logit_scale, gather_enabled=False)
+                loss, acc = active_loss_fn(
+                    q_emb, d_emb, logit_scale, gather_enabled=False
+                )
             total_loss += loss.item()
             total_acc += acc.item()
             n_batches += 1
@@ -2216,14 +2763,19 @@ def main():
         if n_batches > 0 and is_main:
             avg_loss = total_loss / n_batches
             avg_acc = total_acc / n_batches
-            logger.info(f"eval step={step} loss={avg_loss:.4f} "
-                        f"acc={avg_acc:.4f} batches={n_batches}")
+            logger.info(
+                f"eval step={step} loss={avg_loss:.4f} "
+                f"acc={avg_acc:.4f} batches={n_batches}"
+            )
             if use_wandb:
-                wandb.log({
-                    "eval/loss": avg_loss,
-                    "eval/accuracy": avg_acc,
-                    "eval/batches": n_batches,
-                }, step=step)
+                wandb.log(
+                    {
+                        "eval/loss": avg_loss,
+                        "eval/accuracy": avg_acc,
+                        "eval/batches": n_batches,
+                    },
+                    step=step,
+                )
 
     def run_query_side_tests(step):
         if not is_main:
@@ -2233,9 +2785,13 @@ def main():
             try:
                 logger.info(
                     f"Running test-split retrieval eval via search API: "
-                    f"{len(test_split_queries)} queries...")
+                    f"{len(test_split_queries)} queries..."
+                )
                 metrics = run_search_api_retrieval_eval(
-                    model, processor, test_split_queries, device,
+                    model,
+                    processor,
+                    test_split_queries,
+                    device,
                     search_api_url=args.search_api_url,
                     batch_size=args.search_api_batch_size,
                     n_docs=3,
@@ -2243,16 +2799,22 @@ def main():
                 for k, v in metrics.items():
                     logger.info(f"  test_split/{k}: {v:.4f}")
                 if use_wandb:
-                    wandb.log({f"test_split/{k}": v for k, v in metrics.items()}, step=step)
+                    wandb.log(
+                        {f"test_split/{k}": v for k, v in metrics.items()}, step=step
+                    )
             except Exception as e:
                 logger.warning(f"test-split retrieval eval failed: {e}")
 
         if simpleqa_queries:
             try:
                 logger.info(
-                    f"Running SimpleQA eval via search API: {len(simpleqa_queries)} queries...")
+                    f"Running SimpleQA eval via search API: {len(simpleqa_queries)} queries..."
+                )
                 metrics = run_simpleqa_search_api_eval(
-                    model, processor, simpleqa_queries, device,
+                    model,
+                    processor,
+                    simpleqa_queries,
+                    device,
                     search_api_url=args.search_api_url,
                     vllm_url=args.vllm_url,
                     vllm_model=args.vllm_model,
@@ -2269,8 +2831,11 @@ def main():
                         logger.info(f"  simpleqa/{k}: {v}")
                 if use_wandb and metrics:
                     wandb.log(
-                        {f"simpleqa/{k}": v for k, v in metrics.items()
-                         if isinstance(v, (int, float))},
+                        {
+                            f"simpleqa/{k}": v
+                            for k, v in metrics.items()
+                            if isinstance(v, (int, float))
+                        },
                         step=step,
                     )
             except Exception as e:
@@ -2296,29 +2861,43 @@ def main():
             torch.cuda.empty_cache()
             logger.info(
                 f"Running test '{name}': {len(td['questions'])} queries, "
-                f"{len(td['doc_paths'])} tiles...")
-            metrics = run_miniv6_eval(model, processor, td, device,
-                                      batch_size=args.test_batch_size,
-                                      vllm_url=args.vllm_url, vllm_model=args.vllm_model,
-                                      grader_model=args.simpleqa_grader_model,
-                                      output_path=os.path.join(
-                                          args.output_dir, f"{label_prefix}_step{step}_{name}.jsonl"),
-                                      vllm_max_tokens=args.vllm_max_tokens,
-                                      vllm_enable_thinking=args.vllm_enable_thinking)
+                f"{len(td['doc_paths'])} tiles..."
+            )
+            metrics = run_miniv6_eval(
+                model,
+                processor,
+                td,
+                device,
+                batch_size=args.test_batch_size,
+                vllm_url=args.vllm_url,
+                vllm_model=args.vllm_model,
+                grader_model=args.simpleqa_grader_model,
+                output_path=os.path.join(
+                    args.output_dir, f"{label_prefix}_step{step}_{name}.jsonl"
+                ),
+                vllm_max_tokens=args.vllm_max_tokens,
+                vllm_enable_thinking=args.vllm_enable_thinking,
+            )
             for k, v in metrics.items():
                 logger.info(f"  test_{name}/{k}: {v:.4f}")
             if log_to_wandb and use_wandb:
-                wandb.log({f"test_{name}/{k}": v for k, v in metrics.items()}, step=step)
+                wandb.log(
+                    {f"test_{name}/{k}": v for k, v in metrics.items()}, step=step
+                )
 
     # Eval-only mode: run all test evals at current step (post-resume) and exit
-    if getattr(args, 'eval_only', False) and is_main and test_datasets:
+    if getattr(args, "eval_only", False) and is_main and test_datasets:
         suffix = ""
         if args.vllm_enable_thinking:
             suffix += "_think"
         suffix += f"_mt{args.vllm_max_tokens}"
-        logger.info(f"[eval-only] Running test evals at step={start_step}, "
-                    f"thinking={args.vllm_enable_thinking}, max_tokens={args.vllm_max_tokens}")
-        run_test_evals(start_step, label_prefix=f"eval_only{suffix}", log_to_wandb=False)
+        logger.info(
+            f"[eval-only] Running test evals at step={start_step}, "
+            f"thinking={args.vllm_enable_thinking}, max_tokens={args.vllm_max_tokens}"
+        )
+        run_test_evals(
+            start_step, label_prefix=f"eval_only{suffix}", log_to_wandb=False
+        )
         logger.info("[eval-only] Done. Exiting.")
         return
 
@@ -2341,6 +2920,7 @@ def main():
     def prefetched(loader):
         """Prefetch next batch in a background thread while GPU is busy."""
         from concurrent.futures import ThreadPoolExecutor
+
         with ThreadPoolExecutor(max_workers=1) as pool:
             it = iter(loader)
             future = pool.submit(next, it, None)
@@ -2352,10 +2932,15 @@ def main():
                 yield batch
 
     # Text warmup phase
-    text_warmup_done = (args.text_warmup_steps <= 0 or text_loader is None
-                        or step >= args.text_warmup_steps)
+    text_warmup_done = (
+        args.text_warmup_steps <= 0
+        or text_loader is None
+        or step >= args.text_warmup_steps
+    )
     if not text_warmup_done and is_main:
-        logger.info(f"Starting text warmup phase: steps {step} → {args.text_warmup_steps}")
+        logger.info(
+            f"Starting text warmup phase: steps {step} → {args.text_warmup_steps}"
+        )
 
     text_epoch = 0
     while not text_warmup_done and step < args.text_warmup_steps:
@@ -2381,8 +2966,12 @@ def main():
                 query_chunks=q_chunks,
                 doc_chunks=d_chunks,
                 logit_scale=logit_scale,
-                query_process_fn=functools.partial(forward_query, bidirectional=args.bidirectional),
-                doc_process_fn=functools.partial(forward_doc, bidirectional=args.bidirectional),
+                query_process_fn=functools.partial(
+                    forward_query, bidirectional=args.bidirectional
+                ),
+                doc_process_fn=functools.partial(
+                    forward_doc, bidirectional=args.bidirectional
+                ),
                 hardness_alpha=args.hardness_alpha,
                 loss_fn=active_loss_fn,
             )
@@ -2403,13 +2992,22 @@ def main():
             if is_main:
                 temp = 1.0 / logit_scale.log_scale.exp().item()
                 cur_lr = scheduler.get_last_lr()[0]
-                logger.info(f"[text-warmup] step={step}/{args.max_steps} "
-                            f"loss={loss.item():.4f} acc={accuracy.item():.3f} "
-                            f"lr={cur_lr:.2e} temp={temp:.4f} time={dt:.1f}s")
+                logger.info(
+                    f"[text-warmup] step={step}/{args.max_steps} "
+                    f"loss={loss.item():.4f} acc={accuracy.item():.3f} "
+                    f"lr={cur_lr:.2e} temp={temp:.4f} time={dt:.1f}s"
+                )
                 if use_wandb:
-                    wandb.log({"train/loss": loss.item(), "train/accuracy": accuracy.item(),
-                               "train/lr": cur_lr, "train/temperature": temp,
-                               "train/phase": 0}, step=step)
+                    wandb.log(
+                        {
+                            "train/loss": loss.item(),
+                            "train/accuracy": accuracy.item(),
+                            "train/lr": cur_lr,
+                            "train/temperature": temp,
+                            "train/phase": 0,
+                        },
+                        step=step,
+                    )
 
             need_eval = args.eval_steps > 0 and step % args.eval_steps == 0
             need_save = args.save_steps > 0 and step % args.save_steps == 0
@@ -2439,22 +3037,29 @@ def main():
         image_steps = args.max_steps - args.text_warmup_steps
         if args.scheduler == "cosine":
             scheduler = get_cosine_schedule_with_warmup(
-                optimizer, num_warmup_steps=args.warmup_steps,
-                num_training_steps=image_steps)
+                optimizer,
+                num_warmup_steps=args.warmup_steps,
+                num_training_steps=image_steps,
+            )
         elif args.scheduler == "constant":
             scheduler = get_constant_schedule_with_warmup(
-                optimizer, num_warmup_steps=args.warmup_steps)
+                optimizer, num_warmup_steps=args.warmup_steps
+            )
         # Reset lr to peak (optimizer stores current lr from text phase decay)
         for pg in optimizer.param_groups:
-            pg['lr'] = args.lr
+            pg["lr"] = args.lr
         if is_main:
-            logger.info(f"Two-stage LR: reset scheduler for image phase "
-                        f"({image_steps} steps, warmup={args.warmup_steps})")
+            logger.info(
+                f"Two-stage LR: reset scheduler for image phase "
+                f"({image_steps} steps, warmup={args.warmup_steps})"
+            )
 
     # Set up text interleaving for mixed training phase
     text_mix_iter = None
     text_mix_epoch = 0
-    use_text_mix = ((args.text_mix_ratio > 0 or args.text_curriculum) and text_loader is not None)
+    use_text_mix = (
+        args.text_mix_ratio > 0 or args.text_curriculum
+    ) and text_loader is not None
 
     def _get_text_mix_interval(current_step):
         """Return how often to insert a text batch (0 = never)."""
@@ -2467,13 +3072,13 @@ def main():
             image_steps = args.max_steps - args.text_warmup_steps
             progress = (current_step - args.text_warmup_steps) / max(image_steps, 1)
             if progress < 0.25:
-                return 2   # 50% text
+                return 2  # 50% text
             elif progress < 0.50:
-                return 3   # 33% text
+                return 3  # 33% text
             elif progress < 0.75:
-                return 5   # 20% text
+                return 5  # 20% text
             else:
-                return 0   # no text
+                return 0  # no text
         elif args.text_mix_ratio > 0:
             return max(1, round(1.0 / args.text_mix_ratio))
         return 0
@@ -2483,8 +3088,10 @@ def main():
             logger.info("Text curriculum enabled: 50%→33%→20%→0% over 4 phases")
         else:
             interval = _get_text_mix_interval(args.text_warmup_steps)
-            logger.info(f"Text interleaving enabled: 1 text batch every {interval} steps "
-                        f"(ratio={args.text_mix_ratio})")
+            logger.info(
+                f"Text interleaving enabled: 1 text batch every {interval} steps "
+                f"(ratio={args.text_mix_ratio})"
+            )
 
     def _get_text_mix_batch():
         """Get next text batch, cycling through epochs."""
@@ -2529,8 +3136,7 @@ def main():
 
             # Interleave text batches during image training
             cur_interval = _get_text_mix_interval(step) if use_text_mix else 0
-            is_text_step = (cur_interval > 0 and step > 0
-                            and step % cur_interval == 0)
+            is_text_step = cur_interval > 0 and step > 0 and step % cur_interval == 0
             if is_text_step:
                 batch = _get_text_mix_batch()
 
@@ -2547,7 +3153,10 @@ def main():
             # GradCache forward — handles DDP sync internally via no_sync pattern
             q_chunks = chunk_inputs(q_inputs, args.grad_cache_chunk)
             d_chunks = chunk_inputs(d_inputs, args.grad_cache_chunk)
-            debug_trace(trace_enabled, f"train_loop: chunked q={len(q_chunks)} d={len(d_chunks)}")
+            debug_trace(
+                trace_enabled,
+                f"train_loop: chunked q={len(q_chunks)} d={len(d_chunks)}",
+            )
 
             if args.mode == "query-side-tune":
                 if args.query_side_backward == "direct":
@@ -2613,26 +3222,37 @@ def main():
                 dt_transfer = t_transfer - t0
                 dt_fwdbwd = t_fwdbwd - t_transfer
                 dt_optim = t_optim - t_fwdbwd
-                logger.info(f"{phase_tag}step={step}/{args.max_steps} loss={loss_val_item:.4f} "
-                            f"acc={acc_val:.3f} lr={cur_lr:.2e} "
-                            f"temp={temp:.4f} time={dt:.1f}s "
-                            f"[data={dt_transfer:.1f}s fwd+bwd={dt_fwdbwd:.1f}s optim={dt_optim:.1f}s]")
+                logger.info(
+                    f"{phase_tag}step={step}/{args.max_steps} loss={loss_val_item:.4f} "
+                    f"acc={acc_val:.3f} lr={cur_lr:.2e} "
+                    f"temp={temp:.4f} time={dt:.1f}s "
+                    f"[data={dt_transfer:.1f}s fwd+bwd={dt_fwdbwd:.1f}s optim={dt_optim:.1f}s]"
+                )
                 if use_wandb:
-                    grad_norm = sum(p.grad.norm().item() ** 2 for p in model.parameters()
-                                    if p.requires_grad and p.grad is not None) ** 0.5
-                    wandb.log({
-                        "train/loss": loss_val_item,
-                        "train/accuracy": acc_val,
-                        "train/lr": cur_lr,
-                        "train/temperature": temp,
-                        "train/log_scale": log_scale_val,
-                        "train/grad_norm": grad_norm,
-                        "train/step_time_s": dt,
-                        "train/epoch": epoch,
-                        "train/samples_seen": step * args.batch_size * world_size,
-                        "train/phase": 0.5 if is_text_step else 1,
-                        "train/is_text_step": 1 if is_text_step else 0,
-                    }, step=step)
+                    grad_norm = (
+                        sum(
+                            p.grad.norm().item() ** 2
+                            for p in model.parameters()
+                            if p.requires_grad and p.grad is not None
+                        )
+                        ** 0.5
+                    )
+                    wandb.log(
+                        {
+                            "train/loss": loss_val_item,
+                            "train/accuracy": acc_val,
+                            "train/lr": cur_lr,
+                            "train/temperature": temp,
+                            "train/log_scale": log_scale_val,
+                            "train/grad_norm": grad_norm,
+                            "train/step_time_s": dt,
+                            "train/epoch": epoch,
+                            "train/samples_seen": step * args.batch_size * world_size,
+                            "train/phase": 0.5 if is_text_step else 1,
+                            "train/is_text_step": 1 if is_text_step else 0,
+                        },
+                        step=step,
+                    )
 
             # Eval + Save
             # All ranks must participate in barrier; eval/test run only on rank 0
@@ -2640,9 +3260,13 @@ def main():
             need_eval = args.eval_steps > 0 and step % args.eval_steps == 0
             need_save = args.save_steps > 0 and step % args.save_steps == 0
             if args.mode == "query-side-tune":
-                need_test = need_save or (args.test_eval_steps > 0 and step % args.test_eval_steps == 0)
+                need_test = need_save or (
+                    args.test_eval_steps > 0 and step % args.test_eval_steps == 0
+                )
             else:
-                need_test = args.test_eval_steps > 0 and step % args.test_eval_steps == 0
+                need_test = (
+                    args.test_eval_steps > 0 and step % args.test_eval_steps == 0
+                )
             need_action = need_eval or need_test or need_save
 
             if need_action:
@@ -2668,7 +3292,7 @@ def main():
 
     save_checkpoint(step, epoch)
     # Final test eval — skip if last step already triggered test eval
-    already_evaluated = (args.test_eval_steps > 0 and step % args.test_eval_steps == 0)
+    already_evaluated = args.test_eval_steps > 0 and step % args.test_eval_steps == 0
     if is_main and not already_evaluated:
         if args.mode == "query-side-tune":
             run_query_side_tests(step)

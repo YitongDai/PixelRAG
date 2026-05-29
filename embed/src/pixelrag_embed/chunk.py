@@ -152,15 +152,17 @@ def chunk_article(article_dir: str, dry_run: bool = False, force: bool = False) 
             if not dry_run:
                 shutil.copy2(tile_path, chunk_path)
                 files_written += 1
-            chunks_info.append({
-                "tile": tile_name,
-                "tile_index": tile_idx,
-                "chunk_index": 0,
-                "file": chunk_name,
-                "y_offset": 0,
-                "height": h,
-                "width": w,
-            })
+            chunks_info.append(
+                {
+                    "tile": tile_name,
+                    "tile_index": tile_idx,
+                    "chunk_index": 0,
+                    "file": chunk_name,
+                    "y_offset": 0,
+                    "height": h,
+                    "width": w,
+                }
+            )
             continue
 
         # Split into CHUNK_HEIGHT strips
@@ -182,15 +184,17 @@ def chunk_article(article_dir: str, dry_run: bool = False, force: bool = False) 
                 crop.save(chunk_path, format="PNG")
                 files_written += 1
 
-            chunks_info.append({
-                "tile": tile_name,
-                "tile_index": tile_idx,
-                "chunk_index": chunk_idx,
-                "file": chunk_name,
-                "y_offset": y,
-                "height": ch,
-                "width": w,
-            })
+            chunks_info.append(
+                {
+                    "tile": tile_name,
+                    "tile_index": tile_idx,
+                    "chunk_index": chunk_idx,
+                    "file": chunk_name,
+                    "y_offset": y,
+                    "height": ch,
+                    "width": w,
+                }
+            )
 
             y += ch
             chunk_idx += 1
@@ -243,20 +247,29 @@ def _delete_tiles_in_shard(shard_dir: str) -> int:
             try:
                 with open(cj_path) as f:
                     manifest = json.load(f)
-                keep = {c["file"] for c in manifest.get("chunks", [])
-                        if c["file"].startswith("tile_")}
+                keep = {
+                    c["file"]
+                    for c in manifest.get("chunks", [])
+                    if c["file"].startswith("tile_")
+                }
             except (json.JSONDecodeError, KeyError):
                 keep = set()
             for f in article_dir.iterdir():
-                if f.name.startswith("tile_") and f.name.endswith((".png", ".jpg", ".jpeg")):
+                if f.name.startswith("tile_") and f.name.endswith(
+                    (".png", ".jpg", ".jpeg")
+                ):
                     if f.name not in keep:
                         f.unlink()
                         deleted += 1
     return deleted
 
 
-def process_shard(shard_dir: str, dry_run: bool = False, force: bool = False,
-                  delete_tiles: bool = False) -> dict:
+def process_shard(
+    shard_dir: str,
+    dry_run: bool = False,
+    force: bool = False,
+    delete_tiles: bool = False,
+) -> dict:
     """Chunk all articles in a shard directory."""
     t0 = time.time()
     total_articles = 0
@@ -268,7 +281,8 @@ def process_shard(shard_dir: str, dry_run: bool = False, force: bool = False,
 
     # Walk sub-shard directories (shard_00000, shard_00001, ...)
     sub_dirs = sorted(
-        p for p in Path(shard_dir).iterdir()
+        p
+        for p in Path(shard_dir).iterdir()
         if p.is_dir() and p.name.startswith("shard_")
     )
 
@@ -313,44 +327,80 @@ def process_shard(shard_dir: str, dry_run: bool = False, force: bool = False,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Pre-chunk tile images into 1024px strips")
+    parser = argparse.ArgumentParser(
+        description="Pre-chunk tile images into 1024px strips"
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--shard-dir", help="Process a single shard directory")
     group.add_argument("--tiles-dir", help="Process all shards under this directory")
-    parser.add_argument("--workers", type=int, default=96,
-                        help="Parallel shard workers (default: 96)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Count chunks without writing files")
-    parser.add_argument("--force", action="store_true",
-                        help="Rechunk even if chunks.json exists (compare tile hashes, skip if unchanged)")
-    parser.add_argument("--delete-tiles", action="store_true",
-                        help="Delete tile_*.png after chunking each shard")
+    parser.add_argument(
+        "--workers", type=int, default=96, help="Parallel shard workers (default: 96)"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Count chunks without writing files"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Rechunk even if chunks.json exists (compare tile hashes, skip if unchanged)",
+    )
+    parser.add_argument(
+        "--delete-tiles",
+        action="store_true",
+        help="Delete tile_*.png after chunking each shard",
+    )
     args = parser.parse_args()
 
     if args.shard_dir:
-        logger.info("Processing single shard: %s (force=%s, delete_tiles=%s)",
-                     args.shard_dir, args.force, args.delete_tiles)
-        result = process_shard(args.shard_dir, dry_run=args.dry_run,
-                               force=args.force, delete_tiles=args.delete_tiles)
+        logger.info(
+            "Processing single shard: %s (force=%s, delete_tiles=%s)",
+            args.shard_dir,
+            args.force,
+            args.delete_tiles,
+        )
+        result = process_shard(
+            args.shard_dir,
+            dry_run=args.dry_run,
+            force=args.force,
+            delete_tiles=args.delete_tiles,
+        )
         logger.info("Result: %s", result)
         return
 
     # Process all shards
     tiles_dir = args.tiles_dir
     shard_dirs = sorted(
-        str(p) for p in Path(tiles_dir).iterdir()
+        str(p)
+        for p in Path(tiles_dir).iterdir()
         if p.is_dir() and p.name.startswith("shard_")
     )
-    logger.info("Found %d shards in %s (workers=%d, force=%s, delete_tiles=%s, dry_run=%s)",
-                len(shard_dirs), tiles_dir, args.workers, args.force, args.delete_tiles, args.dry_run)
+    logger.info(
+        "Found %d shards in %s (workers=%d, force=%s, delete_tiles=%s, dry_run=%s)",
+        len(shard_dirs),
+        tiles_dir,
+        args.workers,
+        args.force,
+        args.delete_tiles,
+        args.dry_run,
+    )
 
     t0 = time.time()
-    total = {"shards": 0, "articles": 0, "chunked": 0, "skipped": 0,
-             "tiles": 0, "chunks": 0, "files_written": 0, "tiles_deleted": 0}
+    total = {
+        "shards": 0,
+        "articles": 0,
+        "chunked": 0,
+        "skipped": 0,
+        "tiles": 0,
+        "chunks": 0,
+        "files_written": 0,
+        "tiles_deleted": 0,
+    }
 
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         futures = {
-            pool.submit(process_shard, sd, args.dry_run, args.force, args.delete_tiles): sd
+            pool.submit(
+                process_shard, sd, args.dry_run, args.force, args.delete_tiles
+            ): sd
             for sd in shard_dirs
         }
         for fut in as_completed(futures):
@@ -366,18 +416,32 @@ def main():
                 total["files_written"] += r["files_written"]
                 total["tiles_deleted"] += r["tiles_deleted"]
                 if r["chunked"] > 0 or r["tiles_deleted"] > 0:
-                    logger.info("%s: %d chunked, %d tiles → %d chunks, %d written, %d tiles deleted (%.1fs)",
-                                r["shard"], r["chunked"], r["tiles"], r["chunks"],
-                                r["files_written"], r["tiles_deleted"], r["elapsed_s"])
+                    logger.info(
+                        "%s: %d chunked, %d tiles → %d chunks, %d written, %d tiles deleted (%.1fs)",
+                        r["shard"],
+                        r["chunked"],
+                        r["tiles"],
+                        r["chunks"],
+                        r["files_written"],
+                        r["tiles_deleted"],
+                        r["elapsed_s"],
+                    )
             except Exception as e:
                 logger.error("Failed %s: %s", sd, e)
 
     elapsed = time.time() - t0
-    logger.info("Done: %d shards, %d articles chunked (%d skipped), "
-                "%d tiles → %d chunks, %d files written, %d tiles deleted in %.0fs",
-                total["shards"], total["chunked"], total["skipped"],
-                total["tiles"], total["chunks"], total["files_written"],
-                total["tiles_deleted"], elapsed)
+    logger.info(
+        "Done: %d shards, %d articles chunked (%d skipped), "
+        "%d tiles → %d chunks, %d files written, %d tiles deleted in %.0fs",
+        total["shards"],
+        total["chunked"],
+        total["skipped"],
+        total["tiles"],
+        total["chunks"],
+        total["files_written"],
+        total["tiles_deleted"],
+        elapsed,
+    )
 
 
 if __name__ == "__main__":

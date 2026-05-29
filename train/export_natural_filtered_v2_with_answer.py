@@ -60,7 +60,10 @@ def main() -> int:
     source_rows = 0
     for row in iter_jsonl(args.source_jsonl):
         source_rows += 1
-        key = (row["query"], normalize_source_chunk_path(row["chunk_path"], args.image_root))
+        key = (
+            row["query"],
+            normalize_source_chunk_path(row["chunk_path"], args.image_root),
+        )
         if key in answer_map:
             duplicates += 1
         answer_map[key] = row.get("answer")
@@ -95,7 +98,9 @@ def main() -> int:
         "input_rows": total_rows,
         "matched_rows": matched_rows,
         "missing_rows": missing_rows,
-        "match_rate_pct": round(100 * matched_rows / total_rows, 4) if total_rows else 0.0,
+        "match_rate_pct": round(100 * matched_rows / total_rows, 4)
+        if total_rows
+        else 0.0,
         "missing_examples": missing_examples,
     }
     summary_json.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n")

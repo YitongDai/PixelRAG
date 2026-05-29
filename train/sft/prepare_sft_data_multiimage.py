@@ -64,7 +64,7 @@ def build_image_set(row: dict, seed_base: int, n_images: int) -> tuple[list[str]
     gold = row["gold_suffix"]
     hit_sufs = [shard_suffix(h["path"]) for h in row["hits"]]
     non_gold = [s for s in hit_sufs if s != gold]
-    chosen = [gold] + non_gold[:n_images - 1]
+    chosen = [gold] + non_gold[: n_images - 1]
     while len(chosen) < n_images:
         chosen.append(gold)
     rng = random.Random(seed_base)
@@ -77,20 +77,38 @@ def build_image_set(row: dict, seed_base: int, n_images: int) -> tuple[list[str]
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--retrieval-dir", default="/scratch/users/zwcolin/cxr_embeds/sft_data/retrieval_raw")
-    p.add_argument("--tiles-mirror", default=None,
-                   help="Default: <retrieval-dir>/tiles")
-    p.add_argument("--out-root", required=True,
-                   help="Where to write compressed images + split JSONs")
-    p.add_argument("--compress-ratio", type=int, required=True,
-                   help="Pixel-area ratio (2 / 3 / 4 / 5 / 9 …)")
+    p.add_argument(
+        "--retrieval-dir",
+        default="/scratch/users/zwcolin/cxr_embeds/sft_data/retrieval_raw",
+    )
+    p.add_argument(
+        "--tiles-mirror", default=None, help="Default: <retrieval-dir>/tiles"
+    )
+    p.add_argument(
+        "--out-root",
+        required=True,
+        help="Where to write compressed images + split JSONs",
+    )
+    p.add_argument(
+        "--compress-ratio",
+        type=int,
+        required=True,
+        help="Pixel-area ratio (2 / 3 / 4 / 5 / 9 …)",
+    )
     p.add_argument("--splits", nargs="+", default=["train", "eval", "test"])
     p.add_argument("--workers", type=int, default=32)
     p.add_argument("--shuffle-seed", type=int, default=42)
-    p.add_argument("--n-images", type=int, default=3,
-                   help="Images per sample. top-3 = gold + 2 non-gold hits; top-6 = gold + 5 hits")
-    p.add_argument("--json-suffix", default="",
-                   help="Append to output JSON filenames (e.g. '_top3' → train_top3.json). Empty = overwrite train.json")
+    p.add_argument(
+        "--n-images",
+        type=int,
+        default=3,
+        help="Images per sample. top-3 = gold + 2 non-gold hits; top-6 = gold + 5 hits",
+    )
+    p.add_argument(
+        "--json-suffix",
+        default="",
+        help="Append to output JSON filenames (e.g. '_top3' → train_top3.json). Empty = overwrite train.json",
+    )
     args = p.parse_args()
 
     retrieval_dir = Path(args.retrieval_dir)
@@ -100,9 +118,11 @@ def main():
     out_images.mkdir(parents=True, exist_ok=True)
 
     scale = 1.0 / math.sqrt(args.compress_ratio)
-    no_compression = (args.compress_ratio == 1)
-    print(f"Compress ratio: {args.compress_ratio}  (scale={scale:.4f}/dim)"
-          + (" [NO-OP hardlink from mirror]" if no_compression else ""))
+    no_compression = args.compress_ratio == 1
+    print(
+        f"Compress ratio: {args.compress_ratio}  (scale={scale:.4f}/dim)"
+        + (" [NO-OP hardlink from mirror]" if no_compression else "")
+    )
     print(f"Mirror:  {mirror}")
     print(f"Out:     {out_root}")
     print(f"Splits:  {args.splits}")
@@ -143,6 +163,7 @@ def main():
 
     # Compress in parallel (or hardlink when ratio=1)
     if to_compress:
+
         def _work(args_):
             src, dst = args_
             os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -152,6 +173,7 @@ def main():
                     return True
                 except OSError:
                     import shutil
+
                     shutil.copy2(src, dst)
                     return True
             return compress_image(src, dst, scale)
@@ -180,16 +202,18 @@ def main():
                 continue
             # ShareGPT multi-image: N <image> tokens in user content, N paths in images
             user_content = ("<image>" * args.n_images) + "\n" + r["query"]
-            sg.append({
-                "messages": [
-                    {"role": "user", "content": user_content},
-                    {"role": "assistant", "content": r["answer"]},
-                ],
-                "images": img_paths,
-                # meta (not used by LlamaFactory, retained for debugging)
-                "_gold_pos": gold_pos,
-                "_gold_in_top6_pos": r.get("gold_in_top6_pos", -1),
-            })
+            sg.append(
+                {
+                    "messages": [
+                        {"role": "user", "content": user_content},
+                        {"role": "assistant", "content": r["answer"]},
+                    ],
+                    "images": img_paths,
+                    # meta (not used by LlamaFactory, retained for debugging)
+                    "_gold_pos": gold_pos,
+                    "_gold_in_top6_pos": r.get("gold_in_top6_pos", -1),
+                }
+            )
         out_json = out_root / f"{split}{args.json_suffix}.json"
         with open(out_json, "w") as f:
             json.dump(sg, f, ensure_ascii=False)
@@ -199,8 +223,12 @@ def main():
             "file_name": str(out_json),
             "formatting": "sharegpt",
             "columns": {"messages": "messages", "images": "images"},
-            "tags": {"role_tag": "role", "content_tag": "content",
-                     "user_tag": "user", "assistant_tag": "assistant"},
+            "tags": {
+                "role_tag": "role",
+                "content_tag": "content",
+                "user_tag": "user",
+                "assistant_tag": "assistant",
+            },
         }
 
     info_path = out_root / "dataset_info.json"

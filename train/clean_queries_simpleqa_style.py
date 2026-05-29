@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import glob
 import json
-import math
 import os
 import random
 import re
@@ -30,8 +29,12 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 
-DEFAULT_INPUT_GLOB = "training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_*/filtered_hn.jsonl"
-DEFAULT_SIMPLEQA_PATH = "/home/user/wiki-screenshot/eval/simpleqa_query_image_pairs.json"
+DEFAULT_INPUT_GLOB = (
+    "training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_*/filtered_hn.jsonl"
+)
+DEFAULT_SIMPLEQA_PATH = (
+    "/home/user/wiki-screenshot/eval/simpleqa_query_image_pairs.json"
+)
 
 MODEL_PRICING = {
     "gemini-2.0-flash-001": {"input_per_m": 0.10, "output_per_m": 0.40},
@@ -155,7 +158,9 @@ def build_client(args: argparse.Namespace) -> dict:
     }
 
 
-def update_usage(client_ctx: dict, prompt_tokens: int = 0, completion_tokens: int = 0) -> None:
+def update_usage(
+    client_ctx: dict, prompt_tokens: int = 0, completion_tokens: int = 0
+) -> None:
     with client_ctx["usage_lock"]:
         client_ctx["usage"]["prompt_tokens"] += int(prompt_tokens or 0)
         client_ctx["usage"]["completion_tokens"] += int(completion_tokens or 0)
@@ -460,9 +465,14 @@ def review_rows(
                 ]
                 next_batch_idx = 0
 
-                while next_batch_idx < len(pending_batches) and len(futures) < args.concurrency:
+                while (
+                    next_batch_idx < len(pending_batches)
+                    and len(futures) < args.concurrency
+                ):
                     batch = pending_batches[next_batch_idx]
-                    future = executor.submit(score_batch, client_ctx, args, references, batch)
+                    future = executor.submit(
+                        score_batch, client_ctx, args, references, batch
+                    )
                     futures[future] = batch
                     next_batch_idx += 1
 
@@ -481,7 +491,9 @@ def review_rows(
                                 **decision,
                             }
                             existing[row["row_id"]] = review
-                            reviews_file.write(json.dumps(review, ensure_ascii=False) + "\n")
+                            reviews_file.write(
+                                json.dumps(review, ensure_ascii=False) + "\n"
+                            )
                         reviews_file.flush()
                         completed += len(batch)
                         print(
@@ -491,7 +503,9 @@ def review_rows(
                         )
                         if next_batch_idx < len(pending_batches):
                             next_batch = pending_batches[next_batch_idx]
-                            next_future = executor.submit(score_batch, client_ctx, args, references, next_batch)
+                            next_future = executor.submit(
+                                score_batch, client_ctx, args, references, next_batch
+                            )
                             futures[next_future] = next_batch
                             next_batch_idx += 1
     return existing
@@ -507,7 +521,9 @@ def candidate_priority(review: dict) -> tuple:
     )
 
 
-def select_rows(rows: list[dict], reviews: dict[int, dict], args: argparse.Namespace) -> list[dict]:
+def select_rows(
+    rows: list[dict], reviews: dict[int, dict], args: argparse.Namespace
+) -> list[dict]:
     candidates = []
     for row in rows:
         review = reviews.get(row["row_id"])
@@ -526,7 +542,9 @@ def select_rows(rows: list[dict], reviews: dict[int, dict], args: argparse.Names
         for row, review in candidates:
             key = normalize_query(row["query"])
             current = by_query.get(key)
-            if current is None or candidate_priority(review) > candidate_priority(current[1]):
+            if current is None or candidate_priority(review) > candidate_priority(
+                current[1]
+            ):
                 by_query[key] = (row, review)
         candidates = list(by_query.values())
 
@@ -557,7 +575,9 @@ def compute_query_stats(queries: list[str]) -> dict:
     word_counts = [word_count(query) for query in queries]
     char_counts = [len(query) for query in queries]
     has_quote = sum('"' in query or "'" in query for query in queries)
-    has_year = sum(bool(re.search(r"\b(1[0-9]{3}|20[0-2][0-9])\b", query)) for query in queries)
+    has_year = sum(
+        bool(re.search(r"\b(1[0-9]{3}|20[0-2][0-9])\b", query)) for query in queries
+    )
     return {
         "count": len(queries),
         "avg_words": round(sum(word_counts) / len(word_counts), 2),
@@ -587,15 +607,25 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 def main() -> int:
     args = parse_args()
     output_path = Path(args.output)
-    reviews_path = Path(args.reviews_output) if args.reviews_output else output_path.with_suffix(".reviews.jsonl")
-    summary_path = Path(args.summary_output) if args.summary_output else output_path.with_suffix(".summary.json")
+    reviews_path = (
+        Path(args.reviews_output)
+        if args.reviews_output
+        else output_path.with_suffix(".reviews.jsonl")
+    )
+    summary_path = (
+        Path(args.summary_output)
+        if args.summary_output
+        else output_path.with_suffix(".summary.json")
+    )
 
     random.seed(args.seed)
 
     rows = load_input_rows(args)
     print(f"Loaded {len(rows)} rows from {args.input_glob}", flush=True)
 
-    references = load_simpleqa_references(Path(args.simpleqa_path), args.few_shot_count, args.seed)
+    references = load_simpleqa_references(
+        Path(args.simpleqa_path), args.few_shot_count, args.seed
+    )
     print(f"Loaded {len(references)} SimpleQA reference examples", flush=True)
 
     client_ctx = build_client(args)

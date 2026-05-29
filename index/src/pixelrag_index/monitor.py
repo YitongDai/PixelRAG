@@ -100,6 +100,7 @@ _ENV_FILE = Path(__file__).resolve().parent.parent.parent.parent.parent / ".env"
 # (fish shell may set a different GOOGLE_API_KEY by default)
 try:
     from dotenv import load_dotenv
+
     load_dotenv(_ENV_FILE, override=True)
 except ImportError:
     pass
@@ -110,7 +111,6 @@ def _validate_env() -> dict[str, str]:
     env = os.environ.copy()
     env.pop("GEMINI_API_KEY", None)  # avoid "both keys set" warning
     return env
-
 
 
 def _parse_new_jsonl(results_file: Path, lines_before: int, state: dict, cycle: dict):
@@ -165,12 +165,18 @@ def _run_validate_tiles(
     # --shard uses nargs="+", so place it before --concurrency which
     # terminates the greedy list (otherwise "local" gets consumed as a shard).
     cmd = [
-        sys.executable, _VALIDATE_SCRIPT,
-        "--sample", str(sample),
-        "--shard", *(str(s) for s in shard_ids),
-        "--concurrency", "10",
-        "--seed", str(int(time.time())),
-        "--resume", str(results_file),
+        sys.executable,
+        _VALIDATE_SCRIPT,
+        "--sample",
+        str(sample),
+        "--shard",
+        *(str(s) for s in shard_ids),
+        "--concurrency",
+        "10",
+        "--seed",
+        str(int(time.time())),
+        "--resume",
+        str(results_file),
     ]
     if model:
         cmd += ["--model", model]
@@ -178,7 +184,9 @@ def _run_validate_tiles(
 
     try:
         lines_before = _count_lines(results_file)
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=_validate_env())
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=300, env=_validate_env()
+        )
         if proc.returncode not in (0, 1):
             return cycle
         _parse_new_jsonl(results_file, lines_before, state, cycle)
@@ -203,12 +211,18 @@ def _run_validate_tiles_s3(
 
     results_file = state["results_file_s3"]
     cmd = [
-        sys.executable, _VALIDATE_SCRIPT,
-        "--sample", str(sample),
-        "--shard", *(str(s) for s in shard_ids),
-        "--concurrency", "10",
-        "--seed", str(int(time.time())),
-        "--resume", str(results_file),
+        sys.executable,
+        _VALIDATE_SCRIPT,
+        "--sample",
+        str(sample),
+        "--shard",
+        *(str(s) for s in shard_ids),
+        "--concurrency",
+        "10",
+        "--seed",
+        str(int(time.time())),
+        "--resume",
+        str(results_file),
     ]
     if model:
         cmd += ["--model", model]
@@ -216,7 +230,9 @@ def _run_validate_tiles_s3(
 
     try:
         lines_before = _count_lines(results_file)
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=_validate_env())
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=600, env=_validate_env()
+        )
         if proc.returncode not in (0, 1):
             return cycle
         _parse_new_jsonl(results_file, lines_before, state, cycle)
@@ -233,7 +249,7 @@ def _parse_ssh_spec(spec: str) -> tuple[str, str]:
     """
     colon_idx = spec.find(":/")
     if colon_idx >= 0:
-        return spec[:colon_idx], spec[colon_idx + 1:]
+        return spec[:colon_idx], spec[colon_idx + 1 :]
     return spec, "~/pixelrag-index"
 
 
@@ -277,8 +293,13 @@ def _run_validate_tiles_ssh(
     )
 
     ssh_cmd = [
-        "ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
-        ssh_host, remote_cmd,
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "ConnectTimeout=10",
+        ssh_host,
+        remote_cmd,
     ]
 
     try:
@@ -289,8 +310,12 @@ def _run_validate_tiles_ssh(
         # SCP the remote results file back
         lines_before = _count_lines(local_results)
         scp_cmd = [
-            "scp", "-o", "StrictHostKeyChecking=no", "-q",
-            f"{ssh_host}:{remote_results}", str(local_results),
+            "scp",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-q",
+            f"{ssh_host}:{remote_results}",
+            str(local_results),
         ]
         subprocess.run(scp_cmd, capture_output=True, timeout=30)
         _parse_new_jsonl(local_results, lines_before, state, cycle)
@@ -300,7 +325,15 @@ def _run_validate_tiles_ssh(
     return cycle
 
 
-def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int | None, prev_time: float | None, verbose: bool = False, prev_machine_tiles: dict[str, int] | None = None, window_rates: dict[str, float] | None = None):
+def render(
+    coord: S3ShardCoordinator,
+    prev_articles: int | None,
+    prev_tiles: int | None,
+    prev_time: float | None,
+    verbose: bool = False,
+    prev_machine_tiles: dict[str, int] | None = None,
+    window_rates: dict[str, float] | None = None,
+):
     """Fetch status and render one dashboard frame.
 
     Args:
@@ -317,15 +350,23 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
     pct = articles_done / total_articles if total_articles else 0
 
     # ── per-machine aggregation ──────────────────────────────────────
-    machines: dict[str, dict] = defaultdict(lambda: {
-        "shards_done": 0, "shards_active": 0, "shards_stale": 0,
-        "completed": 0, "failed": 0, "skipped": 0, "tiles": 0,
-        "earliest_claim": float("inf"), "latest_heartbeat": 0,
-        "current_shards": [],
-        "in_flight": [],        # article IDs currently being processed
-        "recent_errors": [],    # last N errors from active shard
-        "disk_free_gb": None,   # latest disk_free_gb from heartbeat
-    })
+    machines: dict[str, dict] = defaultdict(
+        lambda: {
+            "shards_done": 0,
+            "shards_active": 0,
+            "shards_stale": 0,
+            "completed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "tiles": 0,
+            "earliest_claim": float("inf"),
+            "latest_heartbeat": 0,
+            "current_shards": [],
+            "in_flight": [],  # article IDs currently being processed
+            "recent_errors": [],  # last N errors from active shard
+            "disk_free_gb": None,  # latest disk_free_gb from heartbeat
+        }
+    )
     # Per-shard source info: {shard_id: {"machine": ..., "s3_sync": bool|None}}
     shard_source_info: dict[int, dict] = {}
 
@@ -391,6 +432,7 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
 
     # Fallback: latest worker session tiles/elapsed (for one-shot or first cycle)
     from collections import defaultdict as _dd
+
     _sessions: dict[str, dict[str, list]] = _dd(lambda: _dd(list))
     for c in claims:
         host = _extract_host(c["machine"])
@@ -428,7 +470,8 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
     # even if it has 0 shards_active right now (claim_next() scanning gap).
     alive_threshold = 600  # 10 minutes
     alive_hosts = {
-        n for n, m in machines.items()
+        n
+        for n, m in machines.items()
         if m["latest_heartbeat"] > 0 and (now - m["latest_heartbeat"]) < alive_threshold
     }
     global_rate = sum(machine_rates[h] for h in alive_hosts) if alive_hosts else 0.0
@@ -455,7 +498,9 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
 
     lines = []
     lines.append("")
-    lines.append(f"  {BOLD}Wiki-Screenshot Pipeline{RESET}{' ' * max(0, w - 50)}{DIM}{now_str}{RESET}")
+    lines.append(
+        f"  {BOLD}Wiki-Screenshot Pipeline{RESET}{' ' * max(0, w - 50)}{DIM}{now_str}{RESET}"
+    )
     lines.append(f"  {DIM}{line}{RESET}")
 
     # Progress bar
@@ -472,7 +517,11 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
         rate_str = _format_rate(global_rate)
     else:
         rate_str = "paused"
-    eta_str = _format_duration(eta) if eta > 0 else ("paused" if not alive_hosts else "calculating...")
+    eta_str = (
+        _format_duration(eta)
+        if eta > 0
+        else ("paused" if not alive_hosts else "calculating...")
+    )
     total_processed = articles_done
     fail_pct = (total_failed / total_processed * 100) if total_processed > 0 else 0
     fail_color = RED if fail_pct > 5 else YELLOW if fail_pct > 1 else GREEN
@@ -545,7 +594,9 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
                 label = aid if len(aid) <= 40 else aid[:39] + "\u2026"
                 lines.append(f"    {DIM}{prefix} {label}{RESET}")
             if len(m["in_flight"]) > 5:
-                lines.append(f"    {DIM}\u2514 ...and {len(m['in_flight']) - 5} more{RESET}")
+                lines.append(
+                    f"    {DIM}\u2514 ...and {len(m['in_flight']) - 5} more{RESET}"
+                )
 
         # Verbose: recent errors
         if verbose and m["recent_errors"]:
@@ -555,11 +606,11 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
                 err_counts[short] = err_counts.get(short, 0) + 1
             top_errs = sorted(err_counts.items(), key=lambda x: -x[1])[:3]
             err_parts = [f"{c}x {e}" for e, c in top_errs]
-            lines.append(
-                f"    {DIM}\u2514 errors: {'; '.join(err_parts)}{RESET}"
-            )
+            lines.append(f"    {DIM}\u2514 errors: {'; '.join(err_parts)}{RESET}")
 
-    for name in sorted(done_machines, key=lambda n: machines[n]["completed"], reverse=True):
+    for name in sorted(
+        done_machines, key=lambda n: machines[n]["completed"], reverse=True
+    ):
         m = done_machines[name]
         total_m = m["shards_done"]
         if total_m == 0:
@@ -579,7 +630,9 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
 
     lines.append(f"  {DIM}{hline * sep_w}{RESET}")
     n_active = len(active_machines)
-    n_total = len([n for n, m in machines.items() if m["shards_done"] + m["shards_active"] > 0])
+    n_total = len(
+        [n for n, m in machines.items() if m["shards_done"] + m["shards_active"] > 0]
+    )
     lines.append(
         f"  {BOLD}{n_active}{RESET} active / {n_total} total machines"
         f"      {BOLD}{_format_rate(global_rate)}{RESET} combined"
@@ -598,6 +651,7 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
     # Also include recently completed shards from alive machines for validation.
     # Sample a small random subset to avoid passing hundreds of shards.
     import random as _rng
+
     validate_shard_ids: list[int] = list(active_shard_ids)
     if not validate_shard_ids:
         _completed_sids = []
@@ -619,14 +673,25 @@ def render(coord: S3ShardCoordinator, prev_articles: int | None, prev_tiles: int
     for name, m in active_machines.items():
         machine_tiles[name] = m["tiles"]
 
-
     # Per-machine disk info (all machines with disk_free_gb reported)
     machine_disk: dict[str, float | None] = {}
     for name, m in machines.items():
         if m["shards_active"] > 0 or m["shards_done"] > 0:
             machine_disk[name] = m.get("disk_free_gb")
 
-    return "\n".join(lines), articles_done, total_tiles, now, n_active, active_shard_ids, machine_tiles, machine_disk, shard_source_info, machine_tiles_snapshot, validate_shard_ids
+    return (
+        "\n".join(lines),
+        articles_done,
+        total_tiles,
+        now,
+        n_active,
+        active_shard_ids,
+        machine_tiles,
+        machine_disk,
+        shard_source_info,
+        machine_tiles_snapshot,
+        validate_shard_ids,
+    )
 
 
 def main():
@@ -640,10 +705,16 @@ def main():
     parser.add_argument("--watch", action="store_true", help="Refresh every 30s")
     parser.add_argument("--interval", type=int, default=30)
     parser.add_argument("--no-color", action="store_true", help="Disable color output")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Show in-flight articles and error distribution")
     parser.add_argument(
-        "--alert-min-tiles-per-min", type=int, default=1000,
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Show in-flight articles and error distribution",
+    )
+    parser.add_argument(
+        "--alert-min-tiles-per-min",
+        type=int,
+        default=1000,
         help=(
             "Minimum tiles/min per active machine. If total throughput stays "
             "below (N * active_machines) for 10 minutes, exit with code 1. "
@@ -652,23 +723,34 @@ def main():
     )
     # Tile validation (Gemini Vision via validate_tiles.py)
     parser.add_argument(
-        "--validate-output-dir", type=str, default=_DEFAULT_OUTPUT_DIR,
+        "--validate-output-dir",
+        type=str,
+        default=_DEFAULT_OUTPUT_DIR,
         help=f"Output directory for Gemini tile validation (default: {_DEFAULT_OUTPUT_DIR})",
     )
     parser.add_argument(
-        "--validate-sample", type=int, default=50,
+        "--validate-sample",
+        type=int,
+        default=50,
         help="Number of tiles to sample per validation cycle (default: 50)",
     )
     parser.add_argument(
-        "--validate-max-fail-pct", type=float, default=5.0,
+        "--validate-max-fail-pct",
+        type=float,
+        default=5.0,
         help="Exit(1) if Gemini fail percentage exceeds this (default: 10.0)",
     )
     parser.add_argument(
-        "--validate-interval", type=int, default=60,
+        "--validate-interval",
+        type=int,
+        default=60,
         help="Run validation every N watch cycles (default: 60, i.e. ~30min at 30s interval)",
     )
     parser.add_argument(
-        "--validate-ssh", type=str, nargs="*", default=None,
+        "--validate-ssh",
+        type=str,
+        nargs="*",
+        default=None,
         help=(
             "SSH specs for remote validation: user@host:/project/dir. "
             "If no :/path, defaults to ~/pixelrag-index. "
@@ -677,12 +759,15 @@ def main():
         ),
     )
     parser.add_argument(
-        "--no-validate", action="store_true",
+        "--no-validate",
+        action="store_true",
         help="Disable Gemini tile validation (both local and SSH)",
     )
 
     parser.add_argument(
-        "--alert-min-disk-gb", type=int, default=100,
+        "--alert-min-disk-gb",
+        type=int,
+        default=100,
         help=(
             "Minimum free disk space in GB on any active machine (from heartbeat data). "
             "If free space drops below this, exit with code 1. "
@@ -690,7 +775,9 @@ def main():
         ),
     )
     parser.add_argument(
-        "--validate-model", type=str, default=None,
+        "--validate-model",
+        type=str,
+        default=None,
         help="Override Gemini model for validation (default: validate_tiles.py default)",
     )
     args = parser.parse_args()
@@ -717,14 +804,16 @@ def main():
 
     # Tile validation state (Gemini Vision via validate_tiles.py)
     has_local = args.validate_output_dir is not None
-    has_ssh = bool(args.validate_ssh)
+    bool(args.validate_ssh)
     validate_enabled = args.watch and not args.no_validate
     results_dir = Path.cwd() / ".pixelrag-monitor" / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
     # Per-SSH-spec local copy of their results file
     ssh_results = {}
-    for spec in (args.validate_ssh or []):
-        safe = spec.replace("@", "_").replace(".", "-").replace("/", "_").replace(":", "_")
+    for spec in args.validate_ssh or []:
+        safe = (
+            spec.replace("@", "_").replace(".", "-").replace("/", "_").replace(":", "_")
+        )
         ssh_results[spec] = results_dir / f"monitor_validation_ssh_{safe}.jsonl"
     validate_state: dict = {
         "tiles_checked": 0,
@@ -748,9 +837,26 @@ def main():
     window_rates: dict[str, float] = {}  # per-machine tiles/s from sliding window
 
     while True:
-        output, prev_articles, prev_tiles, prev_time, n_active_machines, active_shard_ids, machine_tiles, machine_disk, shard_source_info, machine_tiles_snapshot, validate_shard_ids = render(
-            coord, prev_articles, prev_tiles, prev_time, verbose=args.verbose,
-            prev_machine_tiles=prev_machine_tiles, window_rates=window_rates,
+        (
+            output,
+            prev_articles,
+            prev_tiles,
+            prev_time,
+            n_active_machines,
+            active_shard_ids,
+            machine_tiles,
+            machine_disk,
+            shard_source_info,
+            machine_tiles_snapshot,
+            validate_shard_ids,
+        ) = render(
+            coord,
+            prev_articles,
+            prev_tiles,
+            prev_time,
+            verbose=args.verbose,
+            prev_machine_tiles=prev_machine_tiles,
+            window_rates=window_rates,
         )
         prev_machine_tiles = machine_tiles_snapshot
 
@@ -799,7 +905,10 @@ def main():
                 if window_sec < rate_window_sec:
                     continue  # not enough data yet
                 tiles_per_min = rate_s * 60
-                if mname in {n for n, m_tiles in machine_tiles.items()} and tiles_per_min < threshold:
+                if (
+                    mname in {n for n, m_tiles in machine_tiles.items()}
+                    and tiles_per_min < threshold
+                ):
                     print(
                         f"\n{RED}{BOLD}ALERT:{RESET} machine {mname}: "
                         f"throughput {tiles_per_min:.0f} tiles/min "
@@ -851,7 +960,7 @@ def main():
 
                 # SSH validation (non-S3 shards — remote only finds ones it has)
                 if local_shard_ids:
-                    for spec in (args.validate_ssh or []):
+                    for spec in args.validate_ssh or []:
                         c = _run_validate_tiles_ssh(
                             spec,
                             args.validate_sample,
@@ -863,17 +972,33 @@ def main():
                         cycle_total["tiles_failed"] += c["tiles_failed"]
 
                 st = validate_state
-                fail_pct = (st["tiles_failed"] / st["tiles_checked"] * 100) if st["tiles_checked"] > 0 else 0
-                fail_color = RED if fail_pct > args.validate_max_fail_pct else YELLOW if fail_pct > 1 else GREEN
-                issue_str = ", ".join(f"{k}={v}" for k, v in st["issues"].most_common(5)) if st["issues"] else "none"
+                fail_pct = (
+                    (st["tiles_failed"] / st["tiles_checked"] * 100)
+                    if st["tiles_checked"] > 0
+                    else 0
+                )
+                fail_color = (
+                    RED
+                    if fail_pct > args.validate_max_fail_pct
+                    else YELLOW
+                    if fail_pct > 1
+                    else GREEN
+                )
+                issue_str = (
+                    ", ".join(f"{k}={v}" for k, v in st["issues"].most_common(5))
+                    if st["issues"]
+                    else "none"
+                )
                 sources = []
                 if s3_shard_ids:
                     sources.append(f"s3({len(s3_shard_ids)})")
                 if has_local and local_shard_ids:
                     sources.append("local")
-                for spec in (args.validate_ssh or []):
+                for spec in args.validate_ssh or []:
                     host_part, _ = _parse_ssh_spec(spec)
-                    sources.append(host_part.split("@")[-1] if "@" in host_part else host_part)
+                    sources.append(
+                        host_part.split("@")[-1] if "@" in host_part else host_part
+                    )
                 print(
                     f"  {DIM}Validation (Gemini, {'+'.join(sources)}):{RESET} "
                     f"{st['tiles_checked']} checked, "

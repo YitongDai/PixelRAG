@@ -60,8 +60,12 @@ def main():
             "file_name": str(out / "train.json"),
             "formatting": "sharegpt",
             "columns": {"messages": "messages", "images": "images"},
-            "tags": {"role_tag": "role", "content_tag": "content",
-                     "user_tag": "user", "assistant_tag": "assistant"},
+            "tags": {
+                "role_tag": "role",
+                "content_tag": "content",
+                "user_tag": "user",
+                "assistant_tag": "assistant",
+            },
         }
     }
     for c in COMPRESSIONS:
@@ -69,8 +73,12 @@ def main():
             "file_name": str(out / f"eval_{c}.json"),
             "formatting": "sharegpt",
             "columns": {"messages": "messages", "images": "images"},
-            "tags": {"role_tag": "role", "content_tag": "content",
-                     "user_tag": "user", "assistant_tag": "assistant"},
+            "tags": {
+                "role_tag": "role",
+                "content_tag": "content",
+                "user_tag": "user",
+                "assistant_tag": "assistant",
+            },
         }
     (out / "dataset_info.json").write_text(json.dumps(info, indent=2))
     print(f"\nDataset info: {out / 'dataset_info.json'}")

@@ -54,8 +54,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def info_nce_loss(q_emb: torch.Tensor, i_emb: torch.Tensor,
-                  temperature: float = 0.07) -> torch.Tensor:
+def info_nce_loss(
+    q_emb: torch.Tensor, i_emb: torch.Tensor, temperature: float = 0.07
+) -> torch.Tensor:
     """In-batch negatives InfoNCE loss.
 
     q_emb: (B, D) L2-normalized query embeddings
@@ -67,21 +68,25 @@ def info_nce_loss(q_emb: torch.Tensor, i_emb: torch.Tensor,
     return F.cross_entropy(logits, labels)
 
 
-def save_checkpoint(model, optimizer, scheduler, step, config, best_recall_10=0.0,
-                    loss_history=None):
+def save_checkpoint(
+    model, optimizer, scheduler, step, config, best_recall_10=0.0, loss_history=None
+):
     """Save LoRA weights + optimizer/scheduler state."""
     ckpt_dir = Path(config.checkpoint_dir) / config.run_name
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     path = ckpt_dir / f"step_{step}.pt"
-    torch.save({
-        "step": step,
-        "model_state_dict": {k: v.cpu() for k, v in model.state_dict().items()},
-        "optimizer_state_dict": optimizer.state_dict(),
-        "scheduler_state_dict": scheduler.state_dict(),
-        "best_recall_10": best_recall_10,
-        "loss_history": loss_history or [],
-        "config": vars(config),
-    }, path)
+    torch.save(
+        {
+            "step": step,
+            "model_state_dict": {k: v.cpu() for k, v in model.state_dict().items()},
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "best_recall_10": best_recall_10,
+            "loss_history": loss_history or [],
+            "config": vars(config),
+        },
+        path,
+    )
     _log(f"Checkpoint saved: {path}")
 
 
@@ -92,25 +97,33 @@ def train(config):
 
     # wandb — disable console capture so logger output reaches stdout
     wandb.init(
-        project="wiki-embedding", name=config.run_name, config=vars(config),
+        project="wiki-embedding",
+        name=config.run_name,
+        config=vars(config),
         settings=wandb.Settings(console="off"),
     )
 
     # Model
     _log(f"Loading model {config.model} on GPU {config.gpu_id}...")
     model = load_model_for_training(
-        config.model, config.gpu_id,
-        lora_r=config.lora_r, lora_alpha=config.lora_alpha,
+        config.model,
+        config.gpu_id,
+        lora_r=config.lora_r,
+        lora_alpha=config.lora_alpha,
     )
-    processor = load_processor(config.model,
-                               min_pixels=config.min_pixels, max_pixels=config.max_pixels)
+    processor = load_processor(
+        config.model, min_pixels=config.min_pixels, max_pixels=config.max_pixels
+    )
 
     # Data
     dataset = QueryChunkDataset(config.train_jsonl)
     collate_fn = make_collate_fn(processor, device=device)
     loader = DataLoader(
-        dataset, batch_size=config.batch_size, shuffle=True,
-        num_workers=0, collate_fn=collate_fn,
+        dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        num_workers=0,
+        collate_fn=collate_fn,
     )
 
     # Optimizer + scheduler
@@ -166,8 +179,15 @@ def train(config):
             for batch in loader:
                 if shutdown.is_set():
                     _log("Shutdown requested, saving checkpoint...")
-                    save_checkpoint(model, optimizer, scheduler, step, config,
-                                    best_recall_10, loss_history)
+                    save_checkpoint(
+                        model,
+                        optimizer,
+                        scheduler,
+                        step,
+                        config,
+                        best_recall_10,
+                        loss_history,
+                    )
                     wandb.finish()
                     return
 
@@ -183,12 +203,14 @@ def train(config):
                     # Forward: query embeddings
                     q_out = model(**q_inputs, output_hidden_states=True)
                     q_emb = pool_and_normalize(
-                        q_out.hidden_states[-1], q_inputs["attention_mask"])
+                        q_out.hidden_states[-1], q_inputs["attention_mask"]
+                    )
 
                     # Forward: image embeddings
                     i_out = model(**i_inputs, output_hidden_states=True)
                     i_emb = pool_and_normalize(
-                        i_out.hidden_states[-1], i_inputs["attention_mask"])
+                        i_out.hidden_states[-1], i_inputs["attention_mask"]
+                    )
 
                     loss = info_nce_loss(q_emb, i_emb, temperature=config.temperature)
                     loss.backward()
@@ -212,13 +234,16 @@ def train(config):
                 lr = scheduler.get_last_lr()[0]
                 gpu_mem = torch.cuda.memory_allocated(config.gpu_id) / 1e9
 
-                wandb.log({
-                    "loss": loss_val,
-                    "lr": lr,
-                    "batch_time": dt,
-                    "pairs_per_sec": config.batch_size / dt,
-                    "gpu_mem_gb": gpu_mem,
-                }, step=step)
+                wandb.log(
+                    {
+                        "loss": loss_val,
+                        "lr": lr,
+                        "batch_time": dt,
+                        "pairs_per_sec": config.batch_size / dt,
+                        "gpu_mem_gb": gpu_mem,
+                    },
+                    step=step,
+                )
                 _log(
                     f"step={step} loss={loss_val:.4f} lr={lr:.2e} "
                     f"batch_time={dt:.1f}s pairs/s={config.batch_size / dt:.1f} "
@@ -228,12 +253,20 @@ def train(config):
                 # Eval
                 if step % config.eval_every == 0:
                     r1, r10, mrr = run_eval(
-                        model, processor, config.eval_jsonl, device,
+                        model,
+                        processor,
+                        config.eval_jsonl,
+                        device,
                         batch_size=config.batch_size,
                     )
-                    wandb.log({
-                        "recall@1": r1, "recall@10": r10, "mrr": mrr,
-                    }, step=step)
+                    wandb.log(
+                        {
+                            "recall@1": r1,
+                            "recall@10": r10,
+                            "mrr": mrr,
+                        },
+                        step=step,
+                    )
                     _log(
                         f"eval step={step} recall@1={r1:.3f} recall@10={r10:.3f} mrr={mrr:.3f}"
                     )
@@ -242,8 +275,15 @@ def train(config):
 
                 # Checkpoint
                 if step % config.save_every == 0:
-                    save_checkpoint(model, optimizer, scheduler, step, config,
-                                    best_recall_10, loss_history)
+                    save_checkpoint(
+                        model,
+                        optimizer,
+                        scheduler,
+                        step,
+                        config,
+                        best_recall_10,
+                        loss_history,
+                    )
 
                 if step >= config.max_steps:
                     break
@@ -254,13 +294,17 @@ def train(config):
         signal.signal(signal.SIGINT, original_sigint)
 
     # Final checkpoint
-    save_checkpoint(model, optimizer, scheduler, step, config, best_recall_10, loss_history)
+    save_checkpoint(
+        model, optimizer, scheduler, step, config, best_recall_10, loss_history
+    )
     wandb.finish()
     _log("Training complete!")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="LoRA fine-tuning for Qwen3-VL embeddings")
+    parser = argparse.ArgumentParser(
+        description="LoRA fine-tuning for Qwen3-VL embeddings"
+    )
     parser.add_argument("--model", default="Qwen/Qwen3-VL-Embedding-2B")
     parser.add_argument("--gpu-id", type=int, default=2)
     parser.add_argument("--train-jsonl", default="training/data/train.jsonl")
@@ -270,19 +314,33 @@ def main():
     parser.add_argument("--resume", type=str, default=None)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--lr", type=float, default=2e-5)
-    parser.add_argument("--warmup-steps", type=int, default=None,
-                        help="Warmup steps (default: 5% of max_steps)")
+    parser.add_argument(
+        "--warmup-steps",
+        type=int,
+        default=None,
+        help="Warmup steps (default: 5% of max_steps)",
+    )
     parser.add_argument("--max-steps", type=int, default=500)
-    parser.add_argument("--scheduler", choices=["cosine", "constant"], default="constant")
+    parser.add_argument(
+        "--scheduler", choices=["cosine", "constant"], default="constant"
+    )
     parser.add_argument("--temperature", type=float, default=0.07)
     parser.add_argument("--eval-every", type=int, default=100)
     parser.add_argument("--save-every", type=int, default=100)
     parser.add_argument("--lora-r", type=int, default=32)
     parser.add_argument("--lora-alpha", type=int, default=32)
-    parser.add_argument("--min-pixels", type=int, default=128 * 28 * 28,
-                        help="Min image pixels for processor (default: 128*28*28)")
-    parser.add_argument("--max-pixels", type=int, default=256 * 28 * 28,
-                        help="Max image pixels for processor (default: 256*28*28)")
+    parser.add_argument(
+        "--min-pixels",
+        type=int,
+        default=128 * 28 * 28,
+        help="Min image pixels for processor (default: 128*28*28)",
+    )
+    parser.add_argument(
+        "--max-pixels",
+        type=int,
+        default=256 * 28 * 28,
+        help="Max image pixels for processor (default: 256*28*28)",
+    )
     config = parser.parse_args()
     if config.warmup_steps is None:
         config.warmup_steps = max(1, (config.max_steps + 19) // 20)

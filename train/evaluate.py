@@ -17,11 +17,17 @@ logger = logging.getLogger(__name__)
 
 def _chunk(lst, n):
     for i in range(0, len(lst), n):
-        yield lst[i:i + n]
+        yield lst[i : i + n]
 
 
-def run_eval(model, processor, eval_jsonl: str, device: str,
-             batch_size: int = 16, max_pairs: int = 200) -> tuple[float, float, float]:
+def run_eval(
+    model,
+    processor,
+    eval_jsonl: str,
+    device: str,
+    batch_size: int = 16,
+    max_pairs: int = 200,
+) -> tuple[float, float, float]:
     """Embed eval queries + images, compute Recall@1, Recall@10, MRR.
 
     Args:
@@ -56,36 +62,63 @@ def run_eval(model, processor, eval_jsonl: str, device: str,
             queries, images = zip(*valid)
 
             # Query embeddings
-            q_messages = [[
-                {"role": "system", "content": [{"type": "text", "text": QUERY_INSTRUCTION}]},
-                {"role": "user", "content": [{"type": "text", "text": q}]},
-            ] for q in queries]
+            q_messages = [
+                [
+                    {
+                        "role": "system",
+                        "content": [{"type": "text", "text": QUERY_INSTRUCTION}],
+                    },
+                    {"role": "user", "content": [{"type": "text", "text": q}]},
+                ]
+                for q in queries
+            ]
             q_texts = [
-                processor.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
+                processor.apply_chat_template(
+                    m, tokenize=False, add_generation_prompt=True
+                )
                 for m in q_messages
             ]
             q_inputs = processor(text=q_texts, return_tensors="pt", padding=True)
-            q_inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in q_inputs.items()}
+            q_inputs = {
+                k: v.to(device) if hasattr(v, "to") else v for k, v in q_inputs.items()
+            }
             q_out = model(**q_inputs, output_hidden_states=True)
-            q_emb = pool_and_normalize(q_out.hidden_states[-1], q_inputs["attention_mask"])
+            q_emb = pool_and_normalize(
+                q_out.hidden_states[-1], q_inputs["attention_mask"]
+            )
             q_embs_list.append(q_emb.cpu().float().numpy())
 
             # Image embeddings
-            i_messages = [[
-                {"role": "system", "content": [{"type": "text", "text": DOC_INSTRUCTION}]},
-                {"role": "user", "content": [{"type": "image", "image": img}]},
-            ] for img in images]
+            i_messages = [
+                [
+                    {
+                        "role": "system",
+                        "content": [{"type": "text", "text": DOC_INSTRUCTION}],
+                    },
+                    {"role": "user", "content": [{"type": "image", "image": img}]},
+                ]
+                for img in images
+            ]
             i_texts = [
-                processor.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
+                processor.apply_chat_template(
+                    m, tokenize=False, add_generation_prompt=True
+                )
                 for m in i_messages
             ]
             i_inputs = processor(
-                text=i_texts, images=list(images), return_tensors="pt",
-                padding=True, device=device,
+                text=i_texts,
+                images=list(images),
+                return_tensors="pt",
+                padding=True,
+                device=device,
             )
-            i_inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in i_inputs.items()}
+            i_inputs = {
+                k: v.to(device) if hasattr(v, "to") else v for k, v in i_inputs.items()
+            }
             i_out = model(**i_inputs, output_hidden_states=True)
-            i_emb = pool_and_normalize(i_out.hidden_states[-1], i_inputs["attention_mask"])
+            i_emb = pool_and_normalize(
+                i_out.hidden_states[-1], i_inputs["attention_mask"]
+            )
             i_embs_list.append(i_emb.cpu().float().numpy())
 
     if not q_embs_list:

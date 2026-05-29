@@ -30,7 +30,6 @@ import struct
 import subprocess
 import time
 import urllib.request
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 logger = logging.getLogger("pixelrag_render.backends.fast_cdp")
@@ -82,6 +81,7 @@ _WAIT_FONTS_IMGS = """new Promise(resolve => {
 # Subprocess: JPEG compression (runs in ProcessPoolExecutor worker)
 # ---------------------------------------------------------------------------
 
+
 def compress_tile(raw_path: str, out_path: str, quality: int = 85) -> None:
     """Read raw BGRA file, compress to JPEG, delete raw file.
 
@@ -106,6 +106,7 @@ def compress_tile(raw_path: str, out_path: str, quality: int = 85) -> None:
 # ---------------------------------------------------------------------------
 
 _port_counter = 0
+
 
 def _next_base_port() -> int:
     global _port_counter
@@ -204,7 +205,9 @@ class _Conn:
         await self._ws.send(json.dumps(msg))
         return await asyncio.wait_for(fut, timeout=180)
 
-    async def wait_for_event(self, method: str, timeout: float = 30.0, filter_fn=None) -> dict:
+    async def wait_for_event(
+        self, method: str, timeout: float = 30.0, filter_fn=None
+    ) -> dict:
         self._ensure_recv()
         loop = asyncio.get_event_loop()
         fut: asyncio.Future = loop.create_future()
@@ -213,7 +216,9 @@ class _Conn:
             return await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
         except asyncio.TimeoutError:
             listeners = self._event_listeners.get(method, [])
-            self._event_listeners[method] = [(f, fn) for f, fn in listeners if f is not fut]
+            self._event_listeners[method] = [
+                (f, fn) for f, fn in listeners if f is not fut
+            ]
             if not fut.done():
                 fut.cancel()
             raise
@@ -233,6 +238,7 @@ class _Conn:
 # ---------------------------------------------------------------------------
 # Core render logic
 # ---------------------------------------------------------------------------
+
 
 async def _run_render(
     articles: list[dict],
@@ -310,8 +316,12 @@ async def _run_render(
     connections: list[_Conn] = []
     frame_ids: list[str] = []
 
-    logger.info("Launching %d Chrome workers on ports %d-%d",
-                n_workers, base_port, base_port + n_workers - 1)
+    logger.info(
+        "Launching %d Chrome workers on ports %d-%d",
+        n_workers,
+        base_port,
+        base_port + n_workers - 1,
+    )
     for i in range(n_workers):
         ws, proc = await _launch_chrome(chrome_path, base_port + i)
         conn = _Conn(ws, proc)
@@ -319,12 +329,15 @@ async def _run_render(
 
     for i, conn in enumerate(connections):
         await conn.cdp("Page.enable")
-        await conn.cdp("Emulation.setDeviceMetricsOverride", {
-            "width": VIEWPORT_WIDTH,
-            "height": tile_height,
-            "deviceScaleFactor": 1,
-            "mobile": False,
-        })
+        await conn.cdp(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": VIEWPORT_WIDTH,
+                "height": tile_height,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+            },
+        )
         ft = await conn.cdp("Page.getFrameTree")
         frame_ids.append(ft["result"]["frameTree"]["frame"]["id"])
 
@@ -343,7 +356,11 @@ async def _run_render(
 
             art_path = article["path"]
             raw_file_val = article.get("file", "")
-            target_url = raw_file_val if raw_file_val.startswith("http") else f"file://{raw_file_val}"
+            target_url = (
+                raw_file_val
+                if raw_file_val.startswith("http")
+                else f"file://{raw_file_val}"
+            )
 
             # Make output tile dir: use path slug
             slug = art_path.replace("/", "_").replace(" ", "_")[:200] or "article"
@@ -370,17 +387,22 @@ async def _run_render(
                 try:
                     await nav_event_fut
                 except asyncio.TimeoutError:
-                    logger.warning("[w%d] frameStoppedLoading timeout for %s", wi, art_path)
+                    logger.warning(
+                        "[w%d] frameStoppedLoading timeout for %s", wi, art_path
+                    )
                     metrics["errors"] += 1
                     continue
 
                 # Wait for fonts + images, get page height
                 try:
-                    r = await conn.cdp("Runtime.evaluate", {
-                        "expression": _WAIT_FONTS_IMGS,
-                        "awaitPromise": True,
-                        "returnByValue": True,
-                    })
+                    r = await conn.cdp(
+                        "Runtime.evaluate",
+                        {
+                            "expression": _WAIT_FONTS_IMGS,
+                            "awaitPromise": True,
+                            "returnByValue": True,
+                        },
+                    )
                     page_h = r["result"]["result"]["value"]
                     if not page_h or page_h <= 0:
                         page_h = tile_height
@@ -400,8 +422,10 @@ async def _run_render(
                     if t > 0:
                         y = t * tile_height
                         try:
-                            await conn.cdp("Runtime.evaluate", {
-                                "expression": f"""new Promise(resolve => {{
+                            await conn.cdp(
+                                "Runtime.evaluate",
+                                {
+                                    "expression": f"""new Promise(resolve => {{
                                     window.scrollTo(0, {y});
                                     requestAnimationFrame(() => requestAnimationFrame(() => {{
                                         const imgs = Array.from(document.images).filter(i => {{
@@ -418,8 +442,9 @@ async def _run_render(
                                         Promise.race([loaded, timeout]).then(resolve);
                                     }}));
                                 }})""",
-                                "awaitPromise": True,
-                            })
+                                    "awaitPromise": True,
+                                },
+                            )
                         except Exception:
                             pass
 
@@ -430,29 +455,39 @@ async def _run_render(
                     await capture_sem.acquire()
                     try:
                         t0 = time.monotonic()
-                        r = await conn.cdp("Page.captureScreenshot", {
-                            "fromSurface": True,
-                            "optimizeForSpeed": True,
-                            "rawFilePath": raw_path,
-                            "clip": {
-                                "x": 0,
-                                "y": t * tile_height,
-                                "width": VIEWPORT_WIDTH,
-                                "height": clip_h,
-                                "scale": 1,
+                        r = await conn.cdp(
+                            "Page.captureScreenshot",
+                            {
+                                "fromSurface": True,
+                                "optimizeForSpeed": True,
+                                "rawFilePath": raw_path,
+                                "clip": {
+                                    "x": 0,
+                                    "y": t * tile_height,
+                                    "width": VIEWPORT_WIDTH,
+                                    "height": clip_h,
+                                    "scale": 1,
+                                },
                             },
-                        })
+                        )
                         shot_ms = (time.monotonic() - t0) * 1000
                     except Exception as e:
-                        logger.warning("[w%d] capture failed tile %d of %s: %s", wi, t, art_path, e)
+                        logger.warning(
+                            "[w%d] capture failed tile %d of %s: %s", wi, t, art_path, e
+                        )
                         metrics["errors"] += 1
                         continue
                     finally:
                         capture_sem.release()
 
                     if "error" in r.get("result", {}):
-                        logger.warning("[w%d] CDP error tile %d of %s: %s",
-                                       wi, t, art_path, r["result"]["error"])
+                        logger.warning(
+                            "[w%d] CDP error tile %d of %s: %s",
+                            wi,
+                            t,
+                            art_path,
+                            r["result"]["error"],
+                        )
                         metrics["errors"] += 1
                         continue
 
@@ -475,8 +510,13 @@ async def _run_render(
                     json.dump(manifest, f)
 
                 metrics["total_tiles"] += n_written
-                logger.info("[w%d] %s → %d tiles (%.0f ms capture)",
-                            wi, art_path, n_written, shot_ms if n_tiles == 1 else 0)
+                logger.info(
+                    "[w%d] %s → %d tiles (%.0f ms capture)",
+                    wi,
+                    art_path,
+                    n_written,
+                    shot_ms if n_tiles == 1 else 0,
+                )
 
             except Exception as e:
                 logger.warning("[w%d] unexpected error for %s: %s", wi, art_path, e)
@@ -488,8 +528,12 @@ async def _run_render(
     capture_wall_s = time.monotonic() - t_start
     total = metrics["total_tiles"]
     capture_tps = total / capture_wall_s if capture_wall_s > 0 else 0.0
-    logger.info("Capture done: %d tiles in %.1fs (%.1f tiles/s)",
-                total, capture_wall_s, capture_tps)
+    logger.info(
+        "Capture done: %d tiles in %.1fs (%.1f tiles/s)",
+        total,
+        capture_wall_s,
+        capture_tps,
+    )
 
     # Wait for compression — run in thread to avoid blocking asyncio event loop
     import threading
@@ -510,8 +554,13 @@ async def _run_render(
     wall_s = time.monotonic() - t_start
     tps = total / wall_s if wall_s > 0 else 0.0
 
-    logger.info("Done: %d tiles in %.1fs (%.1f tiles/s, capture=%.1f tiles/s)",
-                total, wall_s, tps, capture_tps)
+    logger.info(
+        "Done: %d tiles in %.1fs (%.1f tiles/s, capture=%.1f tiles/s)",
+        total,
+        wall_s,
+        tps,
+        capture_tps,
+    )
     return {
         "total_tiles": total,
         "wall_s": wall_s,
@@ -519,15 +568,14 @@ async def _run_render(
         "capture_tiles_per_s": capture_tps,
         "tiles_per_s": tps,
         "errors": metrics["errors"],
-        "avg_capture_ms": (
-            metrics["total_capture_ms"] / total if total > 0 else 0.0
-        ),
+        "avg_capture_ms": (metrics["total_capture_ms"] / total if total > 0 else 0.0),
     }
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 async def render_articles(
     articles: list[dict],
@@ -562,11 +610,17 @@ async def render_articles(
             ``avg_capture_ms``  – average per-tile capture time (ms)
     """
     if not articles:
-        return {"total_tiles": 0, "wall_s": 0.0, "tiles_per_s": 0.0,
-                "errors": 0, "avg_capture_ms": 0.0}
+        return {
+            "total_tiles": 0,
+            "wall_s": 0.0,
+            "tiles_per_s": 0.0,
+            "errors": 0,
+            "avg_capture_ms": 0.0,
+        }
 
     if chrome_path is None:
         from ..chrome import find_chrome
+
         chrome_path = find_chrome()
 
     actual_workers = min(n_workers, len(articles))

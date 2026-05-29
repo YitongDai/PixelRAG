@@ -37,6 +37,7 @@ def encode_image(path: str, max_bytes: int = 4_000_000) -> str | None:
             # For large images, re-encode smaller via PIL to stay under limit
             from PIL import Image
             import io
+
             Image.MAX_IMAGE_PIXELS = 300_000_000
             img = Image.open(path)
             if img.mode != "RGB":
@@ -46,7 +47,7 @@ def encode_image(path: str, max_bytes: int = 4_000_000) -> str | None:
             m = max(w, h)
             if m > 1024:
                 s = 1024 / m
-                img = img.resize((int(w*s), int(h*s)), Image.Resampling.LANCZOS)
+                img = img.resize((int(w * s), int(h * s)), Image.Resampling.LANCZOS)
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=85)
             data = buf.getvalue()
@@ -65,15 +66,23 @@ def process_one(client, model, ex, image_root):
     try:
         resp = client.chat.completions.create(
             model=model,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text",
-                     "text": PROMPT.format(query=ex["query"], answer=ex["answer"])},
-                    {"type": "image_url",
-                     "image_url": {"url": img_url, "detail": "high"}},
-                ],
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": PROMPT.format(
+                                query=ex["query"], answer=ex["answer"]
+                            ),
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": img_url, "detail": "high"},
+                        },
+                    ],
+                }
+            ],
             max_tokens=200,
             temperature=0.3,
         )
@@ -87,8 +96,11 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--input", required=True)
     p.add_argument("--output", required=True)
-    p.add_argument("--image-root", required=True,
-                   help="Dataset root containing the images/ subtree that chunk_path points into")
+    p.add_argument(
+        "--image-root",
+        required=True,
+        help="Dataset root containing the images/ subtree that chunk_path points into",
+    )
     p.add_argument("--n", type=int, default=30000)
     p.add_argument("--model", default="gpt-4.1-mini-2025-04-14")
     p.add_argument("--concurrency", type=int, default=64)
@@ -101,6 +113,7 @@ def main():
 
     if args.n > 0 and args.n < len(data):
         import random
+
         rng = random.Random(args.seed)
         data = rng.sample(data, args.n)
         print(f"Sampled {len(data)} examples (seed={args.seed})")
@@ -126,8 +139,13 @@ def main():
     fail = 0
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        futures = [pool.submit(process_one, client, args.model, ex, args.image_root) for ex in todo]
-        for fut in tqdm(as_completed(futures), total=len(todo), desc="GPT vision trace"):
+        futures = [
+            pool.submit(process_one, client, args.model, ex, args.image_root)
+            for ex in todo
+        ]
+        for fut in tqdm(
+            as_completed(futures), total=len(todo), desc="GPT vision trace"
+        ):
             r = fut.result()
             if r.get("reasoning") is None:
                 fail += 1

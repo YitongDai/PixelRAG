@@ -70,7 +70,10 @@ async def classify_batch(client, queries, batch_idx, sem):
                         "model": "gpt-4.1-mini",
                         "messages": [
                             {"role": "system", "content": SYSTEM},
-                            {"role": "user", "content": USER_TPL.format(n=len(queries), block=block)},
+                            {
+                                "role": "user",
+                                "content": USER_TPL.format(n=len(queries), block=block),
+                            },
                         ],
                         "temperature": 0,
                         "max_tokens": 400,
@@ -85,13 +88,15 @@ async def classify_batch(client, queries, batch_idx, sem):
                 if isinstance(labels, list):
                     while len(labels) < len(queries):
                         labels.append("S")
-                    return batch_idx, [str(x).upper().strip('"') for x in labels[:len(queries)]]
+                    return batch_idx, [
+                        str(x).upper().strip('"') for x in labels[: len(queries)]
+                    ]
                 return batch_idx, ["S"] * len(queries)
             except Exception as e:
                 if attempt == 2:
                     logger.warning(f"Batch {batch_idx}: {e}")
                     return batch_idx, ["S"] * len(queries)
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
 
 
 async def main():
@@ -118,7 +123,7 @@ async def main():
     queries = [r["query"] for r in records]
     batches = []
     for i in range(0, len(queries), args.batch_size):
-        batches.append(queries[i:i + args.batch_size])
+        batches.append(queries[i : i + args.batch_size])
     logger.info(f"{len(batches)} batches")
 
     labels_all = ["S"] * N
@@ -144,11 +149,15 @@ async def main():
                 elapsed = time.time() - t0
                 rate = done / elapsed if elapsed > 0 else 1
                 eta = (len(tasks) - done) / rate
-                logger.info(f"{done}/{len(tasks)}, P={p_count} ({p_count/N*100:.1f}%), ETA {eta:.0f}s")
+                logger.info(
+                    f"{done}/{len(tasks)}, P={p_count} ({p_count / N * 100:.1f}%), ETA {eta:.0f}s"
+                )
 
     p_count = sum(1 for x in labels_all if x.startswith("P"))
     s_count = N - p_count
-    logger.info(f"\nClassification: P={p_count} ({p_count/N*100:.1f}%), S={s_count} ({s_count/N*100:.1f}%)")
+    logger.info(
+        f"\nClassification: P={p_count} ({p_count / N * 100:.1f}%), S={s_count} ({s_count / N * 100:.1f}%)"
+    )
 
     # Write passage-only
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
@@ -162,6 +171,7 @@ async def main():
 
     # Chunk position breakdown
     from collections import Counter
+
     def parse_pos(path):
         m = re.search(r"chunk_(\d+)_(\d+)\.png", path)
         return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
@@ -170,7 +180,9 @@ async def main():
     s_pos = Counter()
     for i in range(N):
         p, c = parse_pos(records[i]["chunk_path"])
-        bucket = "c0" if c == 0 else ("c1" if c == 1 else ("c2-3" if c <= 3 else "c4+/p1+"))
+        bucket = (
+            "c0" if c == 0 else ("c1" if c == 1 else ("c2-3" if c <= 3 else "c4+/p1+"))
+        )
         if p >= 1:
             bucket = "c4+/p1+"
         if labels_all[i].startswith("P"):
@@ -180,13 +192,14 @@ async def main():
 
     logger.info("Passage (P) by position:")
     for k in ["c0", "c1", "c2-3", "c4+/p1+"]:
-        logger.info(f"  {k}: {p_pos.get(k,0)}")
+        logger.info(f"  {k}: {p_pos.get(k, 0)}")
     logger.info("Structured (S) by position:")
     for k in ["c0", "c1", "c2-3", "c4+/p1+"]:
-        logger.info(f"  {k}: {s_pos.get(k,0)}")
+        logger.info(f"  {k}: {s_pos.get(k, 0)}")
 
     # Save sample of each for visual verification
     import random
+
     random.seed(42)
     p_indices = [i for i in range(N) if labels_all[i].startswith("P")]
     s_indices = [i for i in range(N) if labels_all[i].startswith("S")]

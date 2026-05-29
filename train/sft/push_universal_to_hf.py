@@ -12,13 +12,23 @@ TOKEN = os.environ["HF_TOKEN"]
 USER = "Chrisyichuan"
 REPO_ID = f"{USER}/qwen3vl-4b-wiki-screenshot-universal-lora"
 
-SRC = Path("/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_mixed_llmvit_v2/checkpoint-6503")
+SRC = Path(
+    "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_mixed_llmvit_v2/checkpoint-6503"
+)
 
 KEEP_FILES = {
-    "adapter_config.json", "adapter_model.safetensors", "added_tokens.json",
-    "chat_template.jinja", "merges.txt", "preprocessor_config.json",
-    "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json",
-    "training_args.bin", "trainer_state.json", "video_preprocessor_config.json",
+    "adapter_config.json",
+    "adapter_model.safetensors",
+    "added_tokens.json",
+    "chat_template.jinja",
+    "merges.txt",
+    "preprocessor_config.json",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "training_args.bin",
+    "trainer_state.json",
+    "video_preprocessor_config.json",
     "vocab.json",
 }
 
@@ -120,8 +130,12 @@ def main():
         (tmp / "README.md").write_text(README)
         print("  + README.md")
         create_repo(REPO_ID, token=TOKEN, exist_ok=True, private=False)
-        upload_folder(folder_path=str(tmp), repo_id=REPO_ID, token=TOKEN,
-                      commit_message="Upload universal LoRA adapter (LLM+ViT on 2x/3x/5x/9x mixed, step 6503)")
+        upload_folder(
+            folder_path=str(tmp),
+            repo_id=REPO_ID,
+            token=TOKEN,
+            commit_message="Upload universal LoRA adapter (LLM+ViT on 2x/3x/5x/9x mixed, step 6503)",
+        )
         print(f"  uploaded → https://huggingface.co/{REPO_ID}")
 
 

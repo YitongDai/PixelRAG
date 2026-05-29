@@ -55,17 +55,23 @@ class CDPParallelStrategy:
             for i in range(self.n_workers):
                 port = self._base_port + i
                 conn = await launch_websocket(
-                    self.chrome_path, port,
+                    self.chrome_path,
+                    port,
                     headless_shell=self.headless_shell,
                 )
                 self._connections.append(conn)
 
         for conn in self._connections:
             await conn.cdp("Page.enable")
-            await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                "deviceScaleFactor": 1, "mobile": False,
-            })
+            await conn.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": TILE_HEIGHT,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
 
         if self.fmt == "raw":
             os.makedirs("/dev/shm/pixelrag_bench", exist_ok=True)
@@ -129,9 +135,11 @@ class CDPParallelStrategy:
 
         # Fire all tile requests at once
         # Need raw websocket access for parallel sends
-        if not hasattr(conn, '_ws'):
+        if not hasattr(conn, "_ws"):
             # Playwright connection — fall back to sequential
-            return await self._capture_sequential_fallback(conn, wi, article, ac, page_h, nav_ms)
+            return await self._capture_sequential_fallback(
+                conn, wi, article, ac, page_h, nav_ms
+            )
 
         ws = conn._ws
         pending = []
@@ -149,8 +157,11 @@ class CDPParallelStrategy:
                 "fromSurface": self.from_surface,
                 "optimizeForSpeed": True,
                 "clip": {
-                    "x": 0, "y": t * TILE_HEIGHT,
-                    "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1,
+                    "x": 0,
+                    "y": t * TILE_HEIGHT,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
                 },
             }
 
@@ -163,11 +174,15 @@ class CDPParallelStrategy:
                 if self.fmt == "jpeg":
                     params["quality"] = self.quality
 
-            await ws.send(json.dumps({
-                "id": mid,
-                "method": "Page.captureScreenshot",
-                "params": params,
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "id": mid,
+                        "method": "Page.captureScreenshot",
+                        "params": params,
+                    }
+                )
+            )
             pending.append((mid, t, clip_h, raw_path))
 
         # Collect all responses
@@ -216,7 +231,13 @@ class CDPParallelStrategy:
         params = {
             "fromSurface": self.from_surface,
             "optimizeForSpeed": True,
-            "clip": {"x": 0, "y": 0, "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1},
+            "clip": {
+                "x": 0,
+                "y": 0,
+                "width": VIEWPORT_WIDTH,
+                "height": clip_h,
+                "scale": 1,
+            },
         }
         raw_path = None
         if self.fmt == "raw":
@@ -237,8 +258,9 @@ class CDPParallelStrategy:
         ac.total_shot_ms = shot_ms
 
         if "error" not in r:
-            tc = TileCapture(shot_ms=shot_ms, nav_ms=nav_ms, tile_index=0,
-                             clip_y=0, clip_h=clip_h)
+            tc = TileCapture(
+                shot_ms=shot_ms, nav_ms=nav_ms, tile_index=0, clip_y=0, clip_h=clip_h
+            )
             if self.fmt == "raw":
                 tc.raw_file_path = raw_path
             else:
@@ -255,9 +277,15 @@ class CDPParallelStrategy:
             if clip_h <= 28:
                 break
             params = {
-                "fromSurface": self.from_surface, "optimizeForSpeed": True,
-                "clip": {"x": 0, "y": t * TILE_HEIGHT,
-                         "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1},
+                "fromSurface": self.from_surface,
+                "optimizeForSpeed": True,
+                "clip": {
+                    "x": 0,
+                    "y": t * TILE_HEIGHT,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
+                },
             }
             if self.fmt == "raw":
                 raw_path = f"/dev/shm/pixelrag_bench/w{wi}_{id(article)}_{t}.raw"
@@ -277,8 +305,13 @@ class CDPParallelStrategy:
             ac.total_shot_ms += shot_ms
 
             if "error" not in r:
-                tc = TileCapture(shot_ms=shot_ms, nav_ms=nav_ms if t == 0 else 0.0,
-                                 tile_index=t, clip_y=t * TILE_HEIGHT, clip_h=clip_h)
+                tc = TileCapture(
+                    shot_ms=shot_ms,
+                    nav_ms=nav_ms if t == 0 else 0.0,
+                    tile_index=t,
+                    clip_y=t * TILE_HEIGHT,
+                    clip_h=clip_h,
+                )
                 if self.fmt == "raw":
                     tc.raw_file_path = raw_path
                 else:

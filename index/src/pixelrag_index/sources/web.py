@@ -68,7 +68,11 @@ class WebSource(Source):
             p = Path(urls_file)
             if p.exists():
                 with open(p) as f:
-                    self._urls = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+                    self._urls = [
+                        line.strip()
+                        for line in f
+                        if line.strip() and not line.startswith("#")
+                    ]
             else:
                 raise FileNotFoundError(f"urls_file not found: {urls_file}")
 

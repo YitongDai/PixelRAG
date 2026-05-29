@@ -11,7 +11,9 @@ from huggingface_hub import HfApi
 from huggingface_hub.errors import HfHubHTTPError
 
 
-DEFAULT_LOCAL_DIR = Path("/home/user/wiki-screenshot-training/hf_dataset_export_sharded/screenshot-training")
+DEFAULT_LOCAL_DIR = Path(
+    "/home/user/wiki-screenshot-training/hf_dataset_export_sharded/screenshot-training"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -20,8 +22,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--local-dir", type=Path, default=DEFAULT_LOCAL_DIR)
     parser.add_argument("--repo-type", default="dataset")
     parser.add_argument("--private", action="store_true")
-    parser.add_argument("--skip-create", action="store_true",
-                        help="Skip create_repo (use if repo already exists)")
+    parser.add_argument(
+        "--skip-create",
+        action="store_true",
+        help="Skip create_repo (use if repo already exists)",
+    )
     return parser.parse_args()
 
 
@@ -32,8 +37,10 @@ def retry_on_429(fn, max_retries=5, initial_wait=60):
             return fn()
         except HfHubHTTPError as e:
             if "429" in str(e) and attempt < max_retries - 1:
-                wait = initial_wait * (2 ** attempt)
-                print(f"Rate limited (429). Waiting {wait}s before retry {attempt + 2}/{max_retries}...")
+                wait = initial_wait * (2**attempt)
+                print(
+                    f"Rate limited (429). Waiting {wait}s before retry {attempt + 2}/{max_retries}..."
+                )
                 time.sleep(wait)
             else:
                 raise
@@ -45,12 +52,14 @@ def main() -> int:
 
     if not args.skip_create:
         print("Creating repo (with retry)...")
-        retry_on_429(lambda: api.create_repo(
-            repo_id=args.repo_id,
-            repo_type=args.repo_type,
-            exist_ok=True,
-            private=args.private,
-        ))
+        retry_on_429(
+            lambda: api.create_repo(
+                repo_id=args.repo_id,
+                repo_type=args.repo_type,
+                exist_ok=True,
+                private=args.private,
+            )
+        )
         print("Repo ready.")
 
     print(f"Uploading {args.local_dir} ...")
@@ -59,7 +68,9 @@ def main() -> int:
         repo_type=args.repo_type,
         folder_path=str(args.local_dir),
     )
-    print(f"Uploaded {args.local_dir} -> https://huggingface.co/datasets/{args.repo_id}")
+    print(
+        f"Uploaded {args.local_dir} -> https://huggingface.co/datasets/{args.repo_id}"
+    )
     return 0
 
 

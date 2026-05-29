@@ -48,16 +48,24 @@ def strip_image_tokens(s: str) -> str:
     return s.replace("<image>", "").lstrip("\n ")
 
 
-def run_inference(model, processor, examples, device, desc, max_new_tokens=128,
-                  enable_thinking=False):
+def run_inference(
+    model, processor, examples, device, desc, max_new_tokens=128, enable_thinking=False
+):
     results = []
     for ex in tqdm(examples, desc=desc):
         images = ex.get("images", [])
         # Verify all images exist
         missing = [p for p in images if not os.path.exists(p)]
         if missing:
-            results.append({"query": ex.get("_query", ""), "golden": ex.get("_golden", ""),
-                            "predicted": "", "image_missing": True, "missing_paths": missing})
+            results.append(
+                {
+                    "query": ex.get("_query", ""),
+                    "golden": ex.get("_golden", ""),
+                    "predicted": "",
+                    "image_missing": True,
+                    "missing_paths": missing,
+                }
+            )
             continue
 
         user_msg = next(m for m in ex["messages"] if m["role"] == "user")
@@ -70,26 +78,37 @@ def run_inference(model, processor, examples, device, desc, max_new_tokens=128,
         messages = [{"role": "user", "content": content}]
 
         text = processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
             enable_thinking=enable_thinking,
         )
         image_inputs, video_inputs = process_vision_info(messages)
-        inputs = processor(text=[text], images=image_inputs, videos=video_inputs,
-                           padding=True, return_tensors="pt").to(device)
+        inputs = processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        ).to(device)
 
         with torch.no_grad():
-            out_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-        gen_ids = out_ids[0][inputs.input_ids.shape[1]:]
+            out_ids = model.generate(
+                **inputs, max_new_tokens=max_new_tokens, do_sample=False
+            )
+        gen_ids = out_ids[0][inputs.input_ids.shape[1] :]
         pred = processor.decode(gen_ids, skip_special_tokens=True).strip()
 
-        results.append({
-            "query": query,
-            "golden": golden,
-            "predicted": pred,
-            "n_images": len(images),
-            "gold_pos": ex.get("_gold_pos"),
-            "gold_in_top6_pos": ex.get("_gold_in_top6_pos"),
-        })
+        results.append(
+            {
+                "query": query,
+                "golden": golden,
+                "predicted": pred,
+                "n_images": len(images),
+                "gold_pos": ex.get("_gold_pos"),
+                "gold_in_top6_pos": ex.get("_gold_in_top6_pos"),
+            }
+        )
     return results
 
 
@@ -119,20 +138,23 @@ def compute_em_char(results):
 
 def grade_with_gpt(results, model: str, concurrency: int = 16):
     from openai import OpenAI
+
     client = OpenAI()
 
     def _grade(idx, r):
         try:
             resp = client.chat.completions.create(
                 model=model,
-                messages=[{
-                    "role": "user",
-                    "content": _GRADER_TEMPLATE.format(
-                        question=r["query"],
-                        target=r["golden"],
-                        predicted_answer=r["predicted"] or "(no answer)",
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": _GRADER_TEMPLATE.format(
+                            question=r["query"],
+                            target=r["golden"],
+                            predicted_answer=r["predicted"] or "(no answer)",
+                        ),
+                    }
+                ],
                 max_tokens=5,
                 temperature=0,
             )
@@ -157,16 +179,22 @@ def grade_with_gpt(results, model: str, concurrency: int = 16):
     for i, (grade, is_correct) in enumerate(verdicts):
         results[i]["judge_grade"] = grade
         results[i]["judge_correct"] = is_correct
-    return {"llm_judge_accuracy": correct / n if n else 0.0,
-            "llm_judge_correct": correct, "llm_judge_total": n}
+    return {
+        "llm_judge_accuracy": correct / n if n else 0.0,
+        "llm_judge_correct": correct,
+        "llm_judge_total": n,
+    }
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="Qwen/Qwen3-VL-4B-Instruct")
     p.add_argument("--adapter", default=None)
-    p.add_argument("--test-json", required=True,
-                   help="Path to <dataset_dir>/test.json from prepare_sft_data_multiimage.py")
+    p.add_argument(
+        "--test-json",
+        required=True,
+        help="Path to <dataset_dir>/test.json from prepare_sft_data_multiimage.py",
+    )
     p.add_argument("--n-examples", type=int, default=500)
     p.add_argument("--max-new-tokens", type=int, default=128)
     p.add_argument("--thinking", action="store_true")
@@ -176,7 +204,10 @@ def main():
     p.add_argument("--judge-model", default="gpt-4.1-2025-04-14")
     p.add_argument("--judge-concurrency", type=int, default=16)
     p.add_argument("--tag", required=True)
-    p.add_argument("--output-dir", default="/scratch/users/zwcolin/cxr_embeds/cxr_embedding/sft/eval_out")
+    p.add_argument(
+        "--output-dir",
+        default="/scratch/users/zwcolin/cxr_embeds/cxr_embedding/sft/eval_out",
+    )
     args = p.parse_args()
 
     if args.judge and not os.environ.get("OPENAI_API_KEY"):
@@ -185,10 +216,13 @@ def main():
 
     print(f"Loading base model: {args.model}")
     model = Qwen3VLForConditionalGeneration.from_pretrained(
-        args.model, torch_dtype=torch.bfloat16, device_map=args.device,
+        args.model,
+        torch_dtype=torch.bfloat16,
+        device_map=args.device,
     )
     if args.adapter:
         from peft import PeftModel
+
         print(f"Loading LoRA adapter: {args.adapter}")
         model = PeftModel.from_pretrained(model, args.adapter)
         model = model.merge_and_unload()
@@ -199,15 +233,21 @@ def main():
     with open(args.test_json) as f:
         examples = json.load(f)
     if args.n_examples > 0:
-        examples = examples[:args.n_examples]
+        examples = examples[: args.n_examples]
     print(f"Loaded {len(examples)} multi-image examples")
 
     if args.thinking and args.max_new_tokens < 512:
         args.max_new_tokens = 512
 
-    results = run_inference(model, processor, examples, args.device,
-                            desc=f"eval[{args.tag}]", max_new_tokens=args.max_new_tokens,
-                            enable_thinking=args.thinking)
+    results = run_inference(
+        model,
+        processor,
+        examples,
+        args.device,
+        desc=f"eval[{args.tag}]",
+        max_new_tokens=args.max_new_tokens,
+        enable_thinking=args.thinking,
+    )
 
     metrics = compute_em_char(results)
     print(f"\n=== {args.tag} ===")
@@ -216,10 +256,14 @@ def main():
     print(f"  char_accuracy: {metrics['char_accuracy']:.4f}")
 
     if args.judge:
-        judge_metrics = grade_with_gpt(results, args.judge_model, args.judge_concurrency)
+        judge_metrics = grade_with_gpt(
+            results, args.judge_model, args.judge_concurrency
+        )
         metrics.update(judge_metrics)
-        print(f"  llm_judge:     {metrics['llm_judge_accuracy']:.4f} "
-              f"({metrics['llm_judge_correct']}/{metrics['llm_judge_total']})")
+        print(
+            f"  llm_judge:     {metrics['llm_judge_accuracy']:.4f} "
+            f"({metrics['llm_judge_correct']}/{metrics['llm_judge_total']})"
+        )
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     out = {

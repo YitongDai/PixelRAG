@@ -85,17 +85,26 @@ def mine_from_search(
     all_hits: list[list[dict] | None] = [None] * len(unique_queries)
     batches = []
     for i in range(0, len(unique_queries), batch_size):
-        batch_queries = unique_queries[i:i + batch_size]
+        batch_queries = unique_queries[i : i + batch_size]
         batches.append((i, batch_queries, i // batch_size + 1))
     n_batches = len(batches)
     completed = 0
 
     def run_batch(batch_start: int, batch_queries: list[str], batch_idx: int):
-        return batch_start, batch_queries, batch_idx, search_batch(search_url, batch_queries, n_docs=n_docs)
+        return (
+            batch_start,
+            batch_queries,
+            batch_idx,
+            search_batch(search_url, batch_queries, n_docs=n_docs),
+        )
 
     with ThreadPoolExecutor(max_workers=max(1, search_workers)) as executor:
         futures = {
-            executor.submit(run_batch, batch_start, batch_queries, batch_idx): (batch_start, batch_queries, batch_idx)
+            executor.submit(run_batch, batch_start, batch_queries, batch_idx): (
+                batch_start,
+                batch_queries,
+                batch_idx,
+            )
             for batch_start, batch_queries, batch_idx in batches
         }
         for future in as_completed(futures):
@@ -145,7 +154,9 @@ def mine_from_search(
 
         query_negatives[q] = neg_hits
         query_metadata[q] = {
-            "retrieve_top20": [normalize_hit(hit, rank) for rank, hit in enumerate(hits)],
+            "retrieve_top20": [
+                normalize_hit(hit, rank) for rank, hit in enumerate(hits)
+            ],
             "positive_rank": pos_rank + 1 if pos_rank is not None else 0,
             "positive_score": pos_score if pos_score is not None else 0.0,
         }
@@ -172,7 +183,9 @@ def mine_from_search(
 
     total_queries = len(unique_queries)
     if total_queries > 0:
-        stats["avg_negs"] = sum(len(query_negatives[q]) for q in unique_queries) / total_queries
+        stats["avg_negs"] = (
+            sum(len(query_negatives[q]) for q in unique_queries) / total_queries
+        )
         stats["pos_found_rate"] = len(pos_ranks) / total_queries
         stats["pos_recall@1"] = sum(1 for r in pos_ranks if r == 0) / total_queries
         stats["pos_recall@10"] = sum(1 for r in pos_ranks if r < 10) / total_queries
@@ -185,8 +198,12 @@ def mine_from_search(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True, help="Input JSONL with query/article_id/chunk_index")
-    parser.add_argument("--output", required=True, help="Output JSONL with added neg_hits/neg_passages")
+    parser.add_argument(
+        "--input", required=True, help="Input JSONL with query/article_id/chunk_index"
+    )
+    parser.add_argument(
+        "--output", required=True, help="Output JSONL with added neg_hits/neg_passages"
+    )
     parser.add_argument("--search-url", default="http://localhost:30889/search")
     parser.add_argument("--health-url", default="http://localhost:30889/health")
     parser.add_argument("--health-timeout", type=int, default=30)
@@ -194,7 +211,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-docs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--search-workers", type=int, default=4)
-    parser.add_argument("--limit", type=int, default=0, help="Only process the first N rows (0=all)")
+    parser.add_argument(
+        "--limit", type=int, default=0, help="Only process the first N rows (0=all)"
+    )
     parser.add_argument("--stats-output", default=None)
     return parser.parse_args()
 
@@ -216,7 +235,11 @@ def main() -> None:
             if not line:
                 continue
             row = json.loads(line)
-            if "query" not in row or "article_id" not in row or "chunk_index" not in row:
+            if (
+                "query" not in row
+                or "article_id" not in row
+                or "chunk_index" not in row
+            ):
                 raise ValueError(f"Missing required fields at line {line_no}")
             pairs.append(row)
             if args.limit > 0 and len(pairs) >= args.limit:
@@ -240,7 +263,11 @@ def main() -> None:
 
     n_with_negs = sum(1 for p in output_pairs if p["neg_hits"])
     logger.info("Wrote %d pairs to %s", len(output_pairs), args.output)
-    logger.info("  %d with negatives (%.1f%%)", n_with_negs, 100.0 * n_with_negs / max(len(output_pairs), 1))
+    logger.info(
+        "  %d with negatives (%.1f%%)",
+        n_with_negs,
+        100.0 * n_with_negs / max(len(output_pairs), 1),
+    )
     logger.info("  Avg negatives per query: %.2f", stats["avg_negs"])
     logger.info("  Avg positive rank: %.2f", stats["avg_pos_rank"])
     logger.info("  Search API recall@1: %.3f", stats["pos_recall@1"])

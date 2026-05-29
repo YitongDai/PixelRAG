@@ -14,6 +14,7 @@ from typing import Protocol
 @dataclass
 class TileCapture:
     """Raw capture result for one tile. Decoded later during verification."""
+
     image_bytes: bytes | None = None
     raw_file_path: str | None = None
 
@@ -27,6 +28,7 @@ class TileCapture:
 @dataclass
 class ArticleCapture:
     """Raw capture results for all tiles of one article."""
+
     article_path: str
     tiles: list[TileCapture] = field(default_factory=list)
     page_height: int = 0
@@ -50,26 +52,20 @@ class ChromeConnection(Protocol):
         """Send a CDP command, wait for response."""
         ...
 
-    async def close(self) -> None:
-        ...
+    async def close(self) -> None: ...
 
 
 class CaptureStrategy(Protocol):
     """Interface for capture strategies."""
 
     @property
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
-    def fmt(self) -> str:
-        ...
+    def fmt(self) -> str: ...
 
-    async def setup(self) -> None:
-        ...
+    async def setup(self) -> None: ...
 
-    async def teardown(self) -> None:
-        ...
+    async def teardown(self) -> None: ...
 
-    async def capture_articles(self, articles: list[dict]) -> list[ArticleCapture]:
-        ...
+    async def capture_articles(self, articles: list[dict]) -> list[ArticleCapture]: ...

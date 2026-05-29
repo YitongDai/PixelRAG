@@ -39,7 +39,6 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
 import faiss
 import numpy as np
@@ -50,7 +49,9 @@ from PIL import Image
 from pydantic import BaseModel
 
 logger = logging.getLogger("search_api")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 
 app = FastAPI(title="PixelRAG Search API")
 
@@ -70,6 +71,7 @@ _state = {}
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class Query(BaseModel):
     text: str | None = None
     image: str | None = None  # base64-encoded image
@@ -79,10 +81,10 @@ class Query(BaseModel):
 class SearchRequest(BaseModel):
     queries: list[Query]
     n_docs: int = 10
-    nprobe: int | None = None          # override default nprobe
+    nprobe: int | None = None  # override default nprobe
     min_tile_height: int | None = None  # filter out small/blank chunks
-    instruction: str | None = None     # override query embedding instruction
-    include_images: bool = False       # return base64-encoded tile images
+    instruction: str | None = None  # override query embedding instruction
+    include_images: bool = False  # return base64-encoded tile images
 
 
 class Hit(BaseModel):
@@ -126,7 +128,9 @@ class StatusResponse(BaseModel):
 DEFAULT_INSTRUCTION = "Retrieve images or text relevant to the user's query."
 
 
-def _parse_queries(queries: list[Query], instruction: str | None = None) -> tuple[list[dict], list[Image.Image | None]]:
+def _parse_queries(
+    queries: list[Query], instruction: str | None = None
+) -> tuple[list[dict], list[Image.Image | None]]:
     """Parse queries into chat messages and optional images."""
     instr = DEFAULT_INSTRUCTION if instruction is None else instruction
     messages_list = []
@@ -143,11 +147,15 @@ def _parse_queries(queries: list[Query], instruction: str | None = None) -> tupl
         if q.text:
             user_content.append({"type": "text", "text": q.text})
         if not user_content:
-            raise HTTPException(status_code=400, detail="Query must have text, image, or both")
-        messages_list.append([
-            {"role": "system", "content": sys_content},
-            {"role": "user", "content": user_content},
-        ])
+            raise HTTPException(
+                status_code=400, detail="Query must have text, image, or both"
+            )
+        messages_list.append(
+            [
+                {"role": "system", "content": sys_content},
+                {"role": "user", "content": user_content},
+            ]
+        )
         images.append(img)
     return messages_list, images
 
@@ -172,7 +180,9 @@ def _encode_queries(queries: list[Query], instruction: str | None = None) -> np.
     # Separate image and non-image inputs for the processor
     img_list = [img for img in images if img is not None]
     if img_list:
-        inputs = processor(text=texts, images=img_list, return_tensors="pt", padding=True)
+        inputs = processor(
+            text=texts, images=img_list, return_tensors="pt", padding=True
+        )
     else:
         inputs = processor(text=texts, return_tensors="pt", padding=True)
     inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
@@ -209,7 +219,9 @@ def _normalize_query_embeddings(queries: list[Query]) -> np.ndarray:
 
     embeddings = np.asarray([q.embedding for q in queries], dtype=np.float32)
     if embeddings.ndim != 2:
-        raise HTTPException(status_code=400, detail="Embeddings must have shape [batch, dim].")
+        raise HTTPException(
+            status_code=400, detail="Embeddings must have shape [batch, dim]."
+        )
     expected_dim = _state["dimension"]
     if embeddings.shape[1] != expected_dim:
         raise HTTPException(
@@ -225,6 +237,7 @@ def _normalize_query_embeddings(queries: list[Query]) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Path / URL resolution
 # ---------------------------------------------------------------------------
+
 
 def _resolve_path(article_id: int, tile_index: int, chunk_index: int) -> str:
     """Resolve chunk file path from article_id, tile_index, chunk_index."""
@@ -249,7 +262,9 @@ def _resolve_path(article_id: int, tile_index: int, chunk_index: int) -> str:
 
     # Fallback: shard path without checking existence (serve may run without tiles)
     top_shard = article_id // shard_size
-    return os.path.join(tiles_dir, f"shard_{top_shard:03d}", "?", tiles_dirname, chunk_name)
+    return os.path.join(
+        tiles_dir, f"shard_{top_shard:03d}", "?", tiles_dirname, chunk_name
+    )
 
 
 def _resolve_url(article_id: int) -> str:
@@ -266,6 +281,7 @@ def _resolve_url(article_id: int) -> str:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.post("/search", response_model=SearchResponse)
 async def search(req: SearchRequest):
@@ -323,24 +339,32 @@ async def search(req: SearchRequest):
             if req.include_images and tile_path and os.path.exists(tile_path):
                 with open(tile_path, "rb") as fp:
                     img_b64 = base64.b64encode(fp.read()).decode()
-            hits.append(Hit(
-                score=float(distances[qi, j]),
-                vector_id=vid,
-                article_id=aid,
-                tile_index=ti,
-                chunk_index=ci,
-                y_offset=int(y_offsets[vid]),
-                tile_height=th,
-                path=tile_path,
-                url=_resolve_url(aid),
-                image_base64=img_b64,
-            ))
+            hits.append(
+                Hit(
+                    score=float(distances[qi, j]),
+                    vector_id=vid,
+                    article_id=aid,
+                    tile_index=ti,
+                    chunk_index=ci,
+                    y_offset=int(y_offsets[vid]),
+                    tile_height=th,
+                    path=tile_path,
+                    url=_resolve_url(aid),
+                    image_base64=img_b64,
+                )
+            )
             if len(hits) >= req.n_docs:
                 break
         results.append(QueryResult(hits=hits))
 
-    logger.info("Search: %d queries, n_docs=%d, encode=%.3fs, search=%.3fs, total=%.3fs",
-                len(req.queries), req.n_docs, t_encode, t_search, time.time() - t0)
+    logger.info(
+        "Search: %d queries, n_docs=%d, encode=%.3fs, search=%.3fs, total=%.3fs",
+        len(req.queries),
+        req.n_docs,
+        t_encode,
+        t_search,
+        time.time() - t0,
+    )
 
     return SearchResponse(results=results)
 
@@ -410,6 +434,7 @@ async def tile_by_id(article_id: int, tile_index: int, chunk_index: int):
 # Startup
 # ---------------------------------------------------------------------------
 
+
 def load(args):
     """Load index, metadata, model, and articles.json."""
     import torch
@@ -444,14 +469,18 @@ def load(args):
 
     # Load embedding model
     from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+
     logger.info("Loading model %s on device=%s dtype=%s...", args.model, device, dtype)
     processor = AutoProcessor.from_pretrained(args.model, trust_remote_code=True)
     model = Qwen3VLForConditionalGeneration.from_pretrained(
-        args.model, trust_remote_code=True, dtype=dtype,
+        args.model,
+        trust_remote_code=True,
+        dtype=dtype,
     )
     adapter_path = getattr(args, "peft_adapter", None)
     if adapter_path:
         from peft import PeftModel
+
         logger.info("Loading LoRA adapter from %s...", adapter_path)
         model = PeftModel.from_pretrained(model, adapter_path)
         model = model.merge_and_unload()
@@ -467,35 +496,50 @@ def load(args):
     index_mtime = os.path.getmtime(index_path)
     index_built_at = datetime.fromtimestamp(index_mtime, tz=timezone.utc).isoformat()
 
-    _state.update({
-        "index": index,
-        "metadata": meta,
-        "articles": articles,
-        "processor": processor,
-        "model": model,
-        "device": device,
-        "model_name": args.model,
-        "index_dir": args.index_dir,
-        "tiles_dir": args.tiles_dir,
-        "dimension": summary.get("dimension", index.d),
-        "nlist": summary.get("nlist", 4096),
-        "index_built_at": index_built_at,
-        "index_size_bytes": index_size,
-        "metadata_size_bytes": meta_size,
-    })
+    _state.update(
+        {
+            "index": index,
+            "metadata": meta,
+            "articles": articles,
+            "processor": processor,
+            "model": model,
+            "device": device,
+            "model_name": args.model,
+            "index_dir": args.index_dir,
+            "tiles_dir": args.tiles_dir,
+            "dimension": summary.get("dimension", index.d),
+            "nlist": summary.get("nlist", 4096),
+            "index_built_at": index_built_at,
+            "index_size_bytes": index_size,
+            "metadata_size_bytes": meta_size,
+        }
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description="PixelRAG FAISS Search API")
-    parser.add_argument("--index-dir", default=os.environ.get("PIXELRAG_INDEX_DIR", "./index"))
-    parser.add_argument("--tiles-dir", default=os.environ.get("PIXELRAG_TILES_DIR", "./tiles"))
-    parser.add_argument("--articles-json",
-                        default=os.environ.get("PIXELRAG_ARTICLES_JSON", "./articles.json"))
+    parser.add_argument(
+        "--index-dir", default=os.environ.get("PIXELRAG_INDEX_DIR", "./index")
+    )
+    parser.add_argument(
+        "--tiles-dir", default=os.environ.get("PIXELRAG_TILES_DIR", "./tiles")
+    )
+    parser.add_argument(
+        "--articles-json",
+        default=os.environ.get("PIXELRAG_ARTICLES_JSON", "./articles.json"),
+    )
     parser.add_argument("--model", default="Qwen/Qwen3-VL-Embedding-2B")
-    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
-                        help="Device to run inference on: cpu (default) or cuda")
-    parser.add_argument("--peft-adapter", default=None,
-                        help="Path to PEFT/LoRA adapter directory (merged at load time)")
+    parser.add_argument(
+        "--device",
+        choices=["cpu", "cuda"],
+        default="cpu",
+        help="Device to run inference on: cpu (default) or cuda",
+    )
+    parser.add_argument(
+        "--peft-adapter",
+        default=None,
+        help="Path to PEFT/LoRA adapter directory (merged at load time)",
+    )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=30001)
     args = parser.parse_args()
@@ -503,6 +547,7 @@ def main():
     load(args)
 
     import uvicorn
+
     uvicorn.run(app, host=args.host, port=args.port)
 
 

@@ -8,8 +8,6 @@ Usage:
 """
 
 import argparse
-import os
-import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from urllib.parse import unquote
@@ -38,7 +36,7 @@ class ZimHandler(BaseHTTPRequestHandler):
         # Strip /content/{book_name}/ prefix
         prefix = f"/content/{self.book_name}/"
         if path.startswith(prefix):
-            entry_path = path[len(prefix):]
+            entry_path = path[len(prefix) :]
         elif path.startswith("/"):
             entry_path = path[1:]
         else:
@@ -88,7 +86,7 @@ def main():
     server = ThreadedHTTPServer((args.host, args.port), ZimHandler)
     print(f"ZIM server: http://{args.host}:{args.port}/content/{book_name}/")
     print(f"ZIM: {args.zim} ({archive.article_count:,} articles)")
-    print(f"Threading: unlimited (one thread per request)")
+    print("Threading: unlimited (one thread per request)")
 
     try:
         server.serve_forever()

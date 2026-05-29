@@ -39,14 +39,13 @@ Best config (matching train_contrastors.py defaults):
 """
 
 import argparse
-import math
 import os
-import sys
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Fine-tune Qwen3-VL-Embedding with ms-swift (InfoNCE)")
+        description="Fine-tune Qwen3-VL-Embedding with ms-swift (InfoNCE)"
+    )
 
     # Model
     parser.add_argument("--model", default="Qwen/Qwen3-VL-Embedding-2B")
@@ -56,18 +55,25 @@ def main():
     parser.add_argument("--eval-jsonl", default="data/eval_swift.jsonl")
 
     # Training
-    parser.add_argument("--batch-size", type=int, default=4,
-                        help="Per-GPU batch size")
+    parser.add_argument("--batch-size", type=int, default=4, help="Per-GPU batch size")
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--warmup-steps", type=int, default=50)
     parser.add_argument("--max-steps", type=int, default=500)
     parser.add_argument("--scheduler", choices=["cosine", "constant"], default="cosine")
-    parser.add_argument("--temperature", type=float, default=0.07,
-                        help="Fixed InfoNCE temperature (not learnable in swift)")
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.07,
+        help="Fixed InfoNCE temperature (not learnable in swift)",
+    )
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--weight-decay", type=float, default=0.01)
-    parser.add_argument("--num-hard-negatives", type=int, default=0,
-                        help="Hard negatives per query (requires swift-format data with negative_messages)")
+    parser.add_argument(
+        "--num-hard-negatives",
+        type=int,
+        default=0,
+        help="Hard negatives per query (requires swift-format data with negative_messages)",
+    )
 
     # LoRA (match train_contrastors.py defaults)
     parser.add_argument("--lora-r", type=int, default=32)
@@ -75,8 +81,12 @@ def main():
     parser.add_argument("--lora-dropout", type=float, default=0.05)
 
     # Resolution
-    parser.add_argument("--max-num-visual-tokens", type=int, default=4096,
-                        help="Max visual tokens → converted to max_pixels for processor")
+    parser.add_argument(
+        "--max-num-visual-tokens",
+        type=int,
+        default=4096,
+        help="Max visual tokens → converted to max_pixels for processor",
+    )
 
     # Eval / Save
     parser.add_argument("--eval-steps", type=int, default=100)
@@ -88,29 +98,46 @@ def main():
     parser.add_argument("--output-dir", default="training/output_swift")
 
     # Resume
-    parser.add_argument("--resume", type=str, default=None,
-                        help="Path to checkpoint directory to resume from")
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Path to checkpoint directory to resume from",
+    )
 
     # Distributed
-    parser.add_argument("--nproc-per-node", type=int, default=1,
-                        help="Number of GPUs (sets NPROC_PER_NODE for swift)")
-    parser.add_argument("--deepspeed", default=None,
-                        help="DeepSpeed config: 'zero2', 'zero3', or path to JSON")
+    parser.add_argument(
+        "--nproc-per-node",
+        type=int,
+        default=1,
+        help="Number of GPUs (sets NPROC_PER_NODE for swift)",
+    )
+    parser.add_argument(
+        "--deepspeed",
+        default=None,
+        help="DeepSpeed config: 'zero2', 'zero3', or path to JSON",
+    )
 
     # Wandb
     parser.add_argument("--wandb-project", default="wiki-screenshot-training")
     parser.add_argument("--no-wandb", action="store_true")
 
     # Freeze
-    parser.add_argument("--freeze-vit", action="store_true", default=True,
-                        help="Freeze vision encoder (default: True)")
+    parser.add_argument(
+        "--freeze-vit",
+        action="store_true",
+        default=True,
+        help="Freeze vision encoder (default: True)",
+    )
     parser.add_argument("--no-freeze-vit", dest="freeze_vit", action="store_false")
 
     args = parser.parse_args()
 
     # --- Environment variables for swift InfoNCE ---
     os.environ["INFONCE_TEMPERATURE"] = str(args.temperature)
-    os.environ["INFONCE_USE_BATCH"] = "True"  # in-batch negatives (like train_contrastors.py)
+    os.environ["INFONCE_USE_BATCH"] = (
+        "True"  # in-batch negatives (like train_contrastors.py)
+    )
     if args.num_hard_negatives > 0:
         os.environ["INFONCE_HARD_NEGATIVES"] = str(args.num_hard_negatives)
 
@@ -132,13 +159,14 @@ def main():
     from swift import SftArguments, sft_main
 
     # Map scheduler name
-    lr_scheduler_type = "cosine" if args.scheduler == "cosine" else "constant_with_warmup"
+    lr_scheduler_type = (
+        "cosine" if args.scheduler == "cosine" else "constant_with_warmup"
+    )
 
     sft_args = SftArguments(
         # Model
         model=args.model,
         task_type="embedding",
-
         # LoRA — match train_contrastors.py: q_proj, k_proj, v_proj, o_proj
         tuner_type="lora",
         lora_rank=args.lora_r,
@@ -146,15 +174,12 @@ def main():
         lora_dropout=args.lora_dropout,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         freeze_vit=args.freeze_vit,
-
         # Loss
         loss_type="infonce",
-
         # Data
         dataset=[args.train_jsonl],
         val_dataset=[args.eval_jsonl],
         split_dataset_ratio=0.0,  # We provide val_dataset explicitly
-
         # Training hyperparams
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
@@ -164,13 +189,10 @@ def main():
         max_steps=args.max_steps,
         max_grad_norm=args.max_grad_norm,
         weight_decay=args.weight_decay,
-
         # Precision
         torch_dtype="bfloat16",
-
         # Resolution
         max_pixels=max_pixels,
-
         # Eval / Save / Log
         eval_strategy="steps",
         eval_steps=args.eval_steps,
@@ -178,16 +200,12 @@ def main():
         save_total_limit=args.save_total_limit,
         logging_steps=args.logging_steps,
         dataloader_drop_last=True,
-
         # Output
         output_dir=args.output_dir,
-
         # Resume
         resume_from_checkpoint=args.resume,
-
         # DeepSpeed
         deepspeed=args.deepspeed,
-
         # Misc
         dataloader_num_workers=4,
     )
@@ -197,13 +215,13 @@ def main():
 
     # Print results
     if result:
-        print(f"\n{'='*60}")
-        print(f"Training complete!")
-        if hasattr(result, 'last_model_checkpoint') and result.last_model_checkpoint:
+        print(f"\n{'=' * 60}")
+        print("Training complete!")
+        if hasattr(result, "last_model_checkpoint") and result.last_model_checkpoint:
             print(f"Last checkpoint: {result.last_model_checkpoint}")
-        if hasattr(result, 'best_model_checkpoint') and result.best_model_checkpoint:
+        if hasattr(result, "best_model_checkpoint") and result.best_model_checkpoint:
             print(f"Best checkpoint: {result.best_model_checkpoint}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

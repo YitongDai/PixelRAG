@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -35,10 +33,12 @@ def process_one(client, model, ex):
     try:
         resp = client.chat.completions.create(
             model=model,
-            messages=[{
-                "role": "user",
-                "content": PROMPT.format(query=ex["query"], answer=ex["answer"]),
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": PROMPT.format(query=ex["query"], answer=ex["answer"]),
+                }
+            ],
             max_tokens=200,
             temperature=0.3,
         )
@@ -64,6 +64,7 @@ def main():
 
     if args.n > 0 and args.n < len(data):
         import random
+
         rng = random.Random(args.seed)
         data = rng.sample(data, args.n)
         print(f"Sampled {len(data)} examples (seed={args.seed})")

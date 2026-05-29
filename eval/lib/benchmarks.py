@@ -35,10 +35,12 @@ SUPPORTED_TASKS = {
 EVQA_LANDMARK_404_IMG_ID = "160a34689b4542f2"
 
 # Example IDs where all img_id URLs are 404 (no fallback); skip when loading
-EVQA_LANDMARK_SKIP_IDS = frozenset({
-    "e87957e51e4606ab56d5f475e80fc353",  # all 5 URLs 404 (question: temple hidden structure, Shanxi Taiyuan historic sites series)
-    "62e1cbe1009909d6ff448063c6308719",  # all 5 URLs 404 (question: Monument to the Conquerors of Space coin year, 2_hop)
-})
+EVQA_LANDMARK_SKIP_IDS = frozenset(
+    {
+        "e87957e51e4606ab56d5f475e80fc353",  # all 5 URLs 404 (question: temple hidden structure, Shanxi Taiyuan historic sites series)
+        "62e1cbe1009909d6ff448063c6308719",  # all 5 URLs 404 (question: Monument to the Conquerors of Space coin year, 2_hop)
+    }
+)
 
 DATASET_URLS = {
     "encyclopedic_vqa_val": "https://storage.googleapis.com/encyclopedic-vqa/val.csv",
@@ -140,9 +142,14 @@ def load_encyclopedic_vqa_data(
             ),
         }
         # Preserve optional metadata columns
-        for col in ["wikipedia_url", "wikipedia_title", "question_original",
-                     "dataset_image_ids", "dataset_name",
-                     "wikipedia_url_used_in_train"]:
+        for col in [
+            "wikipedia_url",
+            "wikipedia_title",
+            "question_original",
+            "dataset_image_ids",
+            "dataset_name",
+            "wikipedia_url_used_in_train",
+        ]:
             if col in row.index and pd.notna(row[col]):
                 example[col] = row[col]
 
@@ -162,20 +169,30 @@ def load_encyclopedic_vqa_data(
 
     if dataset_filter:
         ds_lower = dataset_filter.lower()
-        examples = [e for e in examples if (e.get("dataset_name") or "").lower() == ds_lower]
+        examples = [
+            e for e in examples if (e.get("dataset_name") or "").lower() == ds_lower
+        ]
 
     if question_type_filter:
         allowed_qts = frozenset(
             q.strip().lower() for q in question_type_filter.split(",") if q.strip()
         )
-        examples = [e for e in examples if (e.get("question_type") or "").lower() in allowed_qts]
+        examples = [
+            e for e in examples if (e.get("question_type") or "").lower() in allowed_qts
+        ]
 
     # Skip landmark examples with 404 query image URLs
     if dataset_filter and (dataset_filter.lower() == "landmarks"):
+
         def _has_404_only(e):
             ids = e.get("dataset_image_ids_parsed") or []
             return ids and set(ids) == {EVQA_LANDMARK_404_IMG_ID}
-        examples = [e for e in examples if e.get("id") not in EVQA_LANDMARK_SKIP_IDS and not _has_404_only(e)]
+
+        examples = [
+            e
+            for e in examples
+            if e.get("id") not in EVQA_LANDMARK_SKIP_IDS and not _has_404_only(e)
+        ]
 
     if shuffle:
         random.seed(42)
@@ -211,12 +228,10 @@ def load_shortformqa_data(
             if example["ground_truth"][0] == "["
             else [example["ground_truth"]]
         )
-        example["additional_instructions"] = (
-            """
+        example["additional_instructions"] = """
 Your final response should be in the following format without any other text:
 Exact Answer: <your succinct, final answer>
 """.strip()
-        )
         examples.append(example)
 
     if shuffle:
@@ -383,7 +398,9 @@ def load_factualvqa_data(
             pil_image = _bytes_to_pil(images_list[0])
 
         example = {
-            "id": str(sample.get("data_id", hashlib.md5(question.encode()).hexdigest())),
+            "id": str(
+                sample.get("data_id", hashlib.md5(question.encode()).hexdigest())
+            ),
             "problem": question,
             "answer": answer,
             "image": pil_image,
@@ -491,7 +508,9 @@ def load_webqa_data(
     """
     try:
         # Use streaming to avoid memory issues with large rows (>1.4MB each)
-        dataset = datasets.load_dataset("Anil99/webqa", split="validation", streaming=True)
+        dataset = datasets.load_dataset(
+            "Anil99/webqa", split="validation", streaming=True
+        )
     except Exception as e:
         logger.warning(
             f"Failed to load WebQA dataset (Anil99/webqa): {e}. "
@@ -590,7 +609,7 @@ def load_multimodalqa_data(
         if not dev_jsonl_path.exists():
             dev_gz_url = "https://raw.githubusercontent.com/allenai/multimodalqa/master/dataset/MMQA_dev.jsonl.gz"
             gz_path = cache_dir / "MultiModalQA_dev.jsonl.gz"
-            logger.info(f"Downloading MultiModalQA dev set from GitHub...")
+            logger.info("Downloading MultiModalQA dev set from GitHub...")
             urllib.request.urlretrieve(dev_gz_url, gz_path)
             with gzip.open(gz_path, "rt", encoding="utf-8") as f_in:
                 with open(dev_jsonl_path, "w", encoding="utf-8") as f_out:
@@ -626,7 +645,8 @@ def load_multimodalqa_data(
             "To enable images, download and extract: "
             "https://multimodalqa-images.s3-us-west-2.amazonaws.com/final_dataset_images/final_dataset_images.zip "
             "into %s",
-            images_dir, images_dir,
+            images_dir,
+            images_dir,
         )
 
     examples = []

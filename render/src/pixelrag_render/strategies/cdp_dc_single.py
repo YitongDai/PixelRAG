@@ -66,15 +66,23 @@ class CDPDCsingleStrategy:
         self._connections = []
         for i in range(self.n_workers):
             conn = await launch_websocket(
-                self.chrome_path, self._base_port + i,
-                headless_shell=self.headless_shell)
+                self.chrome_path,
+                self._base_port + i,
+                headless_shell=self.headless_shell,
+            )
             self._connections.append(conn)
 
         for conn in self._connections:
             await conn.cdp("Page.enable")
-            await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                "deviceScaleFactor": 1, "mobile": False})
+            await conn.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": TILE_HEIGHT,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
 
         if self.fmt == "raw":
             os.makedirs("/dev/shm/pixelrag_bench", exist_ok=True)
@@ -99,7 +107,8 @@ class CDPDCsingleStrategy:
                 all_results[article_index[article["path"]]] = ac
 
         await asyncio.gather(
-            *[worker_task(i) for i in range(n)], return_exceptions=True)
+            *[worker_task(i) for i in range(n)], return_exceptions=True
+        )
         return [r for r in all_results if r is not None]
 
     async def _capture_one(self, wi: int, article: dict) -> ArticleCapture:
@@ -114,10 +123,14 @@ class CDPDCsingleStrategy:
             return ac
 
         try:
-            r = await conn.cdp("Runtime.evaluate", {
-                "expression": WAIT_FONTS_IMGS,
-                "awaitPromise": True, "returnByValue": True,
-            })
+            r = await conn.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": WAIT_FONTS_IMGS,
+                    "awaitPromise": True,
+                    "returnByValue": True,
+                },
+            )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = TILE_HEIGHT
@@ -139,8 +152,10 @@ class CDPDCsingleStrategy:
             if t > 0:
                 y = t * TILE_HEIGHT
                 try:
-                    await conn.cdp("Runtime.evaluate", {
-                        "expression": f"""new Promise(resolve => {{
+                    await conn.cdp(
+                        "Runtime.evaluate",
+                        {
+                            "expression": f"""new Promise(resolve => {{
                             window.scrollTo(0, {y});
                             requestAnimationFrame(() => requestAnimationFrame(() => {{
                                 const imgs = Array.from(document.images).filter(i => {{
@@ -157,8 +172,9 @@ class CDPDCsingleStrategy:
                                 Promise.race([loaded, timeout]).then(resolve);
                             }}));
                         }})""",
-                        "awaitPromise": True,
-                    })
+                            "awaitPromise": True,
+                        },
+                    )
                 except Exception:
                     pass
 
@@ -166,8 +182,11 @@ class CDPDCsingleStrategy:
                 "directClip": True,
                 "optimizeForSpeed": True,
                 "clip": {
-                    "x": 0, "y": t * TILE_HEIGHT,
-                    "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1,
+                    "x": 0,
+                    "y": t * TILE_HEIGHT,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
                 },
             }
 
@@ -196,7 +215,9 @@ class CDPDCsingleStrategy:
             tc = TileCapture(
                 shot_ms=shot_ms,
                 nav_ms=nav_ms if t == 0 else 0.0,
-                tile_index=t, clip_y=t * TILE_HEIGHT, clip_h=clip_h,
+                tile_index=t,
+                clip_y=t * TILE_HEIGHT,
+                clip_h=clip_h,
             )
             if self.fmt == "raw":
                 tc.raw_file_path = raw_path

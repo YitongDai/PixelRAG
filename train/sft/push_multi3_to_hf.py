@@ -15,28 +15,42 @@ from pathlib import Path
 
 from huggingface_hub import create_repo, upload_folder
 
-TOKEN = os.environ.get("HF_TOKEN") or open(os.path.expanduser("~/.cache/huggingface/token")).read().strip()
+TOKEN = (
+    os.environ.get("HF_TOKEN")
+    or open(os.path.expanduser("~/.cache/huggingface/token")).read().strip()
+)
 USER = "Chrisyichuan"
 
 # Each entry: (compression label, adapter dir, LLM-judge score, config summary, epoch/step note)
 BEST = [
-    ("2x", "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_2x_v1",
-     0.954,
-     "r=256, 2ep, lr 1e-5, LLM+ViT LoRA, cutoff_len 5120, eff-batch 32 on 8× H100",
-     "step 6502 (2 epochs)"),
-    ("3x", "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_3x_v1",
-     0.900,
-     "r=256, 2ep, lr 1e-5, LLM+ViT LoRA, cutoff_len 4096, eff-batch 32 on 8× H100",
-     "step 6502 (2 epochs)"),
-    ("4x", "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_4x_v1",
-     0.868,
-     "r=256, 2ep, lr 1e-5, LLM+ViT LoRA, cutoff_len 3072, eff-batch 32 on 8× H100",
-     "step 6502 (2 epochs)"),
+    (
+        "2x",
+        "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_2x_v1",
+        0.954,
+        "r=256, 2ep, lr 1e-5, LLM+ViT LoRA, cutoff_len 5120, eff-batch 32 on 8× H100",
+        "step 6502 (2 epochs)",
+    ),
+    (
+        "3x",
+        "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_3x_v1",
+        0.900,
+        "r=256, 2ep, lr 1e-5, LLM+ViT LoRA, cutoff_len 4096, eff-batch 32 on 8× H100",
+        "step 6502 (2 epochs)",
+    ),
+    (
+        "4x",
+        "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_4x_v1",
+        0.868,
+        "r=256, 2ep, lr 1e-5, LLM+ViT LoRA, cutoff_len 3072, eff-batch 32 on 8× H100",
+        "step 6502 (2 epochs)",
+    ),
 ]
 
 # Multi-image baselines (same 500 test set, GPT-4.1 judge, 3 images per sample, gold always in the 3)
 BASE_MULTIIMAGE_0X = 0.892  # base Qwen3-VL-4B on uncompressed top-3
-SINGLE_IMAGE_0X_BASELINE = 0.958  # base Qwen3-VL-4B on uncompressed single image (from RESULTS.md)
+SINGLE_IMAGE_0X_BASELINE = (
+    0.958  # base Qwen3-VL-4B on uncompressed single image (from RESULTS.md)
+)
 
 KEEP_FILES = {
     "adapter_config.json",
@@ -85,7 +99,7 @@ LoRA adapter for [Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-
 | Uncompressed (0x) **multi-image (3)**, base Qwen3-VL-4B | {BASE_MULTIIMAGE_0X:.3f} |
 | **This adapter @ {comp} multi-image (3)** | **{judge:.3f}** |
 
-**Key observation:** {'The 2x multi-image SFT model nearly recovers the single-image uncompressed ceiling (0.958), and clearly exceeds the un-SFTed multi-image base (0.892) — fine-tuning compensates for both distractor confusion and 2x compression.' if comp == '2x' else 'Despite 3x pixel compression, this model slightly exceeds the un-SFTed multi-image uncompressed base (0.892) — fine-tuning compensates for both distractor confusion and 3x compression.' if comp == '3x' else 'At 4x compression the per-image pixel budget is ~¼ the original. Even with SFT, accuracy falls slightly below the un-SFTed multi-image 0x base (0.892). This checkpoint documents the compression–quality frontier at the extreme end; use 2x/3x for production.'}
+**Key observation:** {"The 2x multi-image SFT model nearly recovers the single-image uncompressed ceiling (0.958), and clearly exceeds the un-SFTed multi-image base (0.892) — fine-tuning compensates for both distractor confusion and 2x compression." if comp == "2x" else "Despite 3x pixel compression, this model slightly exceeds the un-SFTed multi-image uncompressed base (0.892) — fine-tuning compensates for both distractor confusion and 3x compression." if comp == "3x" else "At 4x compression the per-image pixel budget is ~¼ the original. Even with SFT, accuracy falls slightly below the un-SFTed multi-image 0x base (0.892). This checkpoint documents the compression–quality frontier at the extreme end; use 2x/3x for production."}
 
 Gain over multi-image base @ 0x: **{judge - BASE_MULTIIMAGE_0X:+.3f}** ({100 * (judge - BASE_MULTIIMAGE_0X) / BASE_MULTIIMAGE_0X:+.1f}% relative).
 
@@ -137,7 +151,7 @@ messages = [{{"role": "user", "content": [
 
 - Training distribution **always includes the gold** in the 3-image set (by construction). If your retriever misses the gold, the model has not seen that distribution — expect degradation on those queries.
 - Compression level is fixed at {comp}. Use the adapter that matches your deployment pixel budget.
-- Sister adapters at other compression levels: {', '.join(f'`{USER}/qwen3vl-4b-wiki-screenshot-multi3-{x}-lora`' for x in ['2x', '3x', '4x'] if x != comp)}.
+- Sister adapters at other compression levels: {", ".join(f"`{USER}/qwen3vl-4b-wiki-screenshot-multi3-{x}-lora`" for x in ["2x", "3x", "4x"] if x != comp)}.
 """
 
 
@@ -161,7 +175,7 @@ def push_one(comp, adapter_dir, judge, config, step_note):
                 print(f"  - {name} (not present, skipped)")
 
         (tmp / "README.md").write_text(build_readme(comp, judge, config, step_note))
-        print(f"  + README.md")
+        print("  + README.md")
 
         create_repo(repo_id, token=TOKEN, exist_ok=True, private=False)
         upload_folder(

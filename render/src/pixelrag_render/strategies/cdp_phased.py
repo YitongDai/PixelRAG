@@ -94,17 +94,25 @@ class CDPPhasedStrategy:
         self._connections = []
         for i in range(self.n_workers):
             conn = await launch_websocket(
-                self.chrome_path, self._base_port + i,
+                self.chrome_path,
+                self._base_port + i,
                 headless_shell=self.headless_shell,
-                extra_args=self.extra_chrome_args)
+                extra_args=self.extra_chrome_args,
+            )
             self._connections.append(conn)
 
         self._main_frame_ids = []
         for conn in self._connections:
             await conn.cdp("Page.enable")
-            await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": self.tile_height,
-                "deviceScaleFactor": 1, "mobile": False})
+            await conn.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": self.tile_height,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
             ft = await conn.cdp("Page.getFrameTree")
             self._main_frame_ids.append(ft["result"]["frameTree"]["frame"]["id"])
 
@@ -137,8 +145,7 @@ class CDPPhasedStrategy:
                     ac.errors.append(f"worker {wi}: {e}")
                     all_results[article_index[article["path"]]] = ac
 
-        await asyncio.gather(
-            *[worker_task(i) for i in range(len(self._connections))])
+        await asyncio.gather(*[worker_task(i) for i in range(len(self._connections))])
         return [r for r in all_results if r is not None]
 
     async def _capture_one(self, wi: int, article: dict) -> ArticleCapture:
@@ -154,10 +161,15 @@ class CDPPhasedStrategy:
         # With --in-process-gpu and many concurrent instances, Chrome has a bug
         # where Page.frameStoppedLoading is sometimes never fired (even though the
         # page loads correctly).  Page.frameStoppedLoading is always reliable.
-        main_fid = self._main_frame_ids[wi] if hasattr(self, '_main_frame_ids') else None
+        main_fid = (
+            self._main_frame_ids[wi] if hasattr(self, "_main_frame_ids") else None
+        )
         nav_event_fut = asyncio.ensure_future(
-            conn.wait_for_event("Page.frameStoppedLoading", timeout=30.0,
-                                filter_fn=lambda p: main_fid is None or p.get("frameId") == main_fid)
+            conn.wait_for_event(
+                "Page.frameStoppedLoading",
+                timeout=30.0,
+                filter_fn=lambda p: main_fid is None or p.get("frameId") == main_fid,
+            )
         )
         try:
             await conn.cdp("Page.navigate", {"url": target_url})
@@ -187,17 +199,26 @@ class CDPPhasedStrategy:
                         });
                     });
                 })"""
-                r = await conn.cdp("Runtime.evaluate", {
-                    "expression": fast_expr,
-                    "awaitPromise": True, "returnByValue": True,
-                })
+                r = await conn.cdp(
+                    "Runtime.evaluate",
+                    {
+                        "expression": fast_expr,
+                        "awaitPromise": True,
+                        "returnByValue": True,
+                    },
+                )
             else:
                 wait_expr = WAIT_FONTS_IMGS.replace(
-                    "setTimeout(r, 2000)", f"setTimeout(r, {self.nav_timeout_ms})")
-                r = await conn.cdp("Runtime.evaluate", {
-                    "expression": wait_expr,
-                    "awaitPromise": True, "returnByValue": True,
-                })
+                    "setTimeout(r, 2000)", f"setTimeout(r, {self.nav_timeout_ms})"
+                )
+                r = await conn.cdp(
+                    "Runtime.evaluate",
+                    {
+                        "expression": wait_expr,
+                        "awaitPromise": True,
+                        "returnByValue": True,
+                    },
+                )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = th
@@ -207,9 +228,13 @@ class CDPPhasedStrategy:
 
         if self.use_direct_clip or self.extra_chrome_args:
             try:
-                await conn.cdp("Runtime.evaluate", {
-                    "expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))))",
-                    "awaitPromise": True})
+                await conn.cdp(
+                    "Runtime.evaluate",
+                    {
+                        "expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))))",
+                        "awaitPromise": True,
+                    },
+                )
             except Exception:
                 pass
 
@@ -229,8 +254,10 @@ class CDPPhasedStrategy:
             if t > 0:
                 y = t * th
                 try:
-                    await conn.cdp("Runtime.evaluate", {
-                        "expression": f"""new Promise(resolve => {{
+                    await conn.cdp(
+                        "Runtime.evaluate",
+                        {
+                            "expression": f"""new Promise(resolve => {{
                             window.scrollTo(0, {y});
                             requestAnimationFrame(() => requestAnimationFrame(() => {{
                                 const imgs = Array.from(document.images).filter(i => {{
@@ -247,8 +274,9 @@ class CDPPhasedStrategy:
                                 Promise.race([loaded, timeout]).then(resolve);
                             }}));
                         }})""",
-                        "awaitPromise": True,
-                    })
+                            "awaitPromise": True,
+                        },
+                    )
                 except Exception:
                     pass
 
@@ -258,8 +286,11 @@ class CDPPhasedStrategy:
                 params = {
                     "optimizeForSpeed": True,
                     "clip": {
-                        "x": 0, "y": t * th,
-                        "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1,
+                        "x": 0,
+                        "y": t * th,
+                        "width": VIEWPORT_WIDTH,
+                        "height": clip_h,
+                        "scale": 1,
                     },
                 }
                 if self.use_direct_clip:
@@ -293,7 +324,9 @@ class CDPPhasedStrategy:
             tc = TileCapture(
                 shot_ms=shot_ms,
                 nav_ms=nav_ms if t == 0 else 0.0,
-                tile_index=t, clip_y=t * th, clip_h=clip_h,
+                tile_index=t,
+                clip_y=t * th,
+                clip_h=clip_h,
             )
             if self.fmt == "raw":
                 tc.raw_file_path = raw_path

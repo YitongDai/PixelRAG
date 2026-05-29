@@ -23,7 +23,6 @@ import json
 import logging
 import os
 import time
-from pathlib import Path
 
 import httpx
 
@@ -92,24 +91,32 @@ async def classify_batch(client, queries, batch_idx, semaphore):
                 indices = json.loads(content)
                 if not isinstance(indices, list):
                     indices = []
-                return batch_idx, [i for i in indices if isinstance(i, int) and 0 <= i < len(queries)]
+                return batch_idx, [
+                    i for i in indices if isinstance(i, int) and 0 <= i < len(queries)
+                ]
             except Exception as e:
                 if attempt == 2:
                     logger.warning(f"Batch {batch_idx} failed after 3 attempts: {e}")
                     return batch_idx, []
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
 
 
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, help="Input JSONL file")
     parser.add_argument("--output", required=True, help="Output JSONL file")
-    parser.add_argument("--target-ratio", type=float, default=0.20,
-                        help="Target fraction to keep (approximate)")
-    parser.add_argument("--batch-size", type=int, default=50,
-                        help="Queries per API call")
-    parser.add_argument("--concurrency", type=int, default=20,
-                        help="Max concurrent API calls")
+    parser.add_argument(
+        "--target-ratio",
+        type=float,
+        default=0.20,
+        help="Target fraction to keep (approximate)",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=50, help="Queries per API call"
+    )
+    parser.add_argument(
+        "--concurrency", type=int, default=20, help="Max concurrent API calls"
+    )
     parser.add_argument("--api-key", default=None)
     parser.add_argument("--base-url", default="https://us.api.openai.com/v1")
     args = parser.parse_args()
@@ -131,7 +138,7 @@ async def main():
     # Batch queries
     batches = []
     for i in range(0, len(queries), args.batch_size):
-        batches.append((i, queries[i:i + args.batch_size]))
+        batches.append((i, queries[i : i + args.batch_size]))
     logger.info(f"Created {len(batches)} batches of ~{args.batch_size}")
 
     # Run classification
@@ -159,13 +166,17 @@ async def main():
                 elapsed = time.time() - t0
                 rate = done / elapsed
                 eta = (len(tasks) - done) / rate if rate > 0 else 0
-                logger.info(f"Progress: {done}/{len(tasks)} batches "
-                           f"({len(keep_indices)} kept so far, "
-                           f"{len(keep_indices)/len(records)*100:.1f}%) "
-                           f"ETA: {eta:.0f}s")
+                logger.info(
+                    f"Progress: {done}/{len(tasks)} batches "
+                    f"({len(keep_indices)} kept so far, "
+                    f"{len(keep_indices) / len(records) * 100:.1f}%) "
+                    f"ETA: {eta:.0f}s"
+                )
 
-    logger.info(f"Classification done: {len(keep_indices)}/{len(records)} "
-               f"= {len(keep_indices)/len(records)*100:.1f}% marked SPECIFIC")
+    logger.info(
+        f"Classification done: {len(keep_indices)}/{len(records)} "
+        f"= {len(keep_indices) / len(records) * 100:.1f}% marked SPECIFIC"
+    )
 
     # Write filtered output
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
@@ -177,7 +188,7 @@ async def main():
                 kept += 1
 
     logger.info(f"Wrote {kept} records to {args.output}")
-    logger.info(f"Ratio: {kept/len(records)*100:.1f}%")
+    logger.info(f"Ratio: {kept / len(records) * 100:.1f}%")
 
 
 if __name__ == "__main__":

@@ -82,9 +82,13 @@ queries to gather comprehensive information. Cite your sources with Wikipedia UR
 If search results are insufficient, say so honestly rather than guessing."""
 
 
-def execute_pixelrag_search(query: str, n_results: int = 5, endpoint: str = "http://localhost:30001") -> dict:
+def execute_pixelrag_search(
+    query: str, n_results: int = 5, endpoint: str = "http://localhost:30001"
+) -> dict:
     """Call the PixelRAG search API."""
-    body = json.dumps({"queries": [{"text": query}], "n_docs": min(n_results, 20)}).encode()
+    body = json.dumps(
+        {"queries": [{"text": query}], "n_docs": min(n_results, 20)}
+    ).encode()
     req = urllib.request.Request(
         f"{endpoint}/search",
         data=body,
@@ -99,12 +103,14 @@ def execute_pixelrag_search(query: str, n_results: int = 5, endpoint: str = "htt
         url = hit.get("url", "")
         slug = url.split("/wiki/")[-1] if "/wiki/" in url else ""
         title = slug.replace("_", " ") if slug else url
-        results.append({
-            "title": title,
-            "url": url,
-            "score": round(hit["score"], 4),
-            "tile": f"tile_{hit.get('tile_index', '?')}_chunk_{hit.get('chunk_index', '?')}",
-        })
+        results.append(
+            {
+                "title": title,
+                "url": url,
+                "score": round(hit["score"], 4),
+                "tile": f"tile_{hit.get('tile_index', '?')}_chunk_{hit.get('chunk_index', '?')}",
+            }
+        )
     return {"query": query, "results": results, "count": len(results)}
 
 
@@ -116,6 +122,7 @@ def execute_web_fetch(url: str) -> dict:
 
     # Strip HTML tags for a rough text extraction
     import re
+
     text = re.sub(r"<script[^>]*>.*?</script>", "", raw, flags=re.DOTALL)
     text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
     text = re.sub(r"<[^>]+>", " ", text)
@@ -141,7 +148,12 @@ def handle_tool_call(tool_name: str, tool_input: dict, endpoint: str) -> str:
     return json.dumps(result)
 
 
-def run_agent(question: str, endpoint: str, model: str = "claude-sonnet-4-20250514", verbose: bool = False) -> str:
+def run_agent(
+    question: str,
+    endpoint: str,
+    model: str = "claude-sonnet-4-20250514",
+    verbose: bool = False,
+) -> str:
     """Run the agent loop: send question → handle tool calls → return final answer."""
     client = anthropic.Anthropic()
     messages = [{"role": "user", "content": question}]
@@ -156,7 +168,10 @@ def run_agent(question: str, endpoint: str, model: str = "claude-sonnet-4-202505
         )
 
         if verbose:
-            print(f"  [stop_reason={response.stop_reason}, usage={response.usage}]", file=sys.stderr)
+            print(
+                f"  [stop_reason={response.stop_reason}, usage={response.usage}]",
+                file=sys.stderr,
+            )
 
         if response.stop_reason == "end_turn":
             # Extract text from response
@@ -168,13 +183,18 @@ def run_agent(question: str, endpoint: str, model: str = "claude-sonnet-4-202505
         for block in response.content:
             if block.type == "tool_use":
                 if verbose:
-                    print(f"  [tool: {block.name}({json.dumps(block.input, ensure_ascii=False)})]", file=sys.stderr)
+                    print(
+                        f"  [tool: {block.name}({json.dumps(block.input, ensure_ascii=False)})]",
+                        file=sys.stderr,
+                    )
                 result = handle_tool_call(block.name, block.input, endpoint)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": result,
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result,
+                    }
+                )
 
         if not tool_results:
             # No tool calls and not end_turn — shouldn't happen, but handle gracefully
@@ -212,11 +232,23 @@ def interactive(endpoint: str, model: str, verbose: bool):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PixelRAG Agent — Claude + visual web search")
-    parser.add_argument("question", nargs="?", help="Question to ask (omit for interactive mode)")
-    parser.add_argument("--endpoint", default="http://localhost:30001", help="PixelRAG search API endpoint")
-    parser.add_argument("--model", default="claude-sonnet-4-20250514", help="Claude model to use")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Show tool calls and API details")
+    parser = argparse.ArgumentParser(
+        description="PixelRAG Agent — Claude + visual web search"
+    )
+    parser.add_argument(
+        "question", nargs="?", help="Question to ask (omit for interactive mode)"
+    )
+    parser.add_argument(
+        "--endpoint",
+        default="http://localhost:30001",
+        help="PixelRAG search API endpoint",
+    )
+    parser.add_argument(
+        "--model", default="claude-sonnet-4-20250514", help="Claude model to use"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Show tool calls and API details"
+    )
     args = parser.parse_args()
 
     if args.question:

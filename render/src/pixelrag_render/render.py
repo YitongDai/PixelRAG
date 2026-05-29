@@ -89,9 +89,11 @@ def render_urls(
     if backend in ("cdp", "websocket"):
         from .backends.websocket import render_urls as _render_urls
     else:
-        raise ValueError(f"Unknown backend: {backend!r}. Choose 'cdp' or 'websocket'."
-                         " For high-throughput batch rendering with custom Chrome,"
-                         " use pixelrag_render.backends.fast_cdp.render_articles() directly.")
+        raise ValueError(
+            f"Unknown backend: {backend!r}. Choose 'cdp' or 'websocket'."
+            " For high-throughput batch rendering with custom Chrome,"
+            " use pixelrag_render.backends.fast_cdp.render_articles() directly."
+        )
 
     return _render_urls(
         urls,
@@ -219,7 +221,8 @@ def main() -> None:
         help="URLs or file paths to render.",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default="./tiles",
         metavar="DIR",
         help="Output directory for tile subdirectories (default: ./tiles).",
@@ -231,7 +234,8 @@ def main() -> None:
         help="Browser backend for URL/HTML rendering (default: cdp).",
     )
     parser.add_argument(
-        "--workers", "-w",
+        "--workers",
+        "-w",
         type=int,
         default=4,
         help="Number of parallel browser processes (default: 4).",
@@ -277,8 +281,12 @@ def main() -> None:
 
     # Batch-render URLs together for efficiency
     if urls:
-        logger.info("Rendering %d URL(s) with backend=%s workers=%d",
-                    len(urls), args.backend, args.workers)
+        logger.info(
+            "Rendering %d URL(s) with backend=%s workers=%d",
+            len(urls),
+            args.backend,
+            args.workers,
+        )
         tile_dirs = render_urls(
             urls,
             output_dir,
@@ -295,11 +303,14 @@ def main() -> None:
         suffix = fpath.suffix.lower()
         try:
             if suffix == ".pdf":
-                tile_dirs = render_pdf(fpath, output_dir, dpi=args.dpi, quality=args.quality)
+                tile_dirs = render_pdf(
+                    fpath, output_dir, dpi=args.dpi, quality=args.quality
+                )
             elif suffix in {".html", ".htm"}:
                 file_url = fpath.resolve().as_uri()
                 tile_dirs = render_url(
-                    file_url, output_dir,
+                    file_url,
+                    output_dir,
                     backend=args.backend,
                     tile_height=args.tile_height,
                     quality=args.quality,

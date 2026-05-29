@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass
 
 from .base import ArticleCapture, TileCapture, article_url
-from .connection import launch_websocket, WebsocketConnection
+from .connection import WebsocketConnection
 
 TILE_HEIGHT = 8192
 VIEWPORT_WIDTH = 875
@@ -70,23 +70,31 @@ class CDPPipelinedTabsStrategy:
         return f"{self.n_workers}w {self.fmt} pipe2t{hs}"
 
     async def setup(self) -> None:
-        import subprocess, signal
+        import subprocess
+
         self._procs = []
         self._tab_pairs = []
 
         for i in range(self.n_workers):
             port = self._base_port + i
-            args = [self.chrome_path, f"--remote-debugging-port={port}",
-                    "--no-sandbox", "--disable-dev-shm-usage"]
+            args = [
+                self.chrome_path,
+                f"--remote-debugging-port={port}",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ]
             if not self.headless_shell:
                 args.append("--headless")
             args.append("about:blank")
-            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            proc = subprocess.Popen(
+                args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
             self._procs.append(proc)
 
         await asyncio.sleep(max(5, self.n_workers // 4))
 
         import urllib.request
+
         for i in range(self.n_workers):
             port = self._base_port + i
             try:
@@ -95,21 +103,31 @@ class CDPPipelinedTabsStrategy:
                 targets = json.loads(data)
                 ws_a = await __import__("websockets").connect(
                     targets[0]["webSocketDebuggerUrl"],
-                    open_timeout=10, max_size=50 * 1024 * 1024)
+                    open_timeout=10,
+                    max_size=50 * 1024 * 1024,
+                )
                 conn_a = WebsocketConnection(ws_a, self._procs[i])
                 conn_a._msg_id = i * 200000
 
                 # Create Tab B via Target.createTarget on browser ws
                 browser_data = urllib.request.urlopen(
-                    f"http://localhost:{port}/json/version").read()
+                    f"http://localhost:{port}/json/version"
+                ).read()
                 browser_ws_url = json.loads(browser_data)["webSocketDebuggerUrl"]
                 browser_ws = await __import__("websockets").connect(
-                    browser_ws_url, open_timeout=10, max_size=50 * 1024 * 1024)
+                    browser_ws_url, open_timeout=10, max_size=50 * 1024 * 1024
+                )
 
                 # Create new target
-                await browser_ws.send(json.dumps({
-                    "id": 1, "method": "Target.createTarget",
-                    "params": {"url": "about:blank"}}))
+                await browser_ws.send(
+                    json.dumps(
+                        {
+                            "id": 1,
+                            "method": "Target.createTarget",
+                            "params": {"url": "about:blank"},
+                        }
+                    )
+                )
                 r = json.loads(await asyncio.wait_for(browser_ws.recv(), timeout=10))
                 target_id = r["result"]["targetId"]
 
@@ -126,7 +144,8 @@ class CDPPipelinedTabsStrategy:
                     ws_b_url = targets2[-1]["webSocketDebuggerUrl"]
 
                 ws_b = await __import__("websockets").connect(
-                    ws_b_url, open_timeout=10, max_size=50 * 1024 * 1024)
+                    ws_b_url, open_timeout=10, max_size=50 * 1024 * 1024
+                )
                 conn_b = WebsocketConnection(ws_b, self._procs[i])
                 conn_b._msg_id = i * 200000 + 100000
 
@@ -135,12 +154,18 @@ class CDPPipelinedTabsStrategy:
                 # Setup both tabs
                 for conn in [conn_a, conn_b]:
                     await conn.cdp("Page.enable")
-                    await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                        "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                        "deviceScaleFactor": 1, "mobile": False})
+                    await conn.cdp(
+                        "Emulation.setDeviceMetricsOverride",
+                        {
+                            "width": VIEWPORT_WIDTH,
+                            "height": TILE_HEIGHT,
+                            "deviceScaleFactor": 1,
+                            "mobile": False,
+                        },
+                    )
 
                 self._tab_pairs.append((conn_a, conn_b))
-            except Exception as e:
+            except Exception:
                 self._tab_pairs.append(None)
 
         if self.fmt == "raw":
@@ -157,6 +182,7 @@ class CDPPipelinedTabsStrategy:
                             pass
         if self._procs:
             import signal
+
             for p in self._procs:
                 p.send_signal(signal.SIGTERM)
             await asyncio.sleep(2)
@@ -183,8 +209,7 @@ class CDPPipelinedTabsStrategy:
                 return
 
             # Start loading first article on Tab A
-            nav_task = asyncio.create_task(
-                self._nav_and_wait(conn_a, my_articles[0]))
+            nav_task = asyncio.create_task(self._nav_and_wait(conn_a, my_articles[0]))
 
             for idx in range(len(my_articles)):
                 # Wait for current article to finish loading
@@ -196,30 +221,35 @@ class CDPPipelinedTabsStrategy:
                 # Start loading NEXT article on the OTHER tab (overlapped with capture)
                 if idx + 1 < len(my_articles):
                     nav_task = asyncio.create_task(
-                        self._nav_and_wait(next_conn, my_articles[idx + 1]))
+                        self._nav_and_wait(next_conn, my_articles[idx + 1])
+                    )
 
                 # Capture current article tiles
                 ac = await self._capture_tiles(
-                    current_conn, wi, my_articles[idx], page_h)
+                    current_conn, wi, my_articles[idx], page_h
+                )
                 all_results[article_index[my_articles[idx]["path"]]] = ac
 
         await asyncio.gather(
-            *[worker_task(i) for i in range(n)], return_exceptions=True)
+            *[worker_task(i) for i in range(n)], return_exceptions=True
+        )
         return [r for r in all_results if r is not None]
 
     async def _nav_and_wait(self, conn, article: dict) -> int:
         """Phase 1: Navigate + wait for all resources. Returns page_height."""
         await conn.cdp("Page.navigate", {"url": article_url(article)})
         try:
-            r = await conn.cdp("Runtime.evaluate", {
-                "expression": WAIT_ALL,
-                "awaitPromise": True, "returnByValue": True})
+            r = await conn.cdp(
+                "Runtime.evaluate",
+                {"expression": WAIT_ALL, "awaitPromise": True, "returnByValue": True},
+            )
             return r["result"]["result"]["value"] or TILE_HEIGHT
         except Exception:
             return TILE_HEIGHT
 
-    async def _capture_tiles(self, conn, wi: int, article: dict,
-                              page_h: int) -> ArticleCapture:
+    async def _capture_tiles(
+        self, conn, wi: int, article: dict, page_h: int
+    ) -> ArticleCapture:
         """Phase 2: Pure capture, no waiting."""
         ac = ArticleCapture(article_path=article["path"])
         ac.page_height = page_h
@@ -233,17 +263,28 @@ class CDPPipelinedTabsStrategy:
                 break
 
             if t > 0:
-                await conn.cdp("Runtime.evaluate",
-                    {"expression": f"window.scrollTo(0, {t * TILE_HEIGHT})"})
-                await conn.cdp("Runtime.evaluate", {
-                    "expression": "new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))",
-                    "awaitPromise": True})
+                await conn.cdp(
+                    "Runtime.evaluate",
+                    {"expression": f"window.scrollTo(0, {t * TILE_HEIGHT})"},
+                )
+                await conn.cdp(
+                    "Runtime.evaluate",
+                    {
+                        "expression": "new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))",
+                        "awaitPromise": True,
+                    },
+                )
 
             params = {
                 "fromSurface": self.from_surface,
                 "optimizeForSpeed": True,
-                "clip": {"x": 0, "y": t * TILE_HEIGHT,
-                         "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1},
+                "clip": {
+                    "x": 0,
+                    "y": t * TILE_HEIGHT,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
+                },
             }
             raw_path = None
             if self.fmt == "raw":

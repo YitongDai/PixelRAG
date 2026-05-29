@@ -146,7 +146,8 @@ class S3ShardCoordinator:
 
             # Try to claim with conditional write to prevent races
             claim_data = {
-                "machine": self.machine_id, "hostname": self.hostname,
+                "machine": self.machine_id,
+                "hostname": self.hostname,
                 "status": "in_progress",
                 "claimed_at": time.time(),
                 "heartbeat": time.time(),
@@ -179,7 +180,11 @@ class S3ShardCoordinator:
                 return shard
             except ClientError as e:
                 code = e.response["Error"]["Code"]
-                if code in ("PreconditionFailed", "ConditionalCheckFailed", "ConditionalRequestConflict"):
+                if code in (
+                    "PreconditionFailed",
+                    "ConditionalCheckFailed",
+                    "ConditionalRequestConflict",
+                ):
                     # Another machine claimed it first — try next shard
                     logger.debug(
                         "Lost claim race for shard %d, trying next",
@@ -218,7 +223,8 @@ class S3ShardCoordinator:
         """
         key = f"{self.prefix}/claims/{shard_id:03d}.json"
         claim_data = {
-            "machine": self.machine_id, "hostname": self.hostname,
+            "machine": self.machine_id,
+            "hostname": self.hostname,
             "status": "in_progress",
             "claimed_at": self._claimed_at.get(shard_id, time.time()),
             "heartbeat": time.time(),
@@ -263,7 +269,8 @@ class S3ShardCoordinator:
 
         key = f"{self.prefix}/claims/{shard_id:03d}.json"
         claim_data = {
-            "machine": self.machine_id, "hostname": self.hostname,
+            "machine": self.machine_id,
+            "hostname": self.hostname,
             "status": status,
             "claimed_at": self._claimed_at.pop(shard_id, time.time()),
             "heartbeat": time.time(),
@@ -303,7 +310,8 @@ class S3ShardCoordinator:
         """
         key = f"{self.prefix}/claims/{shard_id:03d}.json"
         claim_data = {
-            "machine": self.machine_id, "hostname": self.hostname,
+            "machine": self.machine_id,
+            "hostname": self.hostname,
             "status": "partial",
             "claimed_at": self._claimed_at.pop(shard_id, time.time()),
             "heartbeat": time.time(),
@@ -316,7 +324,10 @@ class S3ShardCoordinator:
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=json.dumps(claim_data))
         logger.info(
             "Shard %d marked partial (completed=%d, tiles=%d, error=%s)",
-            shard_id, completed, tiles, error[:120],
+            shard_id,
+            completed,
+            tiles,
+            error[:120],
         )
 
     def get_all_claims(self) -> list[dict]:

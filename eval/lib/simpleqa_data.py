@@ -83,6 +83,7 @@ def load_simpleqa_verified_data(num_examples: int | None = None) -> list[dict]:
         # Try using datasets library first (recommended)
         try:
             from datasets import load_dataset
+
             logger.info("Using Hugging Face datasets library...")
             dataset = load_dataset("google/simpleqa-verified", split="eval")
             df = dataset.to_pandas()
@@ -91,15 +92,19 @@ def load_simpleqa_verified_data(num_examples: int | None = None) -> list[dict]:
             # Fallback: try Hugging Face datasets-server API
             try:
                 import requests
+
                 logger.info("Trying Hugging Face datasets-server API...")
                 api_url = "https://datasets-server.huggingface.co/parquet?dataset=google%2Fsimpleqa-verified&config=simpleqa_verified&split=eval"
                 response = requests.get(api_url, timeout=60)
                 if response.status_code == 200:
                     import io
+
                     df = pd.read_parquet(io.BytesIO(response.content))
                     logger.info("Successfully loaded via datasets-server API")
                 else:
-                    raise Exception(f"Failed to download dataset: HTTP {response.status_code}")
+                    raise Exception(
+                        f"Failed to download dataset: HTTP {response.status_code}"
+                    )
             except Exception as e:
                 logger.error(f"Failed to load via API: {e}")
                 # Last resort: try direct file download
@@ -111,7 +116,9 @@ def load_simpleqa_verified_data(num_examples: int | None = None) -> list[dict]:
                     logger.info("Successfully loaded via direct file download")
                 except Exception as e2:
                     logger.error(f"Failed to load via direct download: {e2}")
-                    raise Exception(f"All methods failed. Please install 'datasets' library: pip install datasets")
+                    raise Exception(
+                        "All methods failed. Please install 'datasets' library: pip install datasets"
+                    )
     except Exception as e:
         logger.error(f"Failed to load SimpleQA Verified dataset: {e}")
         raise
@@ -122,12 +129,12 @@ def load_simpleqa_verified_data(num_examples: int | None = None) -> list[dict]:
     # Convert to compatible format with SimpleQA
     # SimpleQA Verified has: original_index, problem, answer, topic, answer_type, multi_step, requires_reasoning, urls
     # SimpleQA has: metadata (with urls), problem, answer, id
-    
+
     # Generate unique ID from problem text (same as SimpleQA)
     df["id"] = df["problem"].apply(
         lambda problem: hashlib.md5(problem.encode()).hexdigest()
     )
-    
+
     # Convert urls to list format if it's a string
     def normalize_urls(urls):
         """Normalize URLs to list format."""
@@ -135,28 +142,29 @@ def load_simpleqa_verified_data(num_examples: int | None = None) -> list[dict]:
             # Try to parse as list string
             try:
                 import ast
+
                 return ast.literal_eval(urls)
-            except:
+            except Exception:
                 # Split by comma if it's a comma-separated string
                 return [u.strip() for u in urls.split(",") if u.strip()]
         elif isinstance(urls, list):
             return urls
         else:
             return []
-    
+
     # Normalize URLs column
     if "urls" in df.columns:
         df["urls"] = df["urls"].apply(normalize_urls)
     else:
         df["urls"] = [[]] * len(df)
-    
+
     # Convert to metadata format compatible with SimpleQA
     def create_metadata(row):
         """Create metadata dict compatible with SimpleQA format."""
         metadata = {
             "topic": str(row.get("topic", "")),
             "answer_type": str(row.get("answer_type", "")),
-            "urls": row.get("urls", [])
+            "urls": row.get("urls", []),
         }
         if "multi_step" in row and pd.notna(row["multi_step"]):
             metadata["multi_step"] = bool(row["multi_step"])
@@ -236,15 +244,16 @@ def extract_url_from_metadata(example: dict) -> str | None:
             for url_entry in meta["urls"]:
                 if isinstance(url_entry, str):
                     # Split on "https://" boundaries to handle concatenated URLs
-                    parts = re.split(r'(?=https?://)', url_entry)
+                    parts = re.split(r"(?=https?://)", url_entry)
                     for part in parts:
-                        part = part.strip().rstrip(",'\"").strip('- ').strip()
-                        if part and re.match(r'https?://', part):
+                        part = part.strip().rstrip(",'\"").strip("- ").strip()
+                        if part and re.match(r"https?://", part):
                             all_urls.append(part)
 
             # Prefer en.wikipedia.org article URLs (exclude non-English and Category pages)
             wikipedia_urls = [
-                u for u in all_urls
+                u
+                for u in all_urls
                 if "en.wikipedia.org/wiki/" in u
                 and "/Category:" not in u
                 and "wikipedia-on-ipfs" not in u.lower()
@@ -254,7 +263,11 @@ def extract_url_from_metadata(example: dict) -> str | None:
             else:
                 # Secondary: wikimedia.org URLs (e.g., commons.wikimedia.org)
                 wikimedia_urls = [u for u in all_urls if "wikimedia.org" in u.lower()]
-                target_url = wikimedia_urls[0] if wikimedia_urls else (all_urls[0] if all_urls else None)
+                target_url = (
+                    wikimedia_urls[0]
+                    if wikimedia_urls
+                    else (all_urls[0] if all_urls else None)
+                )
 
     # Extract first valid URL from the string
     if target_url:
@@ -394,7 +407,9 @@ async def encode_screenshot_async(screenshot_path: str) -> str | None:
     return await loop.run_in_executor(None, encode_screenshot, screenshot_path)
 
 
-def encode_screenshot_for_vlm(screenshot_path: str, max_pixels: int | None = None) -> str | None:
+def encode_screenshot_for_vlm(
+    screenshot_path: str, max_pixels: int | None = None
+) -> str | None:
     """Encode screenshot for VLM ground truth with configurable max_pixels.
 
     Unlike encode_screenshot(), this function does NOT apply max_height limit.
@@ -429,10 +444,14 @@ def encode_screenshot_for_vlm(screenshot_path: str, max_pixels: int | None = Non
         return None
 
 
-async def encode_screenshot_for_vlm_async(screenshot_path: str, max_pixels: int | None = None) -> str | None:
+async def encode_screenshot_for_vlm_async(
+    screenshot_path: str, max_pixels: int | None = None
+) -> str | None:
     """Async wrapper for VLM screenshot encoding."""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, encode_screenshot_for_vlm, screenshot_path, max_pixels)
+    return await loop.run_in_executor(
+        None, encode_screenshot_for_vlm, screenshot_path, max_pixels
+    )
 
 
 # ============================================================================
@@ -474,6 +493,7 @@ def make_compressed_encoder(compress_ratio: int, save_dir: str | None = None):
         return encode_screenshot
 
     import math
+
     scale_factor = 1.0 / math.sqrt(compress_ratio)
 
     # Set up save directory
@@ -508,9 +528,7 @@ def make_compressed_encoder(compress_ratio: int, save_dir: str | None = None):
                 if img.mode != "RGB":
                     img = img.convert("RGB")
 
-                img_resized = img.resize(
-                    (new_w, new_h), _Image.Resampling.LANCZOS
-                )
+                img_resized = img.resize((new_w, new_h), _Image.Resampling.LANCZOS)
 
                 # Save compressed image to disk
                 basename = os.path.splitext(os.path.basename(screenshot_path))[0]
@@ -628,7 +646,10 @@ async def fetch_text_async(
 
 
 def split_image_to_tiles(
-    image_path: str, output_dir: str, tile_size: int | tuple[int, int] = 512, overlap: int = 0
+    image_path: str,
+    output_dir: str,
+    tile_size: int | tuple[int, int] = 512,
+    overlap: int = 0,
 ) -> list[str]:
     """Split an image into fixed-size tiles.
 
@@ -653,7 +674,9 @@ def split_image_to_tiles(
     base_name = os.path.splitext(os.path.basename(image_path))[0]
 
     # Check if tiles already exist for this image
-    existing_tiles = sorted(glob.glob(os.path.join(output_dir, f"{base_name}_tile_*.png")))
+    existing_tiles = sorted(
+        glob.glob(os.path.join(output_dir, f"{base_name}_tile_*.png"))
+    )
     if existing_tiles:
         # Tiles already exist, return them
         return existing_tiles
@@ -690,7 +713,9 @@ def split_image_to_tiles(
                 # Skip tiles with extreme aspect ratios (> 10:1)
                 # This prevents issues with ColQwen which requires aspect ratio < 200
                 if tile_width > 0 and tile_height > 0:
-                    aspect_ratio = max(tile_width / tile_height, tile_height / tile_width)
+                    aspect_ratio = max(
+                        tile_width / tile_height, tile_height / tile_width
+                    )
                     if aspect_ratio > 10:
                         col += 1
                         x += step_x
@@ -764,7 +789,9 @@ def prepare_tiles_for_screenshots(
 # ============================================================================
 
 
-def load_nq_data(num_examples: int | None = 1000, split: str = "validation") -> list[dict]:
+def load_nq_data(
+    num_examples: int | None = 1000, split: str = "validation"
+) -> list[dict]:
     """Load Natural Questions (full) split.
 
     For validation, follows the short-answer protocol used by our NQ eval:
@@ -786,7 +813,9 @@ def load_nq_data(num_examples: int | None = 1000, split: str = "validation") -> 
     import html as _html
 
     if split not in {"train", "validation"}:
-        raise ValueError(f"Unsupported NQ split: {split!r}. Expected 'train' or 'validation'.")
+        raise ValueError(
+            f"Unsupported NQ split: {split!r}. Expected 'train' or 'validation'."
+        )
 
     logger.info(f"Loading NQ {split} split (streaming)...")
     ds = load_dataset(
@@ -824,7 +853,7 @@ def load_nq_data(num_examples: int | None = 1000, split: str = "validation") -> 
         # Clean up HTML entities in URL (e.g., &amp; -> &)
         doc_url = _html.unescape(doc_url)
         # Normalize NQ URL format: /w/index.php?title=Foo&oldid=123 -> /wiki/Foo
-        _title_match = re.search(r'[?&]title=([^&]+)', doc_url)
+        _title_match = re.search(r"[?&]title=([^&]+)", doc_url)
         if _title_match:
             doc_url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(_title_match.group(1), safe='/:(),-')}"
 
@@ -843,7 +872,9 @@ def load_nq_data(num_examples: int | None = 1000, split: str = "validation") -> 
         if num_examples and len(data) >= num_examples:
             break
 
-    filter_desc = ">=2 annotator agreement" if split == "validation" else "non-null short answer"
+    filter_desc = (
+        ">=2 annotator agreement" if split == "validation" else "non-null short answer"
+    )
     logger.info(f"Loaded {len(data)} NQ {split} examples (filtered by {filter_desc}).")
     return data
 
@@ -963,7 +994,9 @@ def load_nq_tables_data(num_examples: int | None = 1000) -> list[dict]:
     """
     import html as _html
 
-    data_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "nq_tables", "dev.jsonl")
+    data_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "data", "nq_tables", "dev.jsonl"
+    )
     data_path = os.path.abspath(data_path)
 
     if not os.path.exists(data_path):
@@ -1000,7 +1033,7 @@ def load_nq_tables_data(num_examples: int | None = 1000) -> list[dict]:
             doc_url = table.get("documentUrl", "")
             doc_url = _html.unescape(doc_url)
             # Normalize NQ URL format: /w/index.php?title=Foo&oldid=123 -> /wiki/Foo
-            _title_match = re.search(r'[?&]title=([^&]+)', doc_url)
+            _title_match = re.search(r"[?&]title=([^&]+)", doc_url)
             if _title_match:
                 doc_url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(_title_match.group(1), safe='/:(),-')}"
 
@@ -1085,7 +1118,9 @@ def load_hellaswag_data(num_examples: int | None = None) -> list[dict]:
     from datasets import load_dataset
 
     logger.info("Loading HellaSwag validation split...")
-    ds = load_dataset("Rowan/hellaswag", split="validation", revision="refs/convert/parquet")
+    ds = load_dataset(
+        "Rowan/hellaswag", split="validation", revision="refs/convert/parquet"
+    )
 
     data = []
     for ex in ds:
@@ -1094,13 +1129,17 @@ def load_hellaswag_data(num_examples: int | None = None) -> list[dict]:
         label = int(ex["label"])
         gold_letter = LETTERS[label]
 
-        options_text = _format_mc_options(LETTERS[:len(options)], options)
+        options_text = _format_mc_options(LETTERS[: len(options)], options)
         example = {
             "id": hashlib.md5(question.encode()).hexdigest(),
             "problem": question,
             "gold_answers": [gold_letter],
             "additional_instructions": f"{options_text}\n\n{MC_INSTRUCTION}",
-            "metadata": {"dataset": "hellaswag", "urls": [], "gold_letter": gold_letter},
+            "metadata": {
+                "dataset": "hellaswag",
+                "urls": [],
+                "gold_letter": gold_letter,
+            },
         }
         data.append(example)
         if num_examples and len(data) >= num_examples:
@@ -1134,7 +1173,11 @@ def load_commonsenseqa_data(num_examples: int | None = None) -> list[dict]:
             "problem": question,
             "gold_answers": [gold_letter],
             "additional_instructions": f"{options_text}\n\n{MC_INSTRUCTION}",
-            "metadata": {"dataset": "commonsense_qa", "urls": [], "gold_letter": gold_letter},
+            "metadata": {
+                "dataset": "commonsense_qa",
+                "urls": [],
+                "gold_letter": gold_letter,
+            },
         }
         data.append(example)
         if num_examples and len(data) >= num_examples:
@@ -1168,7 +1211,11 @@ def load_openbookqa_data(num_examples: int | None = None) -> list[dict]:
             "problem": question,
             "gold_answers": [gold_letter],
             "additional_instructions": f"{options_text}\n\n{MC_INSTRUCTION}",
-            "metadata": {"dataset": "openbookqa", "urls": [], "gold_letter": gold_letter},
+            "metadata": {
+                "dataset": "openbookqa",
+                "urls": [],
+                "gold_letter": gold_letter,
+            },
         }
         data.append(example)
         if num_examples and len(data) >= num_examples:
@@ -1178,7 +1225,9 @@ def load_openbookqa_data(num_examples: int | None = None) -> list[dict]:
     return data
 
 
-def load_arc_data(config: str = "ARC-Challenge", num_examples: int | None = None) -> list[dict]:
+def load_arc_data(
+    config: str = "ARC-Challenge", num_examples: int | None = None
+) -> list[dict]:
     """Load ARC (AI2 Reasoning Challenge) test split.
 
     3-5 choice science exam benchmark. answerKey is A-E or 1-5 (normalized to letters).
@@ -1211,7 +1260,11 @@ def load_arc_data(config: str = "ARC-Challenge", num_examples: int | None = None
             "problem": question,
             "gold_answers": [gold_letter],
             "additional_instructions": f"{options_text}\n\n{MC_INSTRUCTION}",
-            "metadata": {"dataset": dataset_name, "urls": [], "gold_letter": gold_letter},
+            "metadata": {
+                "dataset": dataset_name,
+                "urls": [],
+                "gold_letter": gold_letter,
+            },
         }
         data.append(example)
         if num_examples and len(data) >= num_examples:

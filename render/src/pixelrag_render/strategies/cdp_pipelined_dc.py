@@ -16,7 +16,6 @@ import base64
 import json
 import os
 import time
-import signal
 import subprocess
 import urllib.request
 from dataclasses import dataclass
@@ -72,16 +71,19 @@ class TwoTabConnection:
             pass
 
 
-async def launch_two_tab(chrome_path: str, port: int,
-                         headless_shell: bool = False) -> TwoTabConnection:
+async def launch_two_tab(
+    chrome_path: str, port: int, headless_shell: bool = False
+) -> TwoTabConnection:
     import websockets
 
     args = [chrome_path, f"--remote-debugging-port={port}"]
     if not headless_shell:
         args.append("--headless")
     args += [
-        "--no-sandbox", "--disable-dev-shm-usage",
-        "--enable-gpu-rasterization", "--force-gpu-rasterization",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--enable-gpu-rasterization",
+        "--force-gpu-rasterization",
         "about:blank",
     ]
 
@@ -90,7 +92,9 @@ async def launch_two_tab(chrome_path: str, port: int,
     for attempt in range(10):
         await asyncio.sleep(1)
         try:
-            data = urllib.request.urlopen(f"http://localhost:{port}/json", timeout=3).read()
+            data = urllib.request.urlopen(
+                f"http://localhost:{port}/json", timeout=3
+            ).read()
             targets = json.loads(data)
             break
         except Exception:
@@ -99,7 +103,8 @@ async def launch_two_tab(chrome_path: str, port: int,
                 raise ConnectionError(f"Chrome port {port}")
 
     ws_a = await websockets.connect(
-        targets[0]["webSocketDebuggerUrl"], open_timeout=10, max_size=50*1024*1024)
+        targets[0]["webSocketDebuggerUrl"], open_timeout=10, max_size=50 * 1024 * 1024
+    )
     tab_a = WebsocketConnection(ws_a, proc)
 
     r = await tab_a.cdp("Target.createTarget", {"url": "about:blank"})
@@ -117,7 +122,9 @@ async def launch_two_tab(chrome_path: str, port: int,
                 ws_url_b = t["webSocketDebuggerUrl"]
                 break
 
-    ws_b = await websockets.connect(ws_url_b, open_timeout=10, max_size=50*1024*1024)
+    ws_b = await websockets.connect(
+        ws_url_b, open_timeout=10, max_size=50 * 1024 * 1024
+    )
     tab_b = WebsocketConnection(ws_b, proc)
 
     return TwoTabConnection(tab_a, tab_b, proc)
@@ -150,16 +157,24 @@ class CDPPipelinedDCStrategy:
         self._connections = []
         for i in range(self.n_workers):
             conn = await launch_two_tab(
-                self.chrome_path, self._base_port + i,
-                headless_shell=self.headless_shell)
+                self.chrome_path,
+                self._base_port + i,
+                headless_shell=self.headless_shell,
+            )
             self._connections.append(conn)
 
         for conn in self._connections:
             for tab in [conn.tab_a, conn.tab_b]:
                 await tab.cdp("Page.enable")
-                await tab.cdp("Emulation.setDeviceMetricsOverride", {
-                    "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                    "deviceScaleFactor": 1, "mobile": False})
+                await tab.cdp(
+                    "Emulation.setDeviceMetricsOverride",
+                    {
+                        "width": VIEWPORT_WIDTH,
+                        "height": TILE_HEIGHT,
+                        "deviceScaleFactor": 1,
+                        "mobile": False,
+                    },
+                )
 
         if self.fmt == "raw":
             os.makedirs("/dev/shm/pixelrag_bench", exist_ok=True)
@@ -183,7 +198,7 @@ class CDPPipelinedDCStrategy:
                 ac_result = await ac
                 all_results[article_index[ac_result.article_path]] = ac_result
 
-        async def worker_task(wi):
+        async def worker_task(wi):  # noqa: F811
             arts = wp[wi]
             conn = self._connections[wi]
             tabs = [conn.tab_a, conn.tab_b]
@@ -194,9 +209,9 @@ class CDPPipelinedDCStrategy:
 
                 nav_task = self._navigate(tab, article)
                 if i > 0:
-                    cap_task = self._capture(other, prev_article, prev_page_h, wi)
+                    cap_task = self._capture(other, prev_article, prev_page_h, wi)  # noqa: F821
                     nav_result, cap_result = await asyncio.gather(nav_task, cap_task)
-                    all_results[article_index[prev_article["path"]]] = cap_result
+                    all_results[article_index[prev_article["path"]]] = cap_result  # noqa: F821
                 else:
                     nav_result = await nav_task
 
@@ -206,11 +221,14 @@ class CDPPipelinedDCStrategy:
             last_tab = tabs[len(arts) % 2 - 1] if arts else tabs[0]
             if arts:
                 last_tab = tabs[(len(arts) - 1) % 2]
-                cap_result = await self._capture(last_tab, prev_article, prev_page_h, wi)
+                cap_result = await self._capture(
+                    last_tab, prev_article, prev_page_h, wi
+                )
                 all_results[article_index[prev_article["path"]]] = cap_result
 
         await asyncio.gather(
-            *[worker_task(i) for i in range(n)], return_exceptions=True)
+            *[worker_task(i) for i in range(n)], return_exceptions=True
+        )
         return [r for r in all_results if r is not None]
 
     async def _navigate(self, tab, article: dict) -> int:
@@ -220,17 +238,23 @@ class CDPPipelinedDCStrategy:
             return TILE_HEIGHT
 
         try:
-            r = await tab.cdp("Runtime.evaluate", {
-                "expression": WAIT_FONTS_IMGS,
-                "awaitPromise": True, "returnByValue": True,
-            })
+            r = await tab.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": WAIT_FONTS_IMGS,
+                    "awaitPromise": True,
+                    "returnByValue": True,
+                },
+            )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = TILE_HEIGHT
 
         return max(page_h, 1)
 
-    async def _capture(self, tab, article: dict, page_h: int, wi: int) -> ArticleCapture:
+    async def _capture(
+        self, tab, article: dict, page_h: int, wi: int
+    ) -> ArticleCapture:
         ac = ArticleCapture(article_path=article["path"])
         ac.page_height = page_h
         n_tiles = max(1, (page_h + TILE_HEIGHT - 1) // TILE_HEIGHT)
@@ -243,8 +267,10 @@ class CDPPipelinedDCStrategy:
 
             if t > 0:
                 try:
-                    await tab.cdp("Runtime.evaluate", {
-                        "expression": f"""new Promise(resolve => {{
+                    await tab.cdp(
+                        "Runtime.evaluate",
+                        {
+                            "expression": f"""new Promise(resolve => {{
                             window.scrollTo(0, {t * TILE_HEIGHT});
                             requestAnimationFrame(() => requestAnimationFrame(() => {{
                                 const imgs = Array.from(document.images).filter(i => {{
@@ -261,15 +287,22 @@ class CDPPipelinedDCStrategy:
                                 Promise.race([loaded, timeout]).then(resolve);
                             }}));
                         }})""",
-                        "awaitPromise": True})
+                            "awaitPromise": True,
+                        },
+                    )
                 except Exception:
                     pass
 
             params = {
                 "directClip": True,
                 "optimizeForSpeed": True,
-                "clip": {"x": 0, "y": t * TILE_HEIGHT,
-                         "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1},
+                "clip": {
+                    "x": 0,
+                    "y": t * TILE_HEIGHT,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
+                },
             }
 
             raw_path = None
@@ -295,8 +328,12 @@ class CDPPipelinedDCStrategy:
                 continue
 
             tc = TileCapture(
-                shot_ms=shot_ms, nav_ms=0.0,
-                tile_index=t, clip_y=t * TILE_HEIGHT, clip_h=clip_h)
+                shot_ms=shot_ms,
+                nav_ms=0.0,
+                tile_index=t,
+                clip_y=t * TILE_HEIGHT,
+                clip_h=clip_h,
+            )
             if self.fmt == "raw":
                 tc.raw_file_path = raw_path
             else:

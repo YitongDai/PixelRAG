@@ -9,12 +9,18 @@ import asyncio
 import base64
 import logging
 import os
-from typing import Optional
 
 # Try to import Google GenAI for Gemini support
 try:
     import google.genai as genai
-    from google.genai.types import GenerateContentConfig, Part, Blob, HttpOptions, Content
+    from google.genai.types import (
+        GenerateContentConfig,
+        Part,
+        Blob,
+        HttpOptions,
+        Content,
+    )
+
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -134,10 +140,12 @@ def _build_fewshot_turns(demos: list[dict], encode_image_fn) -> list[dict]:
             try:
                 b64 = encode_image_fn(img_path)
                 if b64:
-                    user_content.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{b64}"},
-                    })
+                    user_content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{b64}"},
+                        }
+                    )
             except Exception as e:
                 logger.warning(f"Failed to encode few-shot image {img_path}: {e}")
         turns.append({"role": "user", "content": user_content})
@@ -163,7 +171,9 @@ def build_messages(
     # query_image_path = raw species/landmark photo (for generation, always).
     # pixel_query_path = rendered card or raw photo (for retrieval only; ignored here).
     # Falls back to pixel_query_path if query_image_path is not set (backward compat).
-    gen_image_path = retrieval_result.query_image_path or retrieval_result.pixel_query_path
+    gen_image_path = (
+        retrieval_result.query_image_path or retrieval_result.pixel_query_path
+    )
     if gen_image_path and encode_image_fn:
         system_prompt = SYSTEM_PROMPT_MULTIMODAL_QUERY
         # Decide evidence_note based on what retrieval actually returned. Three cases:
@@ -187,10 +197,12 @@ def build_messages(
         if retrieval_result.text:
             # Option 1: no URL header in multimodal branch either. Reader gets the
             # chunks and the query image, no metadata leak.
-            text_parts.extend([
-                "",
-                retrieval_result.text,
-            ])
+            text_parts.extend(
+                [
+                    "",
+                    retrieval_result.text,
+                ]
+            )
         if additional_instructions:
             text_parts.append("")
             text_parts.append(additional_instructions)
@@ -203,13 +215,17 @@ def build_messages(
             try:
                 img_base64 = encode_image_fn(gen_image_path)
                 if img_base64:
-                    user_content.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{img_base64}"}
-                    })
+                    user_content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{img_base64}"},
+                        }
+                    )
             except Exception as e:
                 logger.warning(f"Failed to encode query image {gen_image_path}: {e}")
-                user_content.append({"type": "text", "text": f"(Image unavailable) Query: {query}"})
+                user_content.append(
+                    {"type": "text", "text": f"(Image unavailable) Query: {query}"}
+                )
         else:
             logger.warning(f"Query image not found: {gen_image_path}")
             user_content.append({"type": "text", "text": f"Query: {query}"})
@@ -221,10 +237,14 @@ def build_messages(
                     try:
                         img_base64 = encode_image_fn(img_path)
                         if img_base64:
-                            user_content.append({
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{img_base64}"}
-                            })
+                            user_content.append(
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{img_base64}"
+                                    },
+                                }
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to encode image {img_path}: {e}")
 
@@ -239,9 +259,18 @@ def build_messages(
         system_prompt = SYSTEM_PROMPT_SCREENSHOT
         user_content = [
             {"type": "text", "text": query},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{retrieval_result.base64_image}"}}
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{retrieval_result.base64_image}"
+                },
+            },
         ]
-    elif retrieval_result.retrieval_type == "text_api+rendered" and retrieval_result.images and encode_image_fn:
+    elif (
+        retrieval_result.retrieval_type == "text_api+rendered"
+        and retrieval_result.images
+        and encode_image_fn
+    ):
         # Text retrieval rendered as images. Mirror the text-RAG framing so
         # evidence comes first and the reader sees an explicit "Question:"
         # suffix — same structure as the text→text branch below, only the
@@ -253,10 +282,14 @@ def build_messages(
                 try:
                     img_base64 = encode_image_fn(img_path)
                     if img_base64:
-                        user_content.append({
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{img_base64}"}
-                        })
+                        user_content.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{img_base64}"
+                                },
+                            }
+                        )
                 except Exception as e:
                     logger.warning(f"Failed to encode image {img_path}: {e}")
         user_content.append({"type": "text", "text": f"Question: {query}"})
@@ -269,10 +302,14 @@ def build_messages(
                 try:
                     img_base64 = encode_image_fn(img_path)
                     if img_base64:
-                        user_content.append({
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{img_base64}"}
-                        })
+                        user_content.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{img_base64}"
+                                },
+                            }
+                        )
                 except Exception as e:
                     logger.warning(f"Failed to encode image {img_path}: {e}")
     elif retrieval_result.text:
@@ -306,11 +343,13 @@ Question: {query}"""
     return [
         {"role": "system", "content": system_prompt},
         *fewshot_turns,
-        {"role": "user", "content": user_content}
+        {"role": "user", "content": user_content},
     ]
 
 
-def _encode_images_to_content(images: list[tuple[str, float]], encode_image_fn) -> list[dict]:
+def _encode_images_to_content(
+    images: list[tuple[str, float]], encode_image_fn
+) -> list[dict]:
     """Encode image paths to base64 content blocks."""
     content = []
     for img_path, score in images:
@@ -318,10 +357,12 @@ def _encode_images_to_content(images: list[tuple[str, float]], encode_image_fn) 
             try:
                 img_base64 = encode_image_fn(img_path)
                 if img_base64:
-                    content.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{img_base64}"}
-                    })
+                    content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{img_base64}"},
+                        }
+                    )
             except Exception as e:
                 logger.warning(f"Failed to encode image {img_path}: {e}")
     return content
@@ -362,7 +403,10 @@ def build_react_messages(
         # Build user message with evidence images
         if turn_idx == 0:
             user_content: list[dict] = [
-                {"type": "text", "text": f"Question: {query}\n\nHere are retrieved Wikipedia evidence tiles:"}
+                {
+                    "type": "text",
+                    "text": f"Question: {query}\n\nHere are retrieved Wikipedia evidence tiles:",
+                }
             ]
         else:
             text = "Here are new search results for your query:"
@@ -371,28 +415,37 @@ def build_react_messages(
                 used = previous_queries[:turn_idx]
                 if used:
                     text += f"\n⚠️ You already searched: {used}. Do NOT repeat these. Use DIFFERENT keywords."
-            user_content = [
-                {"type": "text", "text": text}
-            ]
+            user_content = [{"type": "text", "text": text}]
 
         if retrieval_result.images and encode_image_fn:
-            user_content.extend(_encode_images_to_content(retrieval_result.images, encode_image_fn))
+            user_content.extend(
+                _encode_images_to_content(retrieval_result.images, encode_image_fn)
+            )
 
         if not retrieval_result.has_content:
-            user_content.append({"type": "text", "text": "(No results found for this search.)"})
+            user_content.append(
+                {"type": "text", "text": "(No results found for this search.)"}
+            )
 
         # On last turn, inject force-answer instruction
         if is_last_turn and turn_idx == len(retrieval_results) - 1:
-            user_content.append({"type": "text", "text": (
-                "\n⚠️ This is your FINAL turn. You MUST provide an answer now — do NOT search again. "
-                "Give your best answer based on ALL evidence seen so far. If uncertain, make your best guess."
-            )})
+            user_content.append(
+                {
+                    "type": "text",
+                    "text": (
+                        "\n⚠️ This is your FINAL turn. You MUST provide an answer now — do NOT search again. "
+                        "Give your best answer based on ALL evidence seen so far. If uncertain, make your best guess."
+                    ),
+                }
+            )
 
         messages.append({"role": "user", "content": user_content})
 
         # Add assistant response if we have one for this turn
         if turn_idx < len(assistant_responses):
-            messages.append({"role": "assistant", "content": assistant_responses[turn_idx]})
+            messages.append(
+                {"role": "assistant", "content": assistant_responses[turn_idx]}
+            )
 
     return messages
 
@@ -422,34 +475,43 @@ class LLMClient:
 
         # Gemini routes to Google GenAI SDK unless forced to OpenAI-compatible
         # (aggregators like OpenRouter / Commonstack expose Gemini via OAI-compat).
-        self.is_gemini = ('gemini' in model.lower()) and not force_openai_compat
-        
+        self.is_gemini = ("gemini" in model.lower()) and not force_openai_compat
+
         if self.is_gemini:
             if not GEMINI_AVAILABLE:
-                raise ImportError("google-genai package is required for Gemini models. Install with: pip install google-genai")
-            
+                raise ImportError(
+                    "google-genai package is required for Gemini models. Install with: pip install google-genai"
+                )
+
             # Use Vertex AI if GEMINI_API_KEY is set and GOOGLE_GENAI_USE_VERTEXAI is true
-            vertex_api_key = os.getenv('GEMINI_API_KEY')
-            use_vertex = os.getenv('GOOGLE_GENAI_USE_VERTEXAI', '').lower() == 'true'
+            vertex_api_key = os.getenv("GEMINI_API_KEY")
+            use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
             if vertex_api_key and use_vertex:
                 logger.info(f"Using Vertex AI for Gemini model: {model}")
                 # Ensure GOOGLE_API_KEY is not set when using Vertex AI (it causes conflicts)
-                if 'GOOGLE_API_KEY' in os.environ:
-                    logger.warning("GOOGLE_API_KEY is set but using Vertex AI. Unsetting GOOGLE_API_KEY to avoid conflicts.")
-                    del os.environ['GOOGLE_API_KEY']
-                os.environ['GEMINI_API_KEY'] = vertex_api_key
-                os.environ['GOOGLE_GENAI_USE_VERTEXAI'] = 'true'
-                self.gemini_client = genai.Client(http_options=HttpOptions(api_version="v1"))
+                if "GOOGLE_API_KEY" in os.environ:
+                    logger.warning(
+                        "GOOGLE_API_KEY is set but using Vertex AI. Unsetting GOOGLE_API_KEY to avoid conflicts."
+                    )
+                    del os.environ["GOOGLE_API_KEY"]
+                os.environ["GEMINI_API_KEY"] = vertex_api_key
+                os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+                self.gemini_client = genai.Client(
+                    http_options=HttpOptions(api_version="v1")
+                )
             else:
                 # Use standard Gemini API
                 logger.info(f"Using standard Gemini API for model: {model}")
-                api_key = api_key if api_key != "dummy" else os.getenv('GOOGLE_API_KEY')
+                api_key = api_key if api_key != "dummy" else os.getenv("GOOGLE_API_KEY")
                 if not api_key:
-                    raise ValueError("GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required for Gemini models")
+                    raise ValueError(
+                        "GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required for Gemini models"
+                    )
                 self.gemini_client = genai.Client(api_key=api_key)
         else:
             # Use OpenAI-compatible API
             from openai import AsyncOpenAI
+
             logger.info(f"Using OpenAI-compatible API: {api_base}")
             self.client = AsyncOpenAI(
                 api_key=api_key,
@@ -459,7 +521,9 @@ class LLMClient:
             )
             self.gemini_client = None
 
-    async def generate(self, messages: list[dict], max_retries: int = 3, connection_retries: int = 12) -> tuple[str, dict]:
+    async def generate(
+        self, messages: list[dict], max_retries: int = 3, connection_retries: int = 12
+    ) -> tuple[str, dict]:
         """Generate response from messages with retry on timeout/connection errors.
 
         Args:
@@ -471,13 +535,14 @@ class LLMClient:
             Tuple of (generated_text, usage_dict).
         """
         # Check and truncate if needed
-        if hasattr(self, 'max_context_tokens') and self.max_context_tokens:
+        if hasattr(self, "max_context_tokens") and self.max_context_tokens:
             estimated_tokens = self._estimate_tokens(messages)
             if estimated_tokens > self.max_context_tokens - self.max_tokens:
-                logger.warning(f"Estimated {estimated_tokens} tokens exceeds limit, truncating...")
+                logger.warning(
+                    f"Estimated {estimated_tokens} tokens exceeds limit, truncating..."
+                )
                 messages = self._truncate_messages(messages, self.max_context_tokens)
 
-        last_error = None
         conn_attempts = 0
         timeout_attempts = 0
         while True:
@@ -486,13 +551,14 @@ class LLMClient:
                     return await self._generate_gemini(messages)
                 else:
                     return await self._generate_openai(messages)
-            except asyncio.TimeoutError as e:
+            except asyncio.TimeoutError:
                 timeout_attempts += 1
                 if timeout_attempts >= max_retries:
                     raise
-                last_error = e
-                wait_time = 2 ** timeout_attempts  # 2, 4, 8 seconds
-                logger.warning(f"Timeout on attempt {timeout_attempts}/{max_retries}, retrying in {wait_time}s...")
+                wait_time = 2**timeout_attempts  # 2, 4, 8 seconds
+                logger.warning(
+                    f"Timeout on attempt {timeout_attempts}/{max_retries}, retrying in {wait_time}s..."
+                )
                 await asyncio.sleep(wait_time)
             except Exception as e:
                 error_str = str(e).lower()
@@ -500,27 +566,37 @@ class LLMClient:
                     timeout_attempts += 1
                     if timeout_attempts >= max_retries:
                         raise
-                    last_error = e
-                    wait_time = 2 ** timeout_attempts
-                    logger.warning(f"Timeout on attempt {timeout_attempts}/{max_retries}, retrying in {wait_time}s...")
+                    wait_time = 2**timeout_attempts
+                    logger.warning(
+                        f"Timeout on attempt {timeout_attempts}/{max_retries}, retrying in {wait_time}s..."
+                    )
                     await asyncio.sleep(wait_time)
                 elif "connection" in error_str or "connect" in error_str:
                     conn_attempts += 1
                     if conn_attempts >= connection_retries:
                         raise
-                    last_error = e
                     wait_time = 10  # fixed 10s — server restart takes ~30-60s
-                    logger.warning(f"Connection error ({conn_attempts}/{connection_retries}), retrying in {wait_time}s...")
+                    logger.warning(
+                        f"Connection error ({conn_attempts}/{connection_retries}), retrying in {wait_time}s..."
+                    )
                     await asyncio.sleep(wait_time)
-                elif "429" in error_str or "rate_limit" in error_str or "rate limit" in error_str:
+                elif (
+                    "429" in error_str
+                    or "rate_limit" in error_str
+                    or "rate limit" in error_str
+                ):
                     # Provider rate limit — exponential backoff with jitter
                     timeout_attempts += 1
                     if timeout_attempts >= max_retries + 3:  # extra patience for 429
                         raise
-                    last_error = e
                     import random
-                    wait_time = min(60, 5 * (2 ** timeout_attempts)) + random.uniform(0, 3)
-                    logger.warning(f"429 rate-limit (attempt {timeout_attempts}), backing off {wait_time:.1f}s...")
+
+                    wait_time = min(60, 5 * (2**timeout_attempts)) + random.uniform(
+                        0, 3
+                    )
+                    logger.warning(
+                        f"429 rate-limit (attempt {timeout_attempts}), backing off {wait_time:.1f}s..."
+                    )
                     await asyncio.sleep(wait_time)
                 else:
                     raise
@@ -530,20 +606,20 @@ class LLMClient:
         # Extract system prompt and user content
         system_prompt = None
         user_content = None
-        
+
         for msg in messages:
             if msg.get("role") == "system":
                 system_prompt = msg.get("content", "")
             elif msg.get("role") == "user":
                 user_content = msg.get("content", "")
-        
+
         # Build parts for Gemini
         parts = []
-        
+
         # Add system prompt to the beginning of user message if present
         if system_prompt:
             parts.append(Part(text=f"{system_prompt}\n\n"))
-        
+
         # Process user content
         if isinstance(user_content, str):
             # Simple text
@@ -556,7 +632,11 @@ class LLMClient:
             for item in user_content:
                 if item.get("type") == "text":
                     text = item.get("text", "")
-                    if parts and isinstance(parts[0], Part) and hasattr(parts[0], 'text'):
+                    if (
+                        parts
+                        and isinstance(parts[0], Part)
+                        and hasattr(parts[0], "text")
+                    ):
                         # Append to existing text part
                         parts[0] = Part(text=parts[0].text + text)
                     else:
@@ -569,47 +649,52 @@ class LLMClient:
                             header, data = image_url.split(",", 1)
                             mime_type = header.split(";")[0].split(":")[1]
                             image_bytes = base64.b64decode(data)
-                            parts.append(Part(inline_data=Blob(mime_type=mime_type, data=image_bytes)))
+                            parts.append(
+                                Part(
+                                    inline_data=Blob(
+                                        mime_type=mime_type, data=image_bytes
+                                    )
+                                )
+                            )
                         except Exception as e:
                             logger.error(f"Failed to process image: {e}")
                             raise
-        
+
         # Create content
         content = Content(role="user", parts=parts)
-        
+
         # Call API in executor to avoid blocking
         loop = asyncio.get_event_loop()
-        
+
         def _call_api():
             try:
                 response = self.gemini_client.models.generate_content(
                     model=self.model,
                     contents=[content],
                     config=GenerateContentConfig(
-                        temperature=self.temperature,
-                        max_output_tokens=self.max_tokens
-                    )
+                        temperature=self.temperature, max_output_tokens=self.max_tokens
+                    ),
                 )
                 return response
             except Exception as e:
                 logger.error(f"Gemini API error: {e}")
                 raise
-        
+
         response = await loop.run_in_executor(None, _call_api)
-        
+
         # Extract text
-        text = response.text if hasattr(response, 'text') and response.text else ""
-        
+        text = response.text if hasattr(response, "text") and response.text else ""
+
         # Extract usage
         usage = {}
-        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
             usage_meta = response.usage_metadata
             usage = {
-                "prompt_tokens": getattr(usage_meta, 'prompt_token_count', 0),
-                "completion_tokens": getattr(usage_meta, 'candidates_token_count', 0),
-                "total_tokens": getattr(usage_meta, 'total_token_count', 0)
+                "prompt_tokens": getattr(usage_meta, "prompt_token_count", 0),
+                "completion_tokens": getattr(usage_meta, "candidates_token_count", 0),
+                "total_tokens": getattr(usage_meta, "total_token_count", 0),
             }
-        
+
         return text, usage
 
     async def _generate_openai(self, messages: list[dict]) -> tuple[str, dict]:
@@ -623,7 +708,9 @@ class LLMClient:
         # Some modern reasoning models deprecate `temperature` (Claude Opus 4.7+, some GPT-5 variants).
         # Only send it when we actually want to override the default.
         model_lower = self.model.lower()
-        drops_temperature = any(x in model_lower for x in ("opus-4-7", "opus-4-8", "gpt-5.4-pro"))
+        drops_temperature = any(
+            x in model_lower for x in ("opus-4-7", "opus-4-8", "gpt-5.4-pro")
+        )
         if not drops_temperature:
             kwargs["temperature"] = self.temperature
         if self.enable_thinking is not None:
@@ -639,7 +726,7 @@ class LLMClient:
             usage = {
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
+                "total_tokens": response.usage.total_tokens,
             }
 
         return generated_text, usage
@@ -677,8 +764,13 @@ class LLMClient:
             if isinstance(content, str):
                 if total_chars + len(content) > max_chars:
                     remaining = max(0, max_chars - total_chars)
-                    new_msg["content"] = content[:remaining] + "\n\n[Content truncated due to context limit]"
-                    logger.warning(f"Truncated message content from {len(content)} to {remaining} chars")
+                    new_msg["content"] = (
+                        content[:remaining]
+                        + "\n\n[Content truncated due to context limit]"
+                    )
+                    logger.warning(
+                        f"Truncated message content from {len(content)} to {remaining} chars"
+                    )
                 total_chars += len(new_msg["content"])
             elif isinstance(content, list):
                 new_content = []
@@ -688,9 +780,14 @@ class LLMClient:
                         if total_chars + len(text) > max_chars:
                             remaining = max(0, max_chars - total_chars)
                             new_item = item.copy()
-                            new_item["text"] = text[:remaining] + "\n\n[Content truncated due to context limit]"
+                            new_item["text"] = (
+                                text[:remaining]
+                                + "\n\n[Content truncated due to context limit]"
+                            )
                             new_content.append(new_item)
-                            logger.warning(f"Truncated text content from {len(text)} to {remaining} chars")
+                            logger.warning(
+                                f"Truncated text content from {len(text)} to {remaining} chars"
+                            )
                             total_chars += remaining
                         else:
                             new_content.append(item)
@@ -703,5 +800,3 @@ class LLMClient:
             truncated.append(new_msg)
 
         return truncated
-
-

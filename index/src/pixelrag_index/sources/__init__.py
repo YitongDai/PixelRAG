@@ -1,4 +1,4 @@
-from .base import Document, Source
+from .base import Document as Document, Source as Source
 from .kiwix import KiwixSource
 from .local import LocalSource
 from .pdf import PDFSource

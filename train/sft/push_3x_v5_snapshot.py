@@ -16,10 +16,15 @@ from pathlib import Path
 
 from huggingface_hub import create_repo, upload_folder
 
-TOKEN = os.environ.get("HF_TOKEN") or open(os.path.expanduser("~/.cache/huggingface/token")).read().strip()
+TOKEN = (
+    os.environ.get("HF_TOKEN")
+    or open(os.path.expanduser("~/.cache/huggingface/token")).read().strip()
+)
 USER = "Chrisyichuan"
 REPO_ID = f"{USER}/qwen3vl-4b-wiki-screenshot-multik-3x-v5-lora"
-SRC = Path("/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_3x_v5/checkpoint-16000")
+SRC = Path(
+    "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_3x_v5/checkpoint-16000"
+)
 
 KEEP_FILES = {
     "adapter_config.json",
@@ -188,7 +193,7 @@ def main():
                 print(f"  - {name} (not present, skipped)")
 
         (tmp / "README.md").write_text(README)
-        print(f"  + README.md")
+        print("  + README.md")
 
         create_repo(REPO_ID, token=TOKEN, exist_ok=True, private=False)
         upload_folder(

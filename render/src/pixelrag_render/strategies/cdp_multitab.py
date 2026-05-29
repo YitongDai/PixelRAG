@@ -98,8 +98,9 @@ class CDPMultiTabStrategy:
                 args.append("--headless")
             args += CHROME_ARGS + ["--in-process-gpu", "about:blank"]
 
-            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL)
+            proc = subprocess.Popen(
+                args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
             self._procs.append(proc)
 
             # Connect to first tab
@@ -107,7 +108,8 @@ class CDPMultiTabStrategy:
                 await asyncio.sleep(1)
                 try:
                     data = urllib.request.urlopen(
-                        f"http://localhost:{port}/json", timeout=3).read()
+                        f"http://localhost:{port}/json", timeout=3
+                    ).read()
                     targets = json.loads(data)
                     break
                 except Exception:
@@ -117,26 +119,40 @@ class CDPMultiTabStrategy:
 
             ws0 = await websockets.connect(
                 targets[0]["webSocketDebuggerUrl"],
-                open_timeout=10, max_size=50 * 1024 * 1024)
+                open_timeout=10,
+                max_size=50 * 1024 * 1024,
+            )
             tab0 = WebsocketConnection(ws0, proc)
             await tab0.cdp("Page.enable")
-            await tab0.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                "deviceScaleFactor": 1, "mobile": False})
+            await tab0.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": TILE_HEIGHT,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
             self._tabs.append((tab0, pi))
 
             # Create additional tabs
             class NoopProc:
-                def send_signal(self, _): pass
-                def wait(self, timeout=None): pass
-                def kill(self): pass
+                def send_signal(self, _):
+                    pass
+
+                def wait(self, timeout=None):
+                    pass
+
+                def kill(self):
+                    pass
 
             for ti in range(1, self.tabs_per_process):
                 r = await tab0.cdp("Target.createTarget", {"url": "about:blank"})
                 target_id = r["result"]["targetId"]
 
                 data2 = urllib.request.urlopen(
-                    f"http://localhost:{port}/json", timeout=3).read()
+                    f"http://localhost:{port}/json", timeout=3
+                ).read()
                 targets2 = json.loads(data2)
                 ws_url = None
                 for t in targets2:
@@ -148,12 +164,19 @@ class CDPMultiTabStrategy:
                     raise ConnectionError(f"Can't find tab {ti} on port {port}")
 
                 ws = await websockets.connect(
-                    ws_url, open_timeout=10, max_size=50 * 1024 * 1024)
+                    ws_url, open_timeout=10, max_size=50 * 1024 * 1024
+                )
                 tab = WebsocketConnection(ws, NoopProc())
                 await tab.cdp("Page.enable")
-                await tab.cdp("Emulation.setDeviceMetricsOverride", {
-                    "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                    "deviceScaleFactor": 1, "mobile": False})
+                await tab.cdp(
+                    "Emulation.setDeviceMetricsOverride",
+                    {
+                        "width": VIEWPORT_WIDTH,
+                        "height": TILE_HEIGHT,
+                        "deviceScaleFactor": 1,
+                        "mobile": False,
+                    },
+                )
                 self._tabs.append((tab, pi))
 
         if self.fmt == "raw":
@@ -210,7 +233,8 @@ class CDPMultiTabStrategy:
         # Use Page.frameStoppedLoading: reliable with --in-process-gpu
         # (Page.frameNavigated has a Chrome bug where it's sometimes not fired).
         nav_fut = asyncio.ensure_future(
-            conn.wait_for_event("Page.frameStoppedLoading", timeout=30))
+            conn.wait_for_event("Page.frameStoppedLoading", timeout=30)
+        )
         try:
             await conn.cdp("Page.navigate", {"url": article_url(article)})
         except Exception as e:
@@ -225,9 +249,14 @@ class CDPMultiTabStrategy:
             return ac
 
         try:
-            r = await conn.cdp("Runtime.evaluate", {
-                "expression": WAIT_FONTS_IMGS,
-                "awaitPromise": True, "returnByValue": True})
+            r = await conn.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": WAIT_FONTS_IMGS,
+                    "awaitPromise": True,
+                    "returnByValue": True,
+                },
+            )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = th
@@ -248,8 +277,10 @@ class CDPMultiTabStrategy:
 
             if t > 0:
                 try:
-                    await conn.cdp("Runtime.evaluate", {
-                        "expression": f"""new Promise(resolve => {{
+                    await conn.cdp(
+                        "Runtime.evaluate",
+                        {
+                            "expression": f"""new Promise(resolve => {{
                             window.scrollTo(0, {t * th});
                             requestAnimationFrame(() => requestAnimationFrame(() => {{
                                 const imgs = Array.from(document.images).filter(i => {{
@@ -266,15 +297,22 @@ class CDPMultiTabStrategy:
                                 Promise.race([loaded, timeout]).then(resolve);
                             }}));
                         }})""",
-                        "awaitPromise": True})
+                            "awaitPromise": True,
+                        },
+                    )
                 except Exception:
                     pass
 
             params = {
                 "directClip": True,
                 "optimizeForSpeed": True,
-                "clip": {"x": 0, "y": t * th,
-                         "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1},
+                "clip": {
+                    "x": 0,
+                    "y": t * th,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
+                },
             }
 
             raw_path = None
@@ -300,8 +338,12 @@ class CDPMultiTabStrategy:
                 continue
 
             tc = TileCapture(
-                shot_ms=shot_ms, nav_ms=nav_ms if t == 0 else 0.0,
-                tile_index=t, clip_y=t * th, clip_h=clip_h)
+                shot_ms=shot_ms,
+                nav_ms=nav_ms if t == 0 else 0.0,
+                tile_index=t,
+                clip_y=t * th,
+                clip_h=clip_h,
+            )
             if self.fmt == "raw":
                 tc.raw_file_path = raw_path
             else:

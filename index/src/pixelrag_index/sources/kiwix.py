@@ -76,7 +76,9 @@ class KiwixServeManager:
                 return f"http://localhost:{port}"
             except RuntimeError:
                 logger.error("Failed to restart kiwix-serve on port %d, skipping", port)
-        logger.error("All kiwix-serve instances down, falling back to port %d", self.base_port)
+        logger.error(
+            "All kiwix-serve instances down, falling back to port %d", self.base_port
+        )
         return f"http://localhost:{self.base_port}"
 
     _KIWIX_TOOLS_VERSION = "3.7.0-2"
@@ -97,9 +99,15 @@ class KiwixServeManager:
         import tempfile
         import urllib.request
 
-        arch = "x86_64" if platform.machine() in ("x86_64", "AMD64") else platform.machine()
-        url = (f"https://download.kiwix.org/release/kiwix-tools/"
-               f"kiwix-tools_linux-{arch}-{self._KIWIX_TOOLS_VERSION}.tar.gz")
+        arch = (
+            "x86_64"
+            if platform.machine() in ("x86_64", "AMD64")
+            else platform.machine()
+        )
+        url = (
+            f"https://download.kiwix.org/release/kiwix-tools/"
+            f"kiwix-tools_linux-{arch}-{self._KIWIX_TOOLS_VERSION}.tar.gz"
+        )
 
         install_dir = Path(self._SEARCH_PATHS[0]).parent
         install_dir.mkdir(parents=True, exist_ok=True)
@@ -125,6 +133,7 @@ class KiwixServeManager:
     def _health_check(self, port: int) -> bool:
         """Quick HTTP check to see if kiwix-serve is responding."""
         import urllib.request
+
         try:
             req = urllib.request.Request(f"http://localhost:{port}/", method="HEAD")
             urllib.request.urlopen(req, timeout=5)
@@ -146,11 +155,19 @@ class KiwixServeManager:
 
         logger.info(
             "Starting kiwix-serve instance %d on port %d (threads=%d) ...",
-            idx, port, self.threads_per_instance,
+            idx,
+            port,
+            self.threads_per_instance,
         )
         proc = subprocess.Popen(
-            [self._binary, "--port", str(port),
-             "--threads", str(self.threads_per_instance), self.zim_path],
+            [
+                self._binary,
+                "--port",
+                str(port),
+                "--threads",
+                str(self.threads_per_instance),
+                self.zim_path,
+            ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             preexec_fn=os.setpgrp,
@@ -160,12 +177,16 @@ class KiwixServeManager:
             if self._health_check(port):
                 logger.info(
                     "kiwix-serve instance %d started (pid %d, port %d)",
-                    idx, proc.pid, port,
+                    idx,
+                    proc.pid,
+                    port,
                 )
                 self._procs[idx] = proc
                 self._start_ttl_watcher()
                 return
-        raise RuntimeError(f"kiwix-serve failed to start on port {port} (pid {proc.pid})")
+        raise RuntimeError(
+            f"kiwix-serve failed to start on port {port} (pid {proc.pid})"
+        )
 
     _TTL_SECONDS = 300  # 5 min idle → auto-stop
 
@@ -180,7 +201,9 @@ class KiwixServeManager:
                 if not any(p is not None for p in self._procs):
                     break
                 if time.time() - self._last_request_time > self._TTL_SECONDS:
-                    logger.info("kiwix-serve idle > %ds, auto-stopping", self._TTL_SECONDS)
+                    logger.info(
+                        "kiwix-serve idle > %ds, auto-stopping", self._TTL_SECONDS
+                    )
                     self.stop()
                     break
 
@@ -203,7 +226,9 @@ class KiwixServeManager:
             if proc is not None:
                 logger.warning(
                     "kiwix-serve instance %d (pid %s, port %d) is dead, restarting...",
-                    idx, proc.pid, port,
+                    idx,
+                    proc.pid,
+                    port,
                 )
             self._start_instance(idx)
 
@@ -231,6 +256,7 @@ class KiwixServeManager:
 
 
 import atexit
+
 _active_sources: list["KiwixSource"] = []
 
 
@@ -265,10 +291,12 @@ class KiwixSource(Source):
         self._zim = None
         self._redirect_ids: Optional[set[int]] = None
         from urllib.parse import urlparse
+
         parsed = urlparse(kiwix_serve_url)
         base_port = parsed.port or 9454
         self._serve_manager = KiwixServeManager(
-            str(self.zim_path), base_port=base_port,
+            str(self.zim_path),
+            base_port=base_port,
             num_instances=num_kiwix_instances,
         )
         _active_sources.append(self)
@@ -308,6 +336,7 @@ class KiwixSource(Source):
     @staticmethod
     def _download_zim(url: str, dest: Path) -> Path:
         import urllib.request
+
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(".zim.part")
         logger.info("Downloading: %s", url)
@@ -316,10 +345,18 @@ class KiwixSource(Source):
         total = int(resp.headers.get("Content-Length", 0))
 
         from tqdm import tqdm
-        with open(tmp, "wb") as f, tqdm(
-            total=total, unit="B", unit_scale=True, unit_divisor=1024,
-            desc=dest.name, ncols=80,
-        ) as bar:
+
+        with (
+            open(tmp, "wb") as f,
+            tqdm(
+                total=total,
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+                desc=dest.name,
+                ncols=80,
+            ) as bar,
+        ):
             while True:
                 chunk = resp.read(1 << 20)
                 if not chunk:
@@ -334,6 +371,7 @@ class KiwixSource(Source):
     def _get_zim(self):
         if self._zim is None:
             from libzim.reader import Archive
+
             self._zim = Archive(str(self.zim_path))
         return self._zim
 
@@ -354,10 +392,32 @@ class KiwixSource(Source):
             last_part = path.rsplit("/", 1)[-1]
             ext = last_part.rsplit(".", 1)[-1].lower()
             if ext in {
-                "png", "jpg", "jpeg", "gif", "svg", "webp", "ico",
-                "css", "js", "json", "woff", "woff2", "ttf", "eot",
-                "tif", "tiff", "bmp", "mp3", "mp4", "ogg", "ogv",
-                "webm", "flac", "wav", "opus", "mid",
+                "png",
+                "jpg",
+                "jpeg",
+                "gif",
+                "svg",
+                "webp",
+                "ico",
+                "css",
+                "js",
+                "json",
+                "woff",
+                "woff2",
+                "ttf",
+                "eot",
+                "tif",
+                "tiff",
+                "bmp",
+                "mp3",
+                "mp4",
+                "ogg",
+                "ogv",
+                "webm",
+                "flac",
+                "wav",
+                "opus",
+                "mid",
             }:
                 return False
         return True
@@ -412,7 +472,9 @@ class KiwixSource(Source):
         paths = self._build_article_list()
         zim = self._get_zim()
         redirects: dict[str, str] = {}
-        url_re = re.compile(rb"""content\s*=\s*["'][^"']*URL\s*=\s*['"]?([^"'\s>]+)""", re.IGNORECASE)
+        url_re = re.compile(
+            rb"""content\s*=\s*["'][^"']*URL\s*=\s*['"]?([^"'\s>]+)""", re.IGNORECASE
+        )
 
         logger.info("Scanning %d articles for client-side redirects...", len(paths))
         for i, path in enumerate(paths):
@@ -434,11 +496,18 @@ class KiwixSource(Source):
             except Exception:
                 continue
             if i % 1_000_000 == 0 and i > 0:
-                logger.info("  Scanned %dM / %dM, %d redirects so far",
-                            i // 1_000_000, len(paths) // 1_000_000, len(redirects))
+                logger.info(
+                    "  Scanned %dM / %dM, %d redirects so far",
+                    i // 1_000_000,
+                    len(paths) // 1_000_000,
+                    len(redirects),
+                )
 
-        logger.info("Found %d client-side redirects (%.1f%%)",
-                     len(redirects), 100 * len(redirects) / max(len(paths), 1))
+        logger.info(
+            "Found %d client-side redirects (%.1f%%)",
+            len(redirects),
+            100 * len(redirects) / max(len(paths), 1),
+        )
 
         tmp = cache.with_suffix(".tmp")
         try:
@@ -480,7 +549,9 @@ class KiwixSource(Source):
             if i % 1_000_000 == 0 and i > 0:
                 logger.info(
                     "  Scanned %dM / %dM entries, %d articles so far",
-                    i // 1_000_000, zim.entry_count // 1_000_000, len(paths),
+                    i // 1_000_000,
+                    zim.entry_count // 1_000_000,
+                    len(paths),
                 )
         self._article_paths = paths
         logger.info("Found %d articles in ZIM", len(paths))

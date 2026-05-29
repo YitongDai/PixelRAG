@@ -40,7 +40,6 @@ class CDPNoScrollStrategy:
 
     @property
     def name(self) -> str:
-        l = "pw" if self.launcher == "playwright" else "ws"
         hs = " HS" if self.headless_shell else ""
         return f"{self.n_workers}w {self.fmt} noscr{hs}"
 
@@ -53,15 +52,23 @@ class CDPNoScrollStrategy:
         else:
             for i in range(self.n_workers):
                 conn = await launch_websocket(
-                    self.chrome_path, self._base_port + i,
-                    headless_shell=self.headless_shell)
+                    self.chrome_path,
+                    self._base_port + i,
+                    headless_shell=self.headless_shell,
+                )
                 self._connections.append(conn)
 
         for conn in self._connections:
             await conn.cdp("Page.enable")
-            await conn.cdp("Emulation.setDeviceMetricsOverride", {
-                "width": VIEWPORT_WIDTH, "height": TILE_HEIGHT,
-                "deviceScaleFactor": 1, "mobile": False})
+            await conn.cdp(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": VIEWPORT_WIDTH,
+                    "height": TILE_HEIGHT,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
 
         if self.fmt == "raw":
             os.makedirs("/dev/shm/pixelrag_bench", exist_ok=True)
@@ -86,7 +93,8 @@ class CDPNoScrollStrategy:
                 all_results[article_index[article["path"]]] = ac
 
         await asyncio.gather(
-            *[worker_task(i) for i in range(n)], return_exceptions=True)
+            *[worker_task(i) for i in range(n)], return_exceptions=True
+        )
         return [r for r in all_results if r is not None]
 
     async def _capture_one(self, wi: int, article: dict) -> ArticleCapture:
@@ -103,8 +111,10 @@ class CDPNoScrollStrategy:
         ac.total_nav_ms = (time.monotonic() - t_nav) * 1000
 
         try:
-            r = await conn.cdp("Runtime.evaluate",
-                {"expression": "document.documentElement.scrollHeight"})
+            r = await conn.cdp(
+                "Runtime.evaluate",
+                {"expression": "document.documentElement.scrollHeight"},
+            )
             page_h = r["result"]["result"]["value"]
         except Exception:
             page_h = TILE_HEIGHT
@@ -116,15 +126,18 @@ class CDPNoScrollStrategy:
         # Pre-scroll warmup: force compositor to rasterize entire page
         if n_tiles > 1:
             for scroll_y in range(0, page_h, 1080):
-                await conn.cdp("Runtime.evaluate",
-                    {"expression": f"window.scrollTo(0, {scroll_y})"})
-            await conn.cdp("Runtime.evaluate", {
-                "expression":
-                    "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
-                "awaitPromise": True,
-            })
-            await conn.cdp("Runtime.evaluate",
-                {"expression": "window.scrollTo(0, 0)"})
+                await conn.cdp(
+                    "Runtime.evaluate",
+                    {"expression": f"window.scrollTo(0, {scroll_y})"},
+                )
+            await conn.cdp(
+                "Runtime.evaluate",
+                {
+                    "expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))",
+                    "awaitPromise": True,
+                },
+            )
+            await conn.cdp("Runtime.evaluate", {"expression": "window.scrollTo(0, 0)"})
 
         for t in range(n_tiles):
             clip_h = min(TILE_HEIGHT, page_h - t * TILE_HEIGHT)
@@ -137,8 +150,11 @@ class CDPNoScrollStrategy:
                 "captureBeyondViewport": True,
                 "optimizeForSpeed": True,
                 "clip": {
-                    "x": 0, "y": t * TILE_HEIGHT,
-                    "width": VIEWPORT_WIDTH, "height": clip_h, "scale": 1,
+                    "x": 0,
+                    "y": t * TILE_HEIGHT,
+                    "width": VIEWPORT_WIDTH,
+                    "height": clip_h,
+                    "scale": 1,
                 },
             }
 

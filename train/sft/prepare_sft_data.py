@@ -47,18 +47,30 @@ def compress_image(src: str, dst: str, scale_factor: float) -> bool:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset-dir", type=str,
-                        default="/mnt/data/hf_datasets/screenshot-training-natural-filtered-v2",
-                        help="Root of the HF dataset (contains images/ and *_with_answer.jsonl)")
-    parser.add_argument("--output-dir", type=str,
-                        default="/mnt/data/sft_data/compressed_3x",
-                        help="Output directory for compressed images and JSON")
-    parser.add_argument("--compress-ratio", type=int, default=3,
-                        help="Pixel compression ratio (3 = each dim scaled by 1/sqrt(3))")
-    parser.add_argument("--workers", type=int, default=16,
-                        help="Parallel workers for image compression")
-    parser.add_argument("--max-examples", type=int, default=0,
-                        help="Limit examples per split (0 = all)")
+    parser.add_argument(
+        "--dataset-dir",
+        type=str,
+        default="/mnt/data/hf_datasets/screenshot-training-natural-filtered-v2",
+        help="Root of the HF dataset (contains images/ and *_with_answer.jsonl)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="/mnt/data/sft_data/compressed_3x",
+        help="Output directory for compressed images and JSON",
+    )
+    parser.add_argument(
+        "--compress-ratio",
+        type=int,
+        default=3,
+        help="Pixel compression ratio (3 = each dim scaled by 1/sqrt(3))",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=16, help="Parallel workers for image compression"
+    )
+    parser.add_argument(
+        "--max-examples", type=int, default=0, help="Limit examples per split (0 = all)"
+    )
     args = parser.parse_args()
 
     dataset_dir = Path(args.dataset_dir)
@@ -91,7 +103,7 @@ def main():
             for line in f:
                 examples.append(json.loads(line))
         if args.max_examples > 0:
-            examples = examples[:args.max_examples]
+            examples = examples[: args.max_examples]
         print(f"  Loaded {len(examples)} examples")
 
         # Collect unique positive image paths
@@ -119,22 +131,28 @@ def main():
                 to_compress.append(info)
 
         if to_compress:
-            print(f"  Compressing {len(to_compress)} new images ({len(unique_images) - len(to_compress)} cached)...")
+            print(
+                f"  Compressing {len(to_compress)} new images ({len(unique_images) - len(to_compress)} cached)..."
+            )
             ok = 0
             fail = 0
             with ThreadPoolExecutor(max_workers=args.workers) as pool:
                 futures = {
-                    pool.submit(compress_image, info["src"], info["dst"], scale_factor): info
+                    pool.submit(
+                        compress_image, info["src"], info["dst"], scale_factor
+                    ): info
                     for info in to_compress
                 }
-                for fut in tqdm(as_completed(futures), total=len(futures), desc=f"  {split_name}"):
+                for fut in tqdm(
+                    as_completed(futures), total=len(futures), desc=f"  {split_name}"
+                ):
                     if fut.result():
                         ok += 1
                     else:
                         fail += 1
             print(f"  Compressed: {ok} ok, {fail} failed")
         else:
-            print(f"  All images already cached")
+            print("  All images already cached")
 
         # Build ShareGPT format
         sharegpt_data = []
@@ -148,18 +166,22 @@ def main():
                 skipped += 1
                 continue
 
-            sharegpt_data.append({
-                "messages": [
-                    {"role": "user", "content": "<image>\n" + ex["query"]},
-                    {"role": "assistant", "content": ex["answer"]},
-                ],
-                "images": [compressed_path],
-            })
+            sharegpt_data.append(
+                {
+                    "messages": [
+                        {"role": "user", "content": "<image>\n" + ex["query"]},
+                        {"role": "assistant", "content": ex["answer"]},
+                    ],
+                    "images": [compressed_path],
+                }
+            )
 
         out_json = output_dir / f"{split_name}.json"
         with open(out_json, "w") as f:
             json.dump(sharegpt_data, f, ensure_ascii=False, indent=None)
-        print(f"  Output: {out_json} ({len(sharegpt_data)} examples, {skipped} skipped)")
+        print(
+            f"  Output: {out_json} ({len(sharegpt_data)} examples, {skipped} skipped)"
+        )
 
     # Write dataset_info.json for LlamaFactory
     dataset_info = {}
@@ -170,8 +192,12 @@ def main():
                 "file_name": str(out_json),
                 "formatting": "sharegpt",
                 "columns": {"messages": "messages", "images": "images"},
-                "tags": {"role_tag": "role", "content_tag": "content",
-                         "user_tag": "user", "assistant_tag": "assistant"},
+                "tags": {
+                    "role_tag": "role",
+                    "content_tag": "content",
+                    "user_tag": "user",
+                    "assistant_tag": "assistant",
+                },
             }
 
     info_path = output_dir / "dataset_info.json"

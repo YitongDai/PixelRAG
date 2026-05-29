@@ -181,10 +181,16 @@ def main() -> int:
         "link_mode": args.link_mode,
         "rows": len(transformed),
         "unique_images_referenced": len(unique_images),
-        "avg_negatives_per_row": (total_negatives / len(transformed)) if transformed else 0.0,
+        "avg_negatives_per_row": (total_negatives / len(transformed))
+        if transformed
+        else 0.0,
     }
-    (output_dir / "dataset_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
-    (output_dir / "README.md").write_text(build_readme(args.repo_id, args.metadata_name, summary))
+    (output_dir / "dataset_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True)
+    )
+    (output_dir / "README.md").write_text(
+        build_readme(args.repo_id, args.metadata_name, summary)
+    )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 

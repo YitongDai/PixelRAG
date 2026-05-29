@@ -10,11 +10,21 @@ from pathlib import Path
 
 
 DEFAULT_CHUNK_INPUTS = [
-    Path("/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_000000_009999/filtered_hn.jsonl"),
-    Path("/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_010000_019999/filtered_hn.jsonl"),
-    Path("/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_020000_029999/filtered_hn.jsonl"),
-    Path("/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_030000_039999/filtered_hn.jsonl"),
-    Path("/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_040000_049999/filtered_hn.jsonl"),
+    Path(
+        "/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_000000_009999/filtered_hn.jsonl"
+    ),
+    Path(
+        "/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_010000_019999/filtered_hn.jsonl"
+    ),
+    Path(
+        "/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_020000_029999/filtered_hn.jsonl"
+    ),
+    Path(
+        "/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_030000_039999/filtered_hn.jsonl"
+    ),
+    Path(
+        "/home/user/wiki-screenshot-training/training/data/lite-query-v2-full-filtered-hn-v2-chunks/chunk_040000_049999/filtered_hn.jsonl"
+    ),
 ]
 
 

@@ -73,11 +73,13 @@ class BaseRetriever(ABC):
 # EVQA query image data dirs (iNaturalist 2021, Google Landmarks v2)
 _INAT2021_DATA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "inat2021",
+    "data",
+    "inat2021",
 )
 _LANDMARK_V2_DATA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "landmark_v2",
+    "data",
+    "landmark_v2",
 )
 
 # Local kiwix tile store (pre-rendered Wikipedia pages)
@@ -130,7 +132,9 @@ def _lookup_and_copy_local_wiki_tiles(
     from scripts.build_index import batch_query_by_url as _batch_query
 
     redirects = _KIWIX_REDIRECTS_JSON if os.path.isfile(_KIWIX_REDIRECTS_JSON) else None
-    results = _batch_query(_KIWIX_OUTPUT_DIR, [url], _KIWIX_ARTICLES_JSON, redirects_json=redirects)
+    results = _batch_query(
+        _KIWIX_OUTPUT_DIR, [url], _KIWIX_ARTICLES_JSON, redirects_json=redirects
+    )
     result = results.get(url)
     if result is None:
         raise RuntimeError(f"URL not found in local kiwix: {url}")
@@ -146,7 +150,8 @@ def _lookup_and_copy_local_wiki_tiles(
     # Cut raw tiles into height=cut_height strips
     os.makedirs(tiles_dir, exist_ok=True)
     raw_tiles = sorted(
-        f for f in os.listdir(article_cache)
+        f
+        for f in os.listdir(article_cache)
         if f.endswith(".png") and f.startswith("tile_")
     )
     if not raw_tiles:
@@ -188,6 +193,7 @@ def _get_inat_image_path_for_example(example: dict, tiles_dir: str) -> str | Non
     if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
         return local_path
     import shutil
+
     id_map = TiledQwen3VLEmbeddingRetriever._load_inat2021_mapping()
     for str_id in inat_ids:
         try:
@@ -205,7 +211,9 @@ def _get_inat_image_path_for_example(example: dict, tiles_dir: str) -> str | Non
     return None
 
 
-def _get_landmark_image_path_for_example(example: dict, tiles_dir: str, quiet: bool = False) -> str | None:
+def _get_landmark_image_path_for_example(
+    example: dict, tiles_dir: str, quiet: bool = False
+) -> str | None:
     """Get Google Landmarks v2 query image path. dataset_name must be 'landmarks'.
 
     GLDv2 stores images as {split}/{a}/{b}/{c}/{id}.jpg (a,b,c = first 3 chars of id).
@@ -221,6 +229,7 @@ def _get_landmark_image_path_for_example(example: dict, tiles_dir: str, quiet: b
     if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
         return local_path
     import shutil
+
     data_dir = _LANDMARK_V2_DATA_DIR
     for img_id in ids:
         if len(img_id) < 3:
@@ -238,27 +247,35 @@ def _get_landmark_image_path_for_example(example: dict, tiles_dir: str, quiet: b
         if _try_download_landmark_from_url(example_id, img_id, local_path):
             return local_path
     if not quiet:
-        logger.warning(f"Failed to find Landmark image for {example_id} (data in {data_dir}?)")
+        logger.warning(
+            f"Failed to find Landmark image for {example_id} (data in {data_dir}?)"
+        )
     return None
 
 
-def _try_download_landmark_from_url(example_id: str, img_id: str, local_path: str) -> bool:
+def _try_download_landmark_from_url(
+    example_id: str, img_id: str, local_path: str
+) -> bool:
     """Try to download landmark image from train.csv URL. Used when GLDv2 TARs unavailable.
 
     Returns True if download succeeded and file is valid, False otherwise.
     """
     import urllib.request
+
     train_csv = os.path.join(_LANDMARK_V2_DATA_DIR, "train.csv")
     if not os.path.exists(train_csv):
         return False
     import csv
+
     with open(train_csv) as f:
         for row in csv.DictReader(f):
             if row.get("id") == img_id:
                 url = row.get("url", "")
                 if url:
                     try:
-                        req = urllib.request.Request(url, headers={"User-Agent": "PixelRAG-Bot/1.0"})
+                        req = urllib.request.Request(
+                            url, headers={"User-Agent": "PixelRAG-Bot/1.0"}
+                        )
                         with urllib.request.urlopen(req, timeout=30) as resp:
                             data = resp.read()
                         if len(data) >= 1000:
@@ -266,12 +283,16 @@ def _try_download_landmark_from_url(example_id: str, img_id: str, local_path: st
                                 out.write(data)
                             return True
                     except Exception as e:
-                        logger.debug(f"URL download failed for {example_id} (img_id={img_id}): {e}")
+                        logger.debug(
+                            f"URL download failed for {example_id} (img_id={img_id}): {e}"
+                        )
                 return False
     return False
 
 
-def _get_query_image_path_for_example(example: dict, tiles_dir: str, quiet: bool = False) -> str | None:
+def _get_query_image_path_for_example(
+    example: dict, tiles_dir: str, quiet: bool = False
+) -> str | None:
     """Get EVQA query image path. Dispatches by dataset_name: inaturalist | landmarks."""
     ds = (example.get("dataset_name") or "").lower()
     if ds == "inaturalist":
@@ -291,6 +312,7 @@ def _get_all_inat_image_paths(example: dict, tiles_dir: str) -> list[str]:
     os.makedirs(cache_dir, exist_ok=True)
     example_id = example.get("id", "unknown")
     import shutil
+
     id_map = TiledQwen3VLEmbeddingRetriever._load_inat2021_mapping()
     paths = []
     for i, str_id in enumerate(inat_ids):
@@ -321,6 +343,7 @@ def _load_landmark_url_map() -> dict[str, str]:
     if _landmark_url_map_cache is not None:
         return _landmark_url_map_cache
     import csv
+
     train_csv = os.path.join(_LANDMARK_V2_DATA_DIR, "train.csv")
     if not os.path.exists(train_csv):
         _landmark_url_map_cache = {}
@@ -340,6 +363,7 @@ def _load_landmark_url_map() -> dict[str, str]:
 def _download_landmark_image_by_id(img_id: str, local_path: str) -> bool:
     """Download a landmark image by its GLDv2 ID. Returns True on success."""
     import urllib.request
+
     url_map = _load_landmark_url_map()
     url = url_map.get(img_id)
     if not url:
@@ -366,6 +390,7 @@ def _get_all_landmark_image_paths(example: dict, tiles_dir: str) -> list[str]:
     os.makedirs(cache_dir, exist_ok=True)
     example_id = example.get("id", "unknown")
     import shutil
+
     data_dir = _LANDMARK_V2_DATA_DIR
     paths = []
     for i, img_id in enumerate(ids):
@@ -402,8 +427,11 @@ def _get_all_query_image_paths(example: dict, tiles_dir: str) -> list[str]:
         od = example.get("original_data", {})
         if isinstance(od, str):
             import ast
-            try: od = ast.literal_eval(od)
-            except: od = {}
+
+            try:
+                od = ast.literal_eval(od)
+            except Exception:
+                od = {}
         ds = (od.get("dataset_name") or "").lower()
     if ds == "inaturalist":
         paths = _get_all_inat_image_paths(example, tiles_dir)
@@ -412,7 +440,9 @@ def _get_all_query_image_paths(example: dict, tiles_dir: str) -> list[str]:
     else:
         paths = _get_all_inat_image_paths(example, tiles_dir)
     if not paths:
-        single = example.get("query_image_path") or _get_query_image_path_for_example(example, tiles_dir, quiet=True)
+        single = example.get("query_image_path") or _get_query_image_path_for_example(
+            example, tiles_dir, quiet=True
+        )
         if single and os.path.exists(single):
             paths = [single]
     return paths
@@ -444,7 +474,9 @@ class EVQANoRetrievalRetriever(BaseRetriever):
         )
 
 
-def _save_task_query_image(example: dict, task_name: str, base_dir: str = "tiles") -> str | None:
+def _save_task_query_image(
+    example: dict, task_name: str, base_dir: str = "tiles"
+) -> str | None:
     """Save query image from any task to disk. Returns path or None.
     Images saved to {base_dir}/{task_name}_images/{example_id}.png
     Works with PIL images, base64 strings, or dict with 'bytes' key.
@@ -463,7 +495,9 @@ def _save_task_query_image(example: dict, task_name: str, base_dir: str = "tiles
             img.save(out_path, format="PNG")
             return out_path
         if isinstance(img, str):
-            raw = img.split(",", 1)[1] if img.startswith("data:") and "," in img else img
+            raw = (
+                img.split(",", 1)[1] if img.startswith("data:") and "," in img else img
+            )
             data = base64.b64decode(raw)
             with open(out_path, "wb") as f:
                 f.write(data)
@@ -496,7 +530,9 @@ def _save_worldvqa_query_image(example: dict, base_dir: str = "tiles") -> str | 
             img.save(out_path, format="PNG")
             return out_path
         if isinstance(img, str):
-            raw = img.split(",", 1)[1] if img.startswith("data:") and "," in img else img
+            raw = (
+                img.split(",", 1)[1] if img.startswith("data:") and "," in img else img
+            )
             data = base64.b64decode(raw)
             ext = ".png" if data[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
             out_path = os.path.join(save_dir, f"{example_id}{ext}")
@@ -570,7 +606,9 @@ class ScreenshotRetriever(BaseRetriever):
                     - 1_000_000 (1M): ~1K tokens
     """
 
-    def __init__(self, screenshot_dir: str = "screenshots", max_pixels: int | None = None):
+    def __init__(
+        self, screenshot_dir: str = "screenshots", max_pixels: int | None = None
+    ):
         self.screenshot_dir = screenshot_dir
         self.max_pixels = max_pixels
 
@@ -587,16 +625,18 @@ class ScreenshotRetriever(BaseRetriever):
         if not screenshot_path:
             return RetrievalResult(
                 retrieval_type="screenshot",
-                source_url=extract_url_from_metadata(example)
+                source_url=extract_url_from_metadata(example),
             )
 
         # Encode to base64 with configurable max_pixels
-        base64_image = await encode_screenshot_for_vlm_async(screenshot_path, max_pixels=self.max_pixels)
+        base64_image = await encode_screenshot_for_vlm_async(
+            screenshot_path, max_pixels=self.max_pixels
+        )
 
         return RetrievalResult(
             base64_image=base64_image,
             source_url=extract_url_from_metadata(example),
-            retrieval_type="screenshot"
+            retrieval_type="screenshot",
         )
 
 
@@ -642,7 +682,7 @@ class TiledScreenshotRetriever(BaseRetriever):
         if not screenshot_path:
             return RetrievalResult(
                 retrieval_type="tiled_screenshot",
-                source_url=extract_url_from_metadata(example)
+                source_url=extract_url_from_metadata(example),
             )
 
         # Split into tiles
@@ -652,7 +692,7 @@ class TiledScreenshotRetriever(BaseRetriever):
             screenshot_path,
             example_tiles_dir,
             tile_size=self.tile_size,
-            overlap=self.overlap
+            overlap=self.overlap,
         )
 
         if not tile_paths:
@@ -661,13 +701,13 @@ class TiledScreenshotRetriever(BaseRetriever):
             return RetrievalResult(
                 base64_image=base64_image,
                 source_url=extract_url_from_metadata(example),
-                retrieval_type="tiled_screenshot"
+                retrieval_type="tiled_screenshot",
             )
 
         # Limit tiles if max_tiles is set
         if self.max_tiles is not None and len(tile_paths) > self.max_tiles:
             logger.info(f"Limiting tiles from {len(tile_paths)} to {self.max_tiles}")
-            tile_paths = tile_paths[:self.max_tiles]
+            tile_paths = tile_paths[: self.max_tiles]
 
         # Return tiles as images list (path, score=1.0 for ground truth)
         images = [(path, 1.0) for path in tile_paths]
@@ -675,7 +715,7 @@ class TiledScreenshotRetriever(BaseRetriever):
         return RetrievalResult(
             images=images,
             source_url=extract_url_from_metadata(example),
-            retrieval_type="tiled_screenshot"
+            retrieval_type="tiled_screenshot",
         )
 
 
@@ -742,7 +782,12 @@ class TextRetriever(BaseRetriever):
     Can use pre-cached text or fetch on demand.
     """
 
-    def __init__(self, max_chars: int = 50000, text_cache: dict | None = None, cache_path: str | None = None):
+    def __init__(
+        self,
+        max_chars: int = 50000,
+        text_cache: dict | None = None,
+        cache_path: str | None = None,
+    ):
         self.max_chars = max_chars
         self.text_cache = text_cache
         self.cache_path = cache_path
@@ -754,6 +799,7 @@ class TextRetriever(BaseRetriever):
             return
         try:
             import json
+
             async with self._cache_lock:
                 with open(self.cache_path, "a") as f:
                     cache_entry = {"id": example_id, "text": text, "url": url}
@@ -776,9 +822,7 @@ class TextRetriever(BaseRetriever):
             await self._save_to_cache(example_id, text, source_url)
 
         return RetrievalResult(
-            text=text,
-            source_url=source_url,
-            retrieval_type="text_rag"
+            text=text, source_url=source_url, retrieval_type="text_rag"
         )
 
 
@@ -788,7 +832,13 @@ class JinaReaderRetriever(BaseRetriever):
     Jina Reader (r.jina.ai) converts any URL to LLM-friendly markdown text.
     """
 
-    def __init__(self, max_chars: int = 50000, api_key: str | None = None, text_cache: dict | None = None, cache_path: str | None = None):
+    def __init__(
+        self,
+        max_chars: int = 50000,
+        api_key: str | None = None,
+        text_cache: dict | None = None,
+        cache_path: str | None = None,
+    ):
         self.max_chars = max_chars
         self.api_key = api_key
         self.text_cache = text_cache
@@ -801,6 +851,7 @@ class JinaReaderRetriever(BaseRetriever):
             return
         try:
             import json
+
             async with self._cache_lock:
                 with open(self.cache_path, "a") as f:
                     cache_entry = {"id": example_id, "text": text, "url": url}
@@ -821,18 +872,15 @@ class JinaReaderRetriever(BaseRetriever):
             source_url = cached.get("url", "")
             if text:
                 if len(text) > self.max_chars:
-                    text = text[:self.max_chars] + "\n\n[Content truncated...]"
+                    text = text[: self.max_chars] + "\n\n[Content truncated...]"
                 return RetrievalResult(
-                    text=text,
-                    source_url=source_url,
-                    retrieval_type="jina_reader"
+                    text=text, source_url=source_url, retrieval_type="jina_reader"
                 )
 
         target_url = extract_url_from_metadata(example)
         if not target_url:
             return RetrievalResult(
-                text="No URL found in metadata.",
-                retrieval_type="jina_reader"
+                text="No URL found in metadata.", retrieval_type="jina_reader"
             )
 
         # Use Jina Reader API with retry logic
@@ -845,12 +893,18 @@ class JinaReaderRetriever(BaseRetriever):
         for attempt in range(max_retries):
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(reader_url, headers=headers, timeout=aiohttp.ClientTimeout(total=60)) as response:
+                    async with session.get(
+                        reader_url,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=60),
+                    ) as response:
                         # Handle rate limiting (429) with exponential backoff
                         if response.status == 429:
                             if attempt < max_retries - 1:
-                                wait_time = min(2 ** attempt * 2, 30)  # Max 30 seconds
-                                logger.warning(f"Rate limited (429) for {target_url}, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})")
+                                wait_time = min(2**attempt * 2, 30)  # Max 30 seconds
+                                logger.warning(
+                                    f"Rate limited (429) for {target_url}, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})"
+                                )
                                 await asyncio.sleep(wait_time)
                                 continue
                             else:
@@ -859,25 +913,29 @@ class JinaReaderRetriever(BaseRetriever):
                                 return RetrievalResult(
                                     text=error_msg,
                                     source_url=target_url,
-                                    retrieval_type="jina_reader"
+                                    retrieval_type="jina_reader",
                                 )
-                        
+
                         # Handle server errors (5xx) with retry
                         if 500 <= response.status < 600:
                             if attempt < max_retries - 1:
-                                wait_time = min(2 ** attempt, 10)  # Max 10 seconds
-                                logger.warning(f"Server error ({response.status}) for {target_url}, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})")
+                                wait_time = min(2**attempt, 10)  # Max 10 seconds
+                                logger.warning(
+                                    f"Server error ({response.status}) for {target_url}, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})"
+                                )
                                 await asyncio.sleep(wait_time)
                                 continue
                             else:
-                                error_msg = f"Jina Reader API server error: {response.status}"
+                                error_msg = (
+                                    f"Jina Reader API server error: {response.status}"
+                                )
                                 logger.error(f"{error_msg} for {target_url}")
                                 return RetrievalResult(
                                     text=error_msg,
                                     source_url=target_url,
-                                    retrieval_type="jina_reader"
+                                    retrieval_type="jina_reader",
                                 )
-                        
+
                         # Handle client errors (4xx) - don't retry for most
                         if response.status == 200:
                             text = await response.text()
@@ -885,11 +943,14 @@ class JinaReaderRetriever(BaseRetriever):
                             await self._save_to_cache(example_id, text, target_url)
                             # Truncate if too long
                             if len(text) > self.max_chars:
-                                text = text[:self.max_chars] + "\n\n[Content truncated...]"
+                                text = (
+                                    text[: self.max_chars]
+                                    + "\n\n[Content truncated...]"
+                                )
                             return RetrievalResult(
                                 text=text,
                                 source_url=target_url,
-                                retrieval_type="jina_reader"
+                                retrieval_type="jina_reader",
                             )
                         else:
                             # Other 4xx errors (403, 404, etc.) - don't retry
@@ -898,12 +959,14 @@ class JinaReaderRetriever(BaseRetriever):
                             return RetrievalResult(
                                 text=error_msg,
                                 source_url=target_url,
-                                retrieval_type="jina_reader"
+                                retrieval_type="jina_reader",
                             )
             except asyncio.TimeoutError:
                 if attempt < max_retries - 1:
-                    wait_time = min(2 ** attempt, 10)  # Max 10 seconds
-                    logger.warning(f"Timeout for {target_url}, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})")
+                    wait_time = min(2**attempt, 10)  # Max 10 seconds
+                    logger.warning(
+                        f"Timeout for {target_url}, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})"
+                    )
                     await asyncio.sleep(wait_time)
                     continue
                 else:
@@ -912,12 +975,14 @@ class JinaReaderRetriever(BaseRetriever):
                     return RetrievalResult(
                         text=error_msg,
                         source_url=target_url,
-                        retrieval_type="jina_reader"
+                        retrieval_type="jina_reader",
                     )
             except aiohttp.ClientError as e:
                 if attempt < max_retries - 1:
-                    wait_time = min(2 ** attempt, 10)  # Max 10 seconds
-                    logger.warning(f"Client error for {target_url}: {e}, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})")
+                    wait_time = min(2**attempt, 10)  # Max 10 seconds
+                    logger.warning(
+                        f"Client error for {target_url}: {e}, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})"
+                    )
                     await asyncio.sleep(wait_time)
                     continue
                 else:
@@ -926,23 +991,19 @@ class JinaReaderRetriever(BaseRetriever):
                     return RetrievalResult(
                         text=error_msg,
                         source_url=target_url,
-                        retrieval_type="jina_reader"
+                        retrieval_type="jina_reader",
                     )
             except Exception as e:
                 error_msg = f"Jina Reader fetch failed: {e}"
                 logger.error(f"{error_msg} for {target_url}")
                 return RetrievalResult(
-                    text=error_msg,
-                    source_url=target_url,
-                    retrieval_type="jina_reader"
+                    text=error_msg, source_url=target_url, retrieval_type="jina_reader"
                 )
-        
+
         # Should not reach here, but just in case
         error_msg = f"Jina Reader fetch failed after {max_retries} retries"
         return RetrievalResult(
-            text=error_msg,
-            source_url=target_url,
-            retrieval_type="jina_reader"
+            text=error_msg, source_url=target_url, retrieval_type="jina_reader"
         )
 
 
@@ -953,7 +1014,12 @@ class WikipediaAPIRetriever(BaseRetriever):
     Much cleaner and faster than web scraping.
     """
 
-    def __init__(self, max_chars: int = 50000, text_cache: dict | None = None, cache_path: str | None = None):
+    def __init__(
+        self,
+        max_chars: int = 50000,
+        text_cache: dict | None = None,
+        cache_path: str | None = None,
+    ):
         self.max_chars = max_chars
         self.text_cache = text_cache
         self.cache_path = cache_path
@@ -965,6 +1031,7 @@ class WikipediaAPIRetriever(BaseRetriever):
             return
         try:
             import json
+
             async with self._cache_lock:
                 with open(self.cache_path, "a") as f:
                     cache_entry = {"id": example_id, "text": text, "url": url}
@@ -980,20 +1047,21 @@ class WikipediaAPIRetriever(BaseRetriever):
         # Match patterns like:
         # https://en.wikipedia.org/wiki/Python_(programming_language)
         # https://zh.wikipedia.org/wiki/Artificial_intelligence
-        pattern = r'https?://[a-z]{2,3}\.wikipedia\.org/wiki/(.+?)(?:#.*)?$'
+        pattern = r"https?://[a-z]{2,3}\.wikipedia\.org/wiki/(.+?)(?:#.*)?$"
         match = re.match(pattern, url)
         if match:
             title = unquote(match.group(1))
             # Replace underscores with spaces
-            title = title.replace('_', ' ')
+            title = title.replace("_", " ")
             return title
         return None
 
     def _get_wiki_lang(self, url: str) -> str:
         """Extract Wikipedia language code from URL."""
         import re
-        match = re.match(r'https?://([a-z]{2,3})\.wikipedia\.org', url)
-        return match.group(1) if match else 'en'
+
+        match = re.match(r"https?://([a-z]{2,3})\.wikipedia\.org", url)
+        return match.group(1) if match else "en"
 
     def _html_to_text(self, html: str) -> str:
         """Convert Wikipedia HTML to plain text, preserving table content."""
@@ -1018,7 +1086,7 @@ class WikipediaAPIRetriever(BaseRetriever):
         text = soup.get_text(separator="\n", strip=True)
 
         # Clean up excessive newlines
-        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
 
         return text
 
@@ -1037,9 +1105,9 @@ class WikipediaAPIRetriever(BaseRetriever):
         depth = 0
         end = start
         for i in range(start, len(wikitext)):
-            if wikitext[i:i+2] == "{{":
+            if wikitext[i : i + 2] == "{{":
                 depth += 1
-            elif wikitext[i:i+2] == "}}":
+            elif wikitext[i : i + 2] == "}}":
                 depth -= 1
                 if depth == 0:
                     end = i + 2
@@ -1049,26 +1117,40 @@ class WikipediaAPIRetriever(BaseRetriever):
 
         # Parse fields
         lines = []
-        for match in re.finditer(r'\|\s*([^=|]+?)\s*=\s*([^|]*?)(?=\n\s*\||\}\})', infobox_raw, re.DOTALL):
+        for match in re.finditer(
+            r"\|\s*([^=|]+?)\s*=\s*([^|]*?)(?=\n\s*\||\}\})", infobox_raw, re.DOTALL
+        ):
             key = match.group(1).strip()
             value = match.group(2).strip()
 
             # Skip image-related fields
-            if key.lower() in ('image', 'caption', 'alt', 'width', 'height', 'image_size', 'imagesize'):
+            if key.lower() in (
+                "image",
+                "caption",
+                "alt",
+                "width",
+                "height",
+                "image_size",
+                "imagesize",
+            ):
                 continue
 
             # Clean up wikitext markup
-            value = re.sub(r'\{\{[^}|]*\|([^}]*)\}\}', r'\1', value)  # {{template|value}} -> value
-            value = re.sub(r'\[\[([^|\]]*\|)?([^\]]*)\]\]', r'\2', value)  # [[link|text]] -> text
-            value = re.sub(r"'''?", '', value)  # bold/italic
-            value = re.sub(r'<[^>]+>', '', value)  # HTML tags
-            value = re.sub(r'\{\{[^}]*\}\}', '', value)  # remaining templates
-            value = ' '.join(value.split())  # normalize whitespace
+            value = re.sub(
+                r"\{\{[^}|]*\|([^}]*)\}\}", r"\1", value
+            )  # {{template|value}} -> value
+            value = re.sub(
+                r"\[\[([^|\]]*\|)?([^\]]*)\]\]", r"\2", value
+            )  # [[link|text]] -> text
+            value = re.sub(r"'''?", "", value)  # bold/italic
+            value = re.sub(r"<[^>]+>", "", value)  # HTML tags
+            value = re.sub(r"\{\{[^}]*\}\}", "", value)  # remaining templates
+            value = " ".join(value.split())  # normalize whitespace
 
             if value:
                 lines.append(f"{key}: {value}")
 
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     async def retrieve(self, query: str, example: dict) -> RetrievalResult:
         import aiohttp
@@ -1082,26 +1164,23 @@ class WikipediaAPIRetriever(BaseRetriever):
             source_url = cached.get("url", "")
             if text:
                 if len(text) > self.max_chars:
-                    text = text[:self.max_chars] + "\n\n[Content truncated...]"
+                    text = text[: self.max_chars] + "\n\n[Content truncated...]"
                 return RetrievalResult(
-                    text=text,
-                    source_url=source_url,
-                    retrieval_type="wikipedia_api"
+                    text=text, source_url=source_url, retrieval_type="wikipedia_api"
                 )
 
         target_url = extract_url_from_metadata(example)
         if not target_url:
             return RetrievalResult(
-                text="No URL found in metadata.",
-                retrieval_type="wikipedia_api"
+                text="No URL found in metadata.", retrieval_type="wikipedia_api"
             )
 
         # Check if it's a Wikipedia URL
-        if 'wikipedia.org' not in target_url.lower():
+        if "wikipedia.org" not in target_url.lower():
             return RetrievalResult(
                 text=f"URL is not a Wikipedia page: {target_url}",
                 source_url=target_url,
-                retrieval_type="wikipedia_api"
+                retrieval_type="wikipedia_api",
             )
 
         title = self._extract_wiki_title(target_url)
@@ -1109,7 +1188,7 @@ class WikipediaAPIRetriever(BaseRetriever):
             return RetrievalResult(
                 text=f"Could not extract Wikipedia title from: {target_url}",
                 source_url=target_url,
-                retrieval_type="wikipedia_api"
+                retrieval_type="wikipedia_api",
             )
 
         lang = self._get_wiki_lang(target_url)
@@ -1131,14 +1210,16 @@ class WikipediaAPIRetriever(BaseRetriever):
                 }
 
                 timeout = aiohttp.ClientTimeout(total=30)
-                async with session.get(api_url, params=parse_params, headers=headers, timeout=timeout) as resp:
+                async with session.get(
+                    api_url, params=parse_params, headers=headers, timeout=timeout
+                ) as resp:
                     if resp.status != 200:
                         error_msg = f"Wikipedia API error: {resp.status}"
                         logger.warning(f"{error_msg} for {target_url}")
                         return RetrievalResult(
                             text=error_msg,
                             source_url=target_url,
-                            retrieval_type="wikipedia_api"
+                            retrieval_type="wikipedia_api",
                         )
 
                     data = await resp.json()
@@ -1149,7 +1230,7 @@ class WikipediaAPIRetriever(BaseRetriever):
                         return RetrievalResult(
                             text=f"Wikipedia page not found: {title}",
                             source_url=target_url,
-                            retrieval_type="wikipedia_api"
+                            retrieval_type="wikipedia_api",
                         )
 
                     html = data.get("parse", {}).get("text", {}).get("*", "")
@@ -1157,7 +1238,7 @@ class WikipediaAPIRetriever(BaseRetriever):
                         return RetrievalResult(
                             text=f"No content found for Wikipedia page: {title}",
                             source_url=target_url,
-                            retrieval_type="wikipedia_api"
+                            retrieval_type="wikipedia_api",
                         )
 
                     # Parse HTML to text (includes tables)
@@ -1168,20 +1249,16 @@ class WikipediaAPIRetriever(BaseRetriever):
 
                     # Truncate if too long
                     if len(text) > self.max_chars:
-                        text = text[:self.max_chars] + "\n\n[Content truncated...]"
+                        text = text[: self.max_chars] + "\n\n[Content truncated...]"
 
                     return RetrievalResult(
-                        text=text,
-                        source_url=target_url,
-                        retrieval_type="wikipedia_api"
+                        text=text, source_url=target_url, retrieval_type="wikipedia_api"
                     )
         except Exception as e:
             error_msg = f"Wikipedia API fetch failed: {e}"
             logger.warning(f"{error_msg} for {target_url}")
             return RetrievalResult(
-                text=error_msg,
-                source_url=target_url,
-                retrieval_type="wikipedia_api"
+                text=error_msg, source_url=target_url, retrieval_type="wikipedia_api"
             )
 
 
@@ -1198,7 +1275,7 @@ class VectorRetriever(BaseRetriever):
         cache_path: str | None = None,
         use_multivector: bool = True,
         top_k: int = 3,
-        examples: list[dict] | None = None
+        examples: list[dict] | None = None,
     ):
         self.top_k = top_k
         self.screenshot_dir = screenshot_dir
@@ -1223,14 +1300,15 @@ class VectorRetriever(BaseRetriever):
         self.retrieval_system = JinaAPIRetrievalSystem(
             api_key=api_key,
             use_multivector=use_multivector,
-            device="cpu"  # Use CPU to avoid OOM when VLM is on GPU
+            device="cpu",  # Use CPU to avoid OOM when VLM is on GPU
         )
         # Only embed screenshots for current dataset
         self.retrieval_system.embed_images(
-            file_paths=screenshot_paths,
-            cache_path=cache_path
+            file_paths=screenshot_paths, cache_path=cache_path
         )
-        logger.info(f"VectorRetriever ready with {len(self.retrieval_system.image_paths)} images")
+        logger.info(
+            f"VectorRetriever ready with {len(self.retrieval_system.image_paths)} images"
+        )
 
     def _prepare_screenshots(self) -> list[str]:
         """Prepare screenshots for dataset and return list of paths."""
@@ -1240,13 +1318,20 @@ class VectorRetriever(BaseRetriever):
         missing = []
 
         for ex in self.examples:
-            screenshot_path = os.path.join(self.screenshot_dir, f"{ex['id']}_fullhd.png")
+            screenshot_path = os.path.join(
+                self.screenshot_dir, f"{ex['id']}_fullhd.png"
+            )
             screenshot_paths.append(screenshot_path)
-            if not os.path.exists(screenshot_path) or os.path.getsize(screenshot_path) == 0:
+            if (
+                not os.path.exists(screenshot_path)
+                or os.path.getsize(screenshot_path) == 0
+            ):
                 missing.append(ex)
 
         if missing:
-            logger.info(f"Found {len(missing)} missing screenshots out of {len(self.examples)} total examples")
+            logger.info(
+                f"Found {len(missing)} missing screenshots out of {len(self.examples)} total examples"
+            )
             logger.info(f"Preparing {len(missing)} missing screenshots...")
             # Use a more robust approach: continue even if some screenshots fail
             success_count = 0
@@ -1255,31 +1340,33 @@ class VectorRetriever(BaseRetriever):
                     capture_screenshot_for_example(ex, self.screenshot_dir)
                     success_count += 1
                 except Exception as e:
-                    logger.warning(f"Failed to capture screenshot for {ex.get('id', 'unknown')}: {e}")
+                    logger.warning(
+                        f"Failed to capture screenshot for {ex.get('id', 'unknown')}: {e}"
+                    )
                     # Continue with next screenshot instead of failing completely
-            logger.info(f"Screenshots prepared: {success_count}/{len(missing)} successful")
+            logger.info(
+                f"Screenshots prepared: {success_count}/{len(missing)} successful"
+            )
         else:
-            logger.info(f"All {len(self.examples)} screenshots already exist, skipping preparation")
+            logger.info(
+                f"All {len(self.examples)} screenshots already exist, skipping preparation"
+            )
 
         # Return only existing screenshots
-        return [p for p in screenshot_paths if os.path.exists(p) and os.path.getsize(p) > 0]
+        return [
+            p for p in screenshot_paths if os.path.exists(p) and os.path.getsize(p) > 0
+        ]
 
     async def retrieve(self, query: str, example: dict) -> RetrievalResult:
         loop = asyncio.get_event_loop()
 
         try:
             results = await loop.run_in_executor(
-                None,
-                self.retrieval_system.retrieve,
-                query,
-                self.top_k
+                None, self.retrieval_system.retrieve, query, self.top_k
             )
 
             if results:
-                return RetrievalResult(
-                    images=results,
-                    retrieval_type="vector"
-                )
+                return RetrievalResult(images=results, retrieval_type="vector")
         except Exception as e:
             logger.warning(f"Vector retrieval failed: {e}")
 
@@ -1300,7 +1387,7 @@ class ColQwenVectorRetriever(BaseRetriever):
         recursive: bool = False,
         top_k: int = 3,
         examples: list[dict] | None = None,
-        prepare_screenshots: bool = False  # ColQwen2 doesn't need to prepare specific screenshots
+        prepare_screenshots: bool = False,  # ColQwen2 doesn't need to prepare specific screenshots
     ):
         self.top_k = top_k
         self.screenshot_dir = screenshot_dir
@@ -1311,9 +1398,13 @@ class ColQwenVectorRetriever(BaseRetriever):
         image_paths = self._get_example_image_paths()
 
         if image_paths:
-            logger.info(f"ColQwen2 will retrieve from {len(image_paths)} images for {len(self.examples)} examples")
+            logger.info(
+                f"ColQwen2 will retrieve from {len(image_paths)} images for {len(self.examples)} examples"
+            )
         else:
-            logger.warning(f"No images found for examples, falling back to all images in: {screenshot_dir}")
+            logger.warning(
+                f"No images found for examples, falling back to all images in: {screenshot_dir}"
+            )
 
         # Import ColQwen2 retrieval system
         import sys
@@ -1330,9 +1421,11 @@ class ColQwenVectorRetriever(BaseRetriever):
             try:
                 from scripts.colqwen_leann_retrieval import ColQwenLEANNRetrievalSystem
             except ImportError:
-                raise ImportError("ColQwenLEANNRetrievalSystem not available. Make sure colqwen_leann_retrieval.py is in the scripts directory.")
+                raise ImportError(
+                    "ColQwenLEANNRetrievalSystem not available. Make sure colqwen_leann_retrieval.py is in the scripts directory."
+                )
 
-        logger.info(f"Initializing ColQwen2 LEANN retrieval system...")
+        logger.info("Initializing ColQwen2 LEANN retrieval system...")
         logger.info(f"Search method: {search_method}")
 
         # Use filtered image paths if available, otherwise fall back to directory scanning
@@ -1355,13 +1448,13 @@ class ColQwenVectorRetriever(BaseRetriever):
                 custom_folder_path=screenshot_dir,
                 custom_folder_recursive=recursive,
             )
-        logger.info(f"ColQwen2 LEANN retrieval system ready")
+        logger.info("ColQwen2 LEANN retrieval system ready")
 
     def _get_example_image_paths(self) -> list[str]:
         """Get image paths for the specific examples."""
         image_paths = []
         for ex in self.examples:
-            example_id = ex.get('id', '')
+            example_id = ex.get("id", "")
             if not example_id:
                 continue
             path = os.path.join(self.screenshot_dir, f"{example_id}_fullhd.png")
@@ -1374,24 +1467,20 @@ class ColQwenVectorRetriever(BaseRetriever):
 
         try:
             results = await loop.run_in_executor(
-                None,
-                self.retrieval_system.retrieve,
-                query,
-                self.top_k
+                None, self.retrieval_system.retrieve, query, self.top_k
             )
 
             if results:
-                return RetrievalResult(
-                    images=results,
-                    retrieval_type="colqwen_vector"
-                )
+                return RetrievalResult(images=results, retrieval_type="colqwen_vector")
         except Exception as e:
             logger.warning(f"ColQwen2 vector retrieval failed: {e}")
 
         return RetrievalResult(retrieval_type="colqwen_vector")
 
 
-def _filter_tiles_by_aspect_ratio(tile_paths: list[str], max_aspect_ratio: float = 100.0) -> list[str]:
+def _filter_tiles_by_aspect_ratio(
+    tile_paths: list[str], max_aspect_ratio: float = 100.0
+) -> list[str]:
     """Filter out tiles with extreme aspect ratios.
 
     Args:
@@ -1413,7 +1502,9 @@ def _filter_tiles_by_aspect_ratio(tile_paths: list[str], max_aspect_ratio: float
                     if aspect_ratio <= max_aspect_ratio:
                         filtered.append(tile_path)
                     else:
-                        logger.warning(f"Skipping tile with extreme aspect ratio {aspect_ratio:.2f}: {tile_path}")
+                        logger.warning(
+                            f"Skipping tile with extreme aspect ratio {aspect_ratio:.2f}: {tile_path}"
+                        )
         except Exception as e:
             logger.warning(f"Failed to check tile {tile_path}: {e}")
 
@@ -1437,7 +1528,7 @@ class TiledVectorRetriever(BaseRetriever):
         cache_path: str | None = None,
         use_multivector: bool = True,
         top_k: int = 3,
-        examples: list[dict] | None = None
+        examples: list[dict] | None = None,
     ):
         self.top_k = top_k
         self.screenshot_dir = screenshot_dir
@@ -1450,6 +1541,7 @@ class TiledVectorRetriever(BaseRetriever):
 
         # Build example_id -> URL mapping (prioritize Wikipedia URLs)
         from .simpleqa_data import extract_url_from_metadata
+
         self.id_to_url = {}
         for ex in self.examples:
             ex_id = ex.get("id", "")
@@ -1475,14 +1567,13 @@ class TiledVectorRetriever(BaseRetriever):
         self.retrieval_system = JinaAPIRetrievalSystem(
             api_key=api_key,
             use_multivector=use_multivector,
-            device="cpu"  # Use CPU to avoid OOM when VLM is on GPU
+            device="cpu",  # Use CPU to avoid OOM when VLM is on GPU
         )
         # Only embed tiles for current dataset
-        self.retrieval_system.embed_images(
-            file_paths=tile_paths,
-            cache_path=cache_path
+        self.retrieval_system.embed_images(file_paths=tile_paths, cache_path=cache_path)
+        logger.info(
+            f"TiledVectorRetriever ready with {len(self.retrieval_system.image_paths)} tiles"
         )
-        logger.info(f"TiledVectorRetriever ready with {len(self.retrieval_system.image_paths)} tiles")
 
     def _prepare_screenshots_and_tiles(self) -> list[str]:
         """Prepare screenshots and tiles for dataset, return tile paths."""
@@ -1494,9 +1585,14 @@ class TiledVectorRetriever(BaseRetriever):
 
         # Collect screenshot paths and identify missing
         for ex in self.examples:
-            screenshot_path = os.path.join(self.screenshot_dir, f"{ex['id']}_fullhd.png")
+            screenshot_path = os.path.join(
+                self.screenshot_dir, f"{ex['id']}_fullhd.png"
+            )
             screenshot_paths.append(screenshot_path)
-            if not os.path.exists(screenshot_path) or os.path.getsize(screenshot_path) == 0:
+            if (
+                not os.path.exists(screenshot_path)
+                or os.path.getsize(screenshot_path) == 0
+            ):
                 missing.append(ex)
 
         # Capture missing screenshots
@@ -1508,7 +1604,9 @@ class TiledVectorRetriever(BaseRetriever):
 
         # Split each screenshot into tiles
         all_tile_paths = []
-        logger.info(f"Splitting {len(screenshot_paths)} screenshots into tiles (output: {self.tiles_dir})...")
+        logger.info(
+            f"Splitting {len(screenshot_paths)} screenshots into tiles (output: {self.tiles_dir})..."
+        )
         for screenshot_path in tqdm(screenshot_paths, desc="Splitting tiles"):
             if os.path.exists(screenshot_path) and os.path.getsize(screenshot_path) > 0:
                 tile_paths = split_image_to_tiles(
@@ -1518,7 +1616,9 @@ class TiledVectorRetriever(BaseRetriever):
 
         # Filter out tiles with extreme aspect ratios
         filtered_tile_paths = _filter_tiles_by_aspect_ratio(all_tile_paths)
-        logger.info(f"Prepared {len(filtered_tile_paths)} tiles from {len(screenshot_paths)} screenshots (filtered {len(all_tile_paths) - len(filtered_tile_paths)} extreme aspect ratio tiles)")
+        logger.info(
+            f"Prepared {len(filtered_tile_paths)} tiles from {len(screenshot_paths)} screenshots (filtered {len(all_tile_paths) - len(filtered_tile_paths)} extreme aspect ratio tiles)"
+        )
         return filtered_tile_paths
 
     def _extract_urls_from_results(self, results: list) -> str:
@@ -1549,18 +1649,13 @@ class TiledVectorRetriever(BaseRetriever):
 
         try:
             results = await loop.run_in_executor(
-                None,
-                self.retrieval_system.retrieve,
-                query,
-                self.top_k
+                None, self.retrieval_system.retrieve, query, self.top_k
             )
 
             if results:
                 source_url = self._extract_urls_from_results(results)
                 return RetrievalResult(
-                    images=results,
-                    source_url=source_url,
-                    retrieval_type="tiled_vector"
+                    images=results, source_url=source_url, retrieval_type="tiled_vector"
                 )
         except Exception as e:
             logger.warning(f"Tiled vector retrieval failed: {e}")
@@ -1587,7 +1682,7 @@ class TiledColQwenVectorRetriever(BaseRetriever):
         first_stage_k: int = 500,
         rebuild_index: bool = False,
         top_k: int = 3,
-        examples: list[dict] | None = None
+        examples: list[dict] | None = None,
     ):
         self.top_k = top_k
         self.screenshot_dir = screenshot_dir
@@ -1600,6 +1695,7 @@ class TiledColQwenVectorRetriever(BaseRetriever):
 
         # Build example_id -> URL mapping (prioritize Wikipedia URLs)
         from .simpleqa_data import extract_url_from_metadata
+
         self.id_to_url = {}
         for ex in self.examples:
             ex_id = ex.get("id", "")
@@ -1626,7 +1722,7 @@ class TiledColQwenVectorRetriever(BaseRetriever):
             except ImportError:
                 raise ImportError("ColQwenLEANNRetrievalSystem not available.")
 
-        logger.info(f"Initializing TiledColQwen2 LEANN retrieval system...")
+        logger.info("Initializing TiledColQwen2 LEANN retrieval system...")
         logger.info(f"Search method: {search_method}, tiles: {len(tile_paths)}")
 
         self.retrieval_system = ColQwenLEANNRetrievalSystem(
@@ -1638,7 +1734,9 @@ class TiledColQwenVectorRetriever(BaseRetriever):
             rebuild_index=rebuild_index,
         )
 
-        logger.info(f"TiledColQwen2 LEANN retrieval system ready with {len(tile_paths)} tiles")
+        logger.info(
+            f"TiledColQwen2 LEANN retrieval system ready with {len(tile_paths)} tiles"
+        )
 
     def _prepare_screenshots_and_tiles(self) -> list[str]:
         """Prepare screenshots and tiles for dataset, return tile paths."""
@@ -1650,9 +1748,14 @@ class TiledColQwenVectorRetriever(BaseRetriever):
 
         # Collect screenshot paths and identify missing
         for ex in self.examples:
-            screenshot_path = os.path.join(self.screenshot_dir, f"{ex['id']}_fullhd.png")
+            screenshot_path = os.path.join(
+                self.screenshot_dir, f"{ex['id']}_fullhd.png"
+            )
             screenshot_paths.append(screenshot_path)
-            if not os.path.exists(screenshot_path) or os.path.getsize(screenshot_path) == 0:
+            if (
+                not os.path.exists(screenshot_path)
+                or os.path.getsize(screenshot_path) == 0
+            ):
                 missing.append(ex)
 
         # Capture missing screenshots
@@ -1664,7 +1767,9 @@ class TiledColQwenVectorRetriever(BaseRetriever):
 
         # Split each screenshot into tiles
         all_tile_paths = []
-        logger.info(f"Splitting {len(screenshot_paths)} screenshots into tiles (output: {self.tiles_dir})...")
+        logger.info(
+            f"Splitting {len(screenshot_paths)} screenshots into tiles (output: {self.tiles_dir})..."
+        )
         for screenshot_path in tqdm(screenshot_paths, desc="Splitting tiles"):
             if os.path.exists(screenshot_path) and os.path.getsize(screenshot_path) > 0:
                 tile_paths = split_image_to_tiles(
@@ -1674,7 +1779,9 @@ class TiledColQwenVectorRetriever(BaseRetriever):
 
         # Filter out tiles with extreme aspect ratios
         filtered_tile_paths = _filter_tiles_by_aspect_ratio(all_tile_paths)
-        logger.info(f"Prepared {len(filtered_tile_paths)} tiles from {len(screenshot_paths)} screenshots (filtered {len(all_tile_paths) - len(filtered_tile_paths)} extreme aspect ratio tiles)")
+        logger.info(
+            f"Prepared {len(filtered_tile_paths)} tiles from {len(screenshot_paths)} screenshots (filtered {len(all_tile_paths) - len(filtered_tile_paths)} extreme aspect ratio tiles)"
+        )
         return filtered_tile_paths
 
     def _extract_urls_from_results(self, results: list) -> str:
@@ -1703,10 +1810,7 @@ class TiledColQwenVectorRetriever(BaseRetriever):
 
         try:
             results = await loop.run_in_executor(
-                None,
-                self.retrieval_system.retrieve,
-                query,
-                self.top_k
+                None, self.retrieval_system.retrieve, query, self.top_k
             )
 
             if results:
@@ -1714,7 +1818,7 @@ class TiledColQwenVectorRetriever(BaseRetriever):
                 return RetrievalResult(
                     images=results,
                     source_url=source_url,
-                    retrieval_type="tiled_colqwen_vector"
+                    retrieval_type="tiled_colqwen_vector",
                 )
         except Exception as e:
             logger.warning(f"TiledColQwen2 vector retrieval failed: {e}")
@@ -1758,7 +1862,13 @@ class TextVectorRetriever(BaseRetriever):
         from pathlib import Path as PathLib
 
         # Add LEANN to path
-        leann_path = PathLib(__file__).parent.parent.parent / "LEANN" / "packages" / "leann-core" / "src"
+        leann_path = (
+            PathLib(__file__).parent.parent.parent
+            / "LEANN"
+            / "packages"
+            / "leann-core"
+            / "src"
+        )
         if str(leann_path) not in sys.path:
             sys.path.insert(0, str(leann_path))
 
@@ -1786,7 +1896,9 @@ class TextVectorRetriever(BaseRetriever):
 
         # Load searcher
         self.searcher = LeannSearcher(index_path)
-        logger.info(f"TextVectorRetriever ready with {len(text_cache)} documents, top_k={top_k}")
+        logger.info(
+            f"TextVectorRetriever ready with {len(text_cache)} documents, top_k={top_k}"
+        )
 
     def _build_index(self, LeannBuilder):
         """Build LEANN index from text_cache with chunking for long texts."""
@@ -1805,6 +1917,7 @@ class TextVectorRetriever(BaseRetriever):
         # Import tiktoken for accurate chunking
         try:
             import tiktoken
+
             enc = tiktoken.get_encoding("cl100k_base")
         except ImportError:
             enc = None
@@ -1834,12 +1947,15 @@ class TextVectorRetriever(BaseRetriever):
                         chunk_text = enc.decode(chunk_tokens)
 
                         chunk_id = f"{example_id}_chunk_{chunk_idx}"
-                        builder.add_text(chunk_text, metadata={
-                            "id": chunk_id,
-                            "original_id": example_id,
-                            "url": url,
-                            "chunk_idx": chunk_idx
-                        })
+                        builder.add_text(
+                            chunk_text,
+                            metadata={
+                                "id": chunk_id,
+                                "original_id": example_id,
+                                "url": url,
+                                "chunk_idx": chunk_idx,
+                            },
+                        )
                         chunk_count += 1
                         chunk_idx += 1
 
@@ -1862,12 +1978,15 @@ class TextVectorRetriever(BaseRetriever):
                         chunk_text = text[start:end]
 
                         chunk_id = f"{example_id}_chunk_{chunk_idx}"
-                        builder.add_text(chunk_text, metadata={
-                            "id": chunk_id,
-                            "original_id": example_id,
-                            "url": url,
-                            "chunk_idx": chunk_idx
-                        })
+                        builder.add_text(
+                            chunk_text,
+                            metadata={
+                                "id": chunk_id,
+                                "original_id": example_id,
+                                "url": url,
+                                "chunk_idx": chunk_idx,
+                            },
+                        )
                         chunk_count += 1
                         chunk_idx += 1
 
@@ -1875,7 +1994,9 @@ class TextVectorRetriever(BaseRetriever):
                             break
                         start = end - overlap_chars
 
-        logger.info(f"Created {chunk_count} chunks from {len(self.text_cache)} documents")
+        logger.info(
+            f"Created {chunk_count} chunks from {len(self.text_cache)} documents"
+        )
 
         # Build index
         builder.build_index(self.index_path)
@@ -1889,7 +2010,9 @@ class TextVectorRetriever(BaseRetriever):
             # Run search in executor (LEANN search is sync)
             results = await loop.run_in_executor(
                 None,
-                lambda: self.searcher.search(query, top_k=self.top_k, recompute_embeddings=False)
+                lambda: self.searcher.search(
+                    query, top_k=self.top_k, recompute_embeddings=False
+                ),
             )
 
             if results:
@@ -1907,7 +2030,7 @@ class TextVectorRetriever(BaseRetriever):
                 return RetrievalResult(
                     text=combined_text,
                     source_url=combined_urls,
-                    retrieval_type="text_vector"
+                    retrieval_type="text_vector",
                 )
         except Exception as e:
             logger.warning(f"Text vector retrieval failed: {e}")
@@ -1917,111 +2040,117 @@ class TextVectorRetriever(BaseRetriever):
 
 class DsServeRetriever(BaseRetriever):
     """Use ds-serve API for external text augmentation.
-    
+
     Calls ds-serve search API to retrieve relevant text passages for the query.
     """
 
-    def __init__(self, api_url: str = "http://api.ds-serve.org:30888/search", top_k: int = 3):
+    def __init__(
+        self, api_url: str = "http://api.ds-serve.org:30888/search", top_k: int = 3
+    ):
         self.api_url = api_url
         self.top_k = top_k
 
     async def retrieve(self, query: str, example: dict) -> RetrievalResult:
         import aiohttp
         import asyncio
-        import json
 
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 headers = {"Content-Type": "application/json"}
                 payload = {"query": query}
-                
+
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         self.api_url,
                         headers=headers,
                         json=payload,
-                        timeout=aiohttp.ClientTimeout(total=30)
+                        timeout=aiohttp.ClientTimeout(total=30),
                     ) as response:
                         if response.status == 200:
                             result = await response.json()
-                            
+
                             # Extract passages from response
                             passages = []
                             if "results" in result and "passages" in result["results"]:
                                 # passages is a list of lists, get the first list
-                                passage_list = result["results"]["passages"][0] if result["results"]["passages"] else []
-                                
+                                passage_list = (
+                                    result["results"]["passages"][0]
+                                    if result["results"]["passages"]
+                                    else []
+                                )
+
                                 # Take top_k passages
-                                for i, passage_data in enumerate(passage_list[:self.top_k]):
+                                for i, passage_data in enumerate(
+                                    passage_list[: self.top_k]
+                                ):
                                     if isinstance(passage_data, dict):
-                                        text = passage_data.get("text", "") or passage_data.get("center_text", "")
+                                        text = passage_data.get(
+                                            "text", ""
+                                        ) or passage_data.get("center_text", "")
                                         if text:
                                             passages.append(text)
-                            
+
                             # Combine passages into context text
                             if passages:
-                                combined_text = "\n\n".join([
-                                    f"[Passage {i+1}]\n{text}" 
-                                    for i, text in enumerate(passages)
-                                ])
-                                
+                                combined_text = "\n\n".join(
+                                    [
+                                        f"[Passage {i + 1}]\n{text}"
+                                        for i, text in enumerate(passages)
+                                    ]
+                                )
+
                                 return RetrievalResult(
                                     text=combined_text,
                                     source_url=f"ds-serve:{self.api_url}",
-                                    retrieval_type="ds_serve"
+                                    retrieval_type="ds_serve",
                                 )
                             else:
                                 return RetrievalResult(
                                     text="No passages found from ds-serve.",
                                     source_url=f"ds-serve:{self.api_url}",
-                                    retrieval_type="ds_serve"
+                                    retrieval_type="ds_serve",
                                 )
                         elif response.status == 429:
                             if attempt < max_retries - 1:
-                                wait_time = min(2 ** attempt * 2, 10)
-                                logger.warning(f"Rate limited (429), waiting {wait_time}s before retry ({attempt + 1}/{max_retries})")
+                                wait_time = min(2**attempt * 2, 10)
+                                logger.warning(
+                                    f"Rate limited (429), waiting {wait_time}s before retry ({attempt + 1}/{max_retries})"
+                                )
                                 await asyncio.sleep(wait_time)
                                 continue
                             else:
                                 error_msg = f"ds-serve API rate limited after {max_retries} retries"
                                 logger.error(error_msg)
                                 return RetrievalResult(
-                                    text=error_msg,
-                                    retrieval_type="ds_serve"
+                                    text=error_msg, retrieval_type="ds_serve"
                                 )
                         else:
                             error_text = await response.text()
                             error_msg = f"ds-serve API error: {response.status} - {error_text[:200]}"
                             logger.error(error_msg)
                             return RetrievalResult(
-                                text=error_msg,
-                                retrieval_type="ds_serve"
+                                text=error_msg, retrieval_type="ds_serve"
                             )
             except asyncio.TimeoutError:
                 if attempt < max_retries - 1:
-                    wait_time = min(2 ** attempt, 5)
-                    logger.warning(f"Timeout, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})")
+                    wait_time = min(2**attempt, 5)
+                    logger.warning(
+                        f"Timeout, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})"
+                    )
                     await asyncio.sleep(wait_time)
                     continue
                 else:
                     error_msg = f"ds-serve API timeout after {max_retries} retries"
                     logger.error(error_msg)
-                    return RetrievalResult(
-                        text=error_msg,
-                        retrieval_type="ds_serve"
-                    )
+                    return RetrievalResult(text=error_msg, retrieval_type="ds_serve")
             except Exception as e:
                 error_msg = f"ds-serve API call failed: {e}"
                 logger.error(error_msg)
-                return RetrievalResult(
-                    text=error_msg,
-                    retrieval_type="ds_serve"
-                )
-        
+                return RetrievalResult(text=error_msg, retrieval_type="ds_serve")
+
         return RetrievalResult(
-            text="ds-serve API call failed after all retries",
-            retrieval_type="ds_serve"
+            text="ds-serve API call failed after all retries", retrieval_type="ds_serve"
         )
 
 
@@ -2053,15 +2182,24 @@ class LocalAPIRetriever(BaseRetriever):
         "Search query:"
     )
 
-    def __init__(self, api_url: str = "http://localhost:30888/search", top_k: int = 5,
-                 batch_size: int = 32, query_rewrite: bool = False,
-                 rewrite_model: str | None = None, rewrite_api_base: str | None = None,
-                 rewrite_api_key: str = "dummy", nprobe: int | None = None,
-                 reranker=None, rerank_top_k: int = 3,
-                 query_image_fn=None, multi_image_query: bool = False,
-                 tiles_dir: str = "tiles/evqa",
-                 lookup_reference_url: bool = False,
-                 query_instruction: str | None = None):
+    def __init__(
+        self,
+        api_url: str = "http://localhost:30888/search",
+        top_k: int = 5,
+        batch_size: int = 32,
+        query_rewrite: bool = False,
+        rewrite_model: str | None = None,
+        rewrite_api_base: str | None = None,
+        rewrite_api_key: str = "dummy",
+        nprobe: int | None = None,
+        reranker=None,
+        rerank_top_k: int = 3,
+        query_image_fn=None,
+        multi_image_query: bool = False,
+        tiles_dir: str = "tiles/evqa",
+        lookup_reference_url: bool = False,
+        query_instruction: str | None = None,
+    ):
         self.api_url = api_url
         self.top_k = top_k
         self.batch_size = batch_size
@@ -2117,12 +2255,15 @@ class LocalAPIRetriever(BaseRetriever):
 
         Returns dict: example_id -> list of hit dicts with path/score/url/is_reference.
         """
-        import re
         import sys as _sys
         from .simpleqa_data import extract_url_from_metadata
 
-        if not os.path.isdir(_KIWIX_OUTPUT_DIR) or not os.path.isfile(_KIWIX_ARTICLES_JSON):
-            logger.error(f"lookup_reference_url: kiwix tiles unavailable at {_KIWIX_OUTPUT_DIR}")
+        if not os.path.isdir(_KIWIX_OUTPUT_DIR) or not os.path.isfile(
+            _KIWIX_ARTICLES_JSON
+        ):
+            logger.error(
+                f"lookup_reference_url: kiwix tiles unavailable at {_KIWIX_OUTPUT_DIR}"
+            )
             return {}
 
         if _WIKI_SCREENSHOT_DIR not in _sys.path:
@@ -2140,9 +2281,15 @@ class LocalAPIRetriever(BaseRetriever):
         if not url_to_eids:
             return {}
 
-        redirects = _KIWIX_REDIRECTS_JSON if os.path.isfile(_KIWIX_REDIRECTS_JSON) else None
-        results = _batch_query(_KIWIX_OUTPUT_DIR, list(url_to_eids.keys()),
-                               _KIWIX_ARTICLES_JSON, redirects_json=redirects)
+        redirects = (
+            _KIWIX_REDIRECTS_JSON if os.path.isfile(_KIWIX_REDIRECTS_JSON) else None
+        )
+        results = _batch_query(
+            _KIWIX_OUTPUT_DIR,
+            list(url_to_eids.keys()),
+            _KIWIX_ARTICLES_JSON,
+            redirects_json=redirects,
+        )
 
         ref_tiles: dict[str, list[dict]] = {}
         found, missing = 0, 0
@@ -2155,22 +2302,38 @@ class LocalAPIRetriever(BaseRetriever):
             tiles_dir_abs = os.path.join(_KIWIX_OUTPUT_DIR, result["tiles_dir"])
             if not os.path.isdir(tiles_dir_abs):
                 missing += 1
-                logger.warning(f"lookup_reference_url: tiles dir missing: {tiles_dir_abs}")
+                logger.warning(
+                    f"lookup_reference_url: tiles dir missing: {tiles_dir_abs}"
+                )
                 continue
-            chunks = sorted(f for f in os.listdir(tiles_dir_abs)
-                            if f.startswith("chunk_") and f.endswith(".png"))
+            chunks = sorted(
+                f
+                for f in os.listdir(tiles_dir_abs)
+                if f.startswith("chunk_") and f.endswith(".png")
+            )
             if not chunks:
                 missing += 1
-                logger.warning(f"lookup_reference_url: no chunk files in {tiles_dir_abs}")
+                logger.warning(
+                    f"lookup_reference_url: no chunk files in {tiles_dir_abs}"
+                )
                 continue
             found += 1
-            hits = [{"path": os.path.join(tiles_dir_abs, c), "score": 0.0,
-                     "url": url, "is_reference": True} for c in chunks]
+            hits = [
+                {
+                    "path": os.path.join(tiles_dir_abs, c),
+                    "score": 0.0,
+                    "url": url,
+                    "is_reference": True,
+                }
+                for c in chunks
+            ]
             for eid in eids:
                 ref_tiles[eid] = hits
 
-        logger.info(f"lookup_reference_url: batch lookup {found} found, {missing} missing "
-                    f"out of {len(url_to_eids)} unique URLs")
+        logger.info(
+            f"lookup_reference_url: batch lookup {found} found, {missing} missing "
+            f"out of {len(url_to_eids)} unique URLs"
+        )
         return ref_tiles
 
     async def prefetch(self, examples: list[dict]):
@@ -2179,9 +2342,15 @@ class LocalAPIRetriever(BaseRetriever):
 
         # Step 1: Query rewriting (if enabled)
         if self.query_rewrite and self.rewrite_model:
-            to_rewrite = [ex for ex in examples if ex.get("id", "unknown") not in self._rewritten_queries]
+            to_rewrite = [
+                ex
+                for ex in examples
+                if ex.get("id", "unknown") not in self._rewritten_queries
+            ]
             if to_rewrite:
-                logger.info(f"LocalAPIRetriever: rewriting {len(to_rewrite)} queries...")
+                logger.info(
+                    f"LocalAPIRetriever: rewriting {len(to_rewrite)} queries..."
+                )
                 self._rewritten_queries.update(await self._rewrite_queries(to_rewrite))
                 # Log some examples
                 for ex in to_rewrite[:3]:
@@ -2197,7 +2366,9 @@ class LocalAPIRetriever(BaseRetriever):
         if self.multi_image_query:
             # Multi-image: send one query per image, track which example each belongs to
             # We'll aggregate after receiving results
-            multi_image_groups: dict[str, list[int]] = {}  # eid -> list of indices in queries[]
+            multi_image_groups: dict[
+                str, list[int]
+            ] = {}  # eid -> list of indices in queries[]
             for ex in examples:
                 eid = ex.get("id", "unknown")
                 if eid in self._cache:
@@ -2213,14 +2384,18 @@ class LocalAPIRetriever(BaseRetriever):
                     query_dict = {"text": query_text}
                     if all_paths:
                         import base64
+
                         with open(all_paths[0], "rb") as f:
                             query_dict["image"] = base64.b64encode(f.read()).decode()
                     elif self.query_image_fn:
                         img_path = self.query_image_fn(ex)
                         if img_path and os.path.exists(img_path):
                             import base64
+
                             with open(img_path, "rb") as f:
-                                query_dict["image"] = base64.b64encode(f.read()).decode()
+                                query_dict["image"] = base64.b64encode(
+                                    f.read()
+                                ).decode()
                     multi_image_groups[eid] = [len(queries)]
                     queries.append(query_dict)
                     example_ids.append(eid)
@@ -2228,6 +2403,7 @@ class LocalAPIRetriever(BaseRetriever):
                     # Multiple images: one query per image
                     group_indices = []
                     import base64
+
                     for img_path in all_paths:
                         query_dict = {"text": query_text}
                         with open(img_path, "rb") as f:
@@ -2236,7 +2412,9 @@ class LocalAPIRetriever(BaseRetriever):
                         queries.append(query_dict)
                         example_ids.append(eid)
                     multi_image_groups[eid] = group_indices
-                    logger.info(f"Multi-image query for {eid[:8]}: {len(all_paths)} images")
+                    logger.info(
+                        f"Multi-image query for {eid[:8]}: {len(all_paths)} images"
+                    )
         else:
             for ex in examples:
                 eid = ex.get("id", "unknown")
@@ -2251,6 +2429,7 @@ class LocalAPIRetriever(BaseRetriever):
                     img_path = self.query_image_fn(ex)
                     if img_path and os.path.exists(img_path):
                         import base64
+
                         with open(img_path, "rb") as f:
                             query_dict["image"] = base64.b64encode(f.read()).decode()
                 queries.append(query_dict)
@@ -2263,15 +2442,21 @@ class LocalAPIRetriever(BaseRetriever):
         # Use smaller batches when queries contain images (GPU memory)
         has_images = any("image" in q for q in queries)
         batch_size = min(self.batch_size, 16) if has_images else self.batch_size
-        logger.info(f"LocalAPIRetriever: prefetching {len(queries)} queries in batches of {batch_size}"
-                    f"{' (multimodal)' if has_images else ''}")
+        logger.info(
+            f"LocalAPIRetriever: prefetching {len(queries)} queries in batches of {batch_size}"
+            f"{' (multimodal)' if has_images else ''}"
+        )
 
         for batch_start in range(0, len(queries), batch_size):
-            batch_queries = queries[batch_start:batch_start + batch_size]
-            batch_ids = example_ids[batch_start:batch_start + batch_size]
+            batch_queries = queries[batch_start : batch_start + batch_size]
+            batch_ids = example_ids[batch_start : batch_start + batch_size]
 
             n_docs = self.top_k * 2 if self.multi_image_query else self.top_k
-            payload = {"queries": batch_queries, "n_docs": n_docs, "include_images": True}
+            payload = {
+                "queries": batch_queries,
+                "n_docs": n_docs,
+                "include_images": True,
+            }
             if self.nprobe is not None:
                 payload["nprobe"] = self.nprobe
             if self.query_instruction is not None:
@@ -2285,7 +2470,9 @@ class LocalAPIRetriever(BaseRetriever):
                     ) as response:
                         if response.status != 200:
                             error_text = await response.text()
-                            logger.error(f"Local API batch error {response.status}: {error_text[:200]}")
+                            logger.error(
+                                f"Local API batch error {response.status}: {error_text[:200]}"
+                            )
                             for eid in batch_ids:
                                 self._cache[eid] = []
                             continue
@@ -2308,8 +2495,10 @@ class LocalAPIRetriever(BaseRetriever):
                     # Multi-image: accumulate hits from all images for this example
                     self._cache[eid].extend(hits)
 
-            logger.info(f"  Batch {batch_start // batch_size + 1}/{(len(queries) + batch_size - 1) // batch_size}: "
-                        f"{len(batch_queries)} queries done")
+            logger.info(
+                f"  Batch {batch_start // batch_size + 1}/{(len(queries) + batch_size - 1) // batch_size}: "
+                f"{len(batch_queries)} queries done"
+            )
 
         # Multi-image aggregation: deduplicate and keep max score per tile path
         if self.multi_image_query:
@@ -2322,11 +2511,17 @@ class LocalAPIRetriever(BaseRetriever):
                 for hit in hits:
                     path = hit.get("path", "")
                     score = hit.get("score", 0.0)
-                    if path not in best_by_path or score > best_by_path[path].get("score", 0.0):
+                    if path not in best_by_path or score > best_by_path[path].get(
+                        "score", 0.0
+                    ):
                         best_by_path[path] = hit
                 # Sort by score descending, take top_k
-                sorted_hits = sorted(best_by_path.values(), key=lambda h: h.get("score", 0.0), reverse=True)
-                self._cache[eid] = sorted_hits[:self.top_k]
+                sorted_hits = sorted(
+                    best_by_path.values(),
+                    key=lambda h: h.get("score", 0.0),
+                    reverse=True,
+                )
+                self._cache[eid] = sorted_hits[: self.top_k]
 
         logger.info(f"LocalAPIRetriever: prefetch complete, {len(self._cache)} cached")
 
@@ -2340,13 +2535,17 @@ class LocalAPIRetriever(BaseRetriever):
                 new_chunks = [rh for rh in ref_hits if rh["path"] not in existing_paths]
                 skipped = len(ref_hits) - len(new_chunks)
                 if new_chunks:
-                    logger.info(f"  [{eid[:8]}]: adding {len(new_chunks)} reference URL chunks "
-                                f"({skipped} already in API results)")
+                    logger.info(
+                        f"  [{eid[:8]}]: adding {len(new_chunks)} reference URL chunks "
+                        f"({skipped} already in API results)"
+                    )
                     self._cache[eid] = existing + new_chunks
                     total_added += len(new_chunks)
                 total_skipped += skipped
-            logger.info(f"lookup_reference_url: added {total_added} chunks, "
-                        f"skipped {total_skipped} duplicates")
+            logger.info(
+                f"lookup_reference_url: added {total_added} chunks, "
+                f"skipped {total_skipped} duplicates"
+            )
 
         # Step 3: Rerank (if reranker provided)
         if self.reranker is not None:
@@ -2371,7 +2570,8 @@ class LocalAPIRetriever(BaseRetriever):
 
             if batch_inputs:
                 all_reranked = self.reranker.rerank_batch(
-                    batch_inputs, top_k=self.rerank_top_k,
+                    batch_inputs,
+                    top_k=self.rerank_top_k,
                 )
                 # Update cache with reranked results
                 for eid, reranked_results in zip(batch_eids, all_reranked):
@@ -2380,9 +2580,13 @@ class LocalAPIRetriever(BaseRetriever):
                     new_hits = []
                     for path, rerank_score in reranked_results:
                         orig_hit = path_to_hit.get(path, {})
-                        new_hits.append({**orig_hit, "path": path, "score": rerank_score})
+                        new_hits.append(
+                            {**orig_hit, "path": path, "score": rerank_score}
+                        )
                     self._cache[eid] = new_hits
-                logger.info(f"LocalAPIRetriever: reranking complete ({len(batch_inputs)} examples)")
+                logger.info(
+                    f"LocalAPIRetriever: reranking complete ({len(batch_inputs)} examples)"
+                )
 
     @staticmethod
     @staticmethod
@@ -2416,7 +2620,9 @@ class LocalAPIRetriever(BaseRetriever):
         return path if path else None
 
     @staticmethod
-    def _hits_to_result(hits: list[dict], tiles_dir: str | None = None) -> RetrievalResult:
+    def _hits_to_result(
+        hits: list[dict], tiles_dir: str | None = None
+    ) -> RetrievalResult:
         """Convert API hits to RetrievalResult."""
         if not hits:
             return RetrievalResult(retrieval_type="local_api")
@@ -2455,11 +2661,13 @@ class LocalAPIRetriever(BaseRetriever):
 
         # Fallback: single query (if prefetch wasn't called)
         import aiohttp
+
         query_dict = {"text": query}
         if self.query_image_fn:
             img_path = self.query_image_fn(example)
             if img_path and os.path.exists(img_path):
                 import base64
+
                 with open(img_path, "rb") as f:
                     query_dict["image"] = base64.b64encode(f.read()).decode()
         payload = {"queries": [query_dict], "n_docs": self.top_k}
@@ -2497,9 +2705,9 @@ class LocalAPIRetriever(BaseRetriever):
 
 class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
     """Retrieves context by searching through image tiles using Qwen3-VL-Embedding.
-    
+
     Uses single vector embeddings (2048 dim) with cosine similarity for retrieval.
-    
+
     When *pixel_query_map* is provided the retriever embeds the rendered query
     image (pixel query) instead of the raw text, so retrieval happens entirely
     in pixel space.
@@ -2547,9 +2755,12 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
 
         # Build example_id -> URL mapping and deduplicate by URL
         from .simpleqa_data import extract_url_from_metadata
+
         self.id_to_url = {}
         seen_urls: dict[str, str] = {}  # url -> first example_id that uses it
-        self.url_to_representative_id: dict[str, str] = {}  # url -> representative example_id
+        self.url_to_representative_id: dict[
+            str, str
+        ] = {}  # url -> representative example_id
         dedup_examples = []
         for ex in self.examples:
             ex_id = ex.get("id", "")
@@ -2561,8 +2772,10 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
                     self.url_to_representative_id[url] = ex_id
                     dedup_examples.append(ex)
 
-        logger.info(f"Deduplicated {len(self.examples)} examples -> {len(dedup_examples)} unique URLs "
-                     f"(removed {len(self.examples) - len(dedup_examples)} duplicate pages)")
+        logger.info(
+            f"Deduplicated {len(self.examples)} examples -> {len(dedup_examples)} unique URLs "
+            f"(removed {len(self.examples) - len(dedup_examples)} duplicate pages)"
+        )
         self._dedup_examples = dedup_examples
 
         # Prepare tile paths: prebuilt dir (hard mini-datastore), local-wiki, or Selenium
@@ -2589,10 +2802,12 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
             except ImportError:
                 raise ImportError("Qwen3VLEmbeddingSystem not available.")
 
-        logger.info(f"Initializing Qwen3-VL-Embedding retrieval system...")
+        logger.info("Initializing Qwen3-VL-Embedding retrieval system...")
         logger.info(f"Model: {model_name}, tiles: {len(tile_paths)}, GPUs: {gpu_ids}")
         if self.pixel_query_map:
-            logger.info(f"Pixel query mode ENABLED ({len(self.pixel_query_map)} queries)")
+            logger.info(
+                f"Pixel query mode ENABLED ({len(self.pixel_query_map)} queries)"
+            )
 
         self.retrieval_system = Qwen3VLEmbeddingSystem(
             model_name=model_name,
@@ -2602,7 +2817,7 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
             backend=self.embedding_backend,
             peft_adapter=self.peft_adapter,
         )
-        
+
         # Embed all tiles (batch_size=8 for HF backend to avoid OOM on shared GPUs)
         embed_bs = 8 if self.embedding_backend == "hf" else 32
         self.retrieval_system.embed_images(
@@ -2610,7 +2825,9 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
             cache_path=cache_path,
             batch_size=embed_bs,
         )
-        logger.info(f"Qwen3-VL-Embedding retrieval ready with {len(self.retrieval_system.image_paths)} tiles")
+        logger.info(
+            f"Qwen3-VL-Embedding retrieval ready with {len(self.retrieval_system.image_paths)} tiles"
+        )
 
     def _load_prebuilt_tiles(self) -> list[str]:
         """Load ALL .png tiles from a prebuilt tile directory (e.g. hard mini-datastore).
@@ -2619,10 +2836,13 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
         example IDs, this loads every tile in the directory — including distractors.
         """
         import glob as _glob
+
         all_tiles = sorted(_glob.glob(os.path.join(self.prebuilt_tiles_dir, "*.png")))
         filtered = _filter_tiles_by_aspect_ratio(all_tiles)
-        logger.info(f"prebuilt-tiles: loaded {len(filtered)} tiles from {self.prebuilt_tiles_dir} "
-                    f"(filtered {len(all_tiles) - len(filtered)} extreme aspect ratio tiles)")
+        logger.info(
+            f"prebuilt-tiles: loaded {len(filtered)} tiles from {self.prebuilt_tiles_dir} "
+            f"(filtered {len(all_tiles) - len(filtered)} extreme aspect ratio tiles)"
+        )
         return filtered
 
     def _prepare_local_wiki_tiles(self) -> list[str]:
@@ -2640,8 +2860,12 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
         from .simpleqa_data import extract_url_from_metadata
         from tqdm import tqdm
 
-        cut_height = self.tile_size[1] if isinstance(self.tile_size, tuple) else self.tile_size
-        wiki_cache = self.local_wiki_screenshot_dir or os.path.join(self.screenshot_dir, "local-wiki")
+        cut_height = (
+            self.tile_size[1] if isinstance(self.tile_size, tuple) else self.tile_size
+        )
+        wiki_cache = self.local_wiki_screenshot_dir or os.path.join(
+            self.screenshot_dir, "local-wiki"
+        )
         os.makedirs(wiki_cache, exist_ok=True)
         os.makedirs(self.tiles_dir, exist_ok=True)
 
@@ -2653,21 +2877,39 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
                 url = extract_url_from_metadata(ex) or ""
                 need.append((ex_id, url))
 
-        logger.info(f"local-wiki: {len(self._dedup_examples)-len(need)} cached, {len(need)} need processing")
+        logger.info(
+            f"local-wiki: {len(self._dedup_examples) - len(need)} cached, {len(need)} need processing"
+        )
 
         if need:
             # Single batch lookup for all URLs at once (loads articles.json once)
-            if not os.path.isdir(_KIWIX_OUTPUT_DIR) or not os.path.isfile(_KIWIX_ARTICLES_JSON):
-                logger.error(f"local-wiki: kiwix tiles unavailable at {_KIWIX_OUTPUT_DIR}")
+            if not os.path.isdir(_KIWIX_OUTPUT_DIR) or not os.path.isfile(
+                _KIWIX_ARTICLES_JSON
+            ):
+                logger.error(
+                    f"local-wiki: kiwix tiles unavailable at {_KIWIX_OUTPUT_DIR}"
+                )
             else:
                 if _WIKI_SCREENSHOT_DIR not in _sys.path:
                     _sys.path.insert(0, _WIKI_SCREENSHOT_DIR)
                 from scripts.build_index import batch_query_by_url as _batch_query
-                redirects = _KIWIX_REDIRECTS_JSON if os.path.isfile(_KIWIX_REDIRECTS_JSON) else None
+
+                redirects = (
+                    _KIWIX_REDIRECTS_JSON
+                    if os.path.isfile(_KIWIX_REDIRECTS_JSON)
+                    else None
+                )
                 urls_to_lookup = [u for _, u in need if u and "wikipedia.org" in u]
-                results = _batch_query(_KIWIX_OUTPUT_DIR, urls_to_lookup, _KIWIX_ARTICLES_JSON, redirects_json=redirects)
+                results = _batch_query(
+                    _KIWIX_OUTPUT_DIR,
+                    urls_to_lookup,
+                    _KIWIX_ARTICLES_JSON,
+                    redirects_json=redirects,
+                )
                 found = sum(1 for r in results.values() if r is not None)
-                logger.info(f"local-wiki: batch lookup found {found}/{len(urls_to_lookup)} URLs")
+                logger.info(
+                    f"local-wiki: batch lookup found {found}/{len(urls_to_lookup)} URLs"
+                )
 
                 # Copy + cut per example
                 ok, failed = 0, 0
@@ -2678,22 +2920,31 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
                         continue
                     result = results.get(url)
                     if result is None:
-                        logger.error(f"local-wiki [{ex_id}]: URL not found in kiwix: {url}")
+                        logger.error(
+                            f"local-wiki [{ex_id}]: URL not found in kiwix: {url}"
+                        )
                         failed += 1
                         continue
                     src_dir = os.path.join(_KIWIX_OUTPUT_DIR, result["tiles_dir"])
                     article_cache = os.path.join(wiki_cache, str(ex_id))
                     if not os.path.exists(article_cache):
                         if not os.path.isdir(src_dir):
-                            logger.error(f"local-wiki [{ex_id}]: tiles dir not on disk: {src_dir}")
+                            logger.error(
+                                f"local-wiki [{ex_id}]: tiles dir not on disk: {src_dir}"
+                            )
                             failed += 1
                             continue
                         shutil.copytree(src_dir, article_cache)
                     # Cut into strips
-                    raw_tiles = sorted(f for f in os.listdir(article_cache)
-                                       if f.endswith(".png") and f.startswith("tile_"))
+                    raw_tiles = sorted(
+                        f
+                        for f in os.listdir(article_cache)
+                        if f.endswith(".png") and f.startswith("tile_")
+                    )
                     if not raw_tiles:
-                        logger.error(f"local-wiki [{ex_id}]: no tile PNGs in {article_cache}")
+                        logger.error(
+                            f"local-wiki [{ex_id}]: no tile PNGs in {article_cache}"
+                        )
                         failed += 1
                         continue
                     global_row = 0
@@ -2705,29 +2956,40 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
                             img = Image.open(raw_path)
                             img.load()
                         except Exception as e:
-                            logger.warning(f"local-wiki [{ex_id}]: corrupt tile {raw_path}: {e}")
+                            logger.warning(
+                                f"local-wiki [{ex_id}]: corrupt tile {raw_path}: {e}"
+                            )
                             continue
                         w, h = img.size
                         y = 0
                         while y < h:
                             y2 = min(y + cut_height, h)
                             img.crop((0, y, w, y2)).save(
-                                os.path.join(self.tiles_dir, f"{ex_id}_tile_{global_row}_0.png"))
+                                os.path.join(
+                                    self.tiles_dir, f"{ex_id}_tile_{global_row}_0.png"
+                                )
+                            )
                             global_row += 1
                             y += cut_height
                         img.close()
                     ok += 1
-                logger.info(f"local-wiki: {ok} articles prepared, {failed} not found/failed")
+                logger.info(
+                    f"local-wiki: {ok} articles prepared, {failed} not found/failed"
+                )
 
         all_tile_paths = []
         for ex in self._dedup_examples:
             ex_id = ex["id"]
-            tiles = sorted(_glob.glob(os.path.join(self.tiles_dir, f"{ex_id}_tile_*.png")))
+            tiles = sorted(
+                _glob.glob(os.path.join(self.tiles_dir, f"{ex_id}_tile_*.png"))
+            )
             all_tile_paths.extend(tiles)
 
         filtered = _filter_tiles_by_aspect_ratio(all_tile_paths)
-        logger.info(f"local-wiki: {len(filtered)} tiles ready for embedding "
-                    f"(filtered {len(all_tile_paths) - len(filtered)} extreme aspect ratio tiles)")
+        logger.info(
+            f"local-wiki: {len(filtered)} tiles ready for embedding "
+            f"(filtered {len(all_tile_paths) - len(filtered)} extreme aspect ratio tiles)"
+        )
         return filtered
 
     def _prepare_screenshots_and_tiles(self) -> list[str]:
@@ -2745,9 +3007,14 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
 
         # Collect screenshot paths and identify missing (deduplicated)
         for ex in examples_to_process:
-            screenshot_path = os.path.join(self.screenshot_dir, f"{ex['id']}_fullhd.png")
+            screenshot_path = os.path.join(
+                self.screenshot_dir, f"{ex['id']}_fullhd.png"
+            )
             screenshot_paths.append(screenshot_path)
-            if not os.path.exists(screenshot_path) or os.path.getsize(screenshot_path) == 0:
+            if (
+                not os.path.exists(screenshot_path)
+                or os.path.getsize(screenshot_path) == 0
+            ):
                 missing.append(ex)
 
         # Capture missing screenshots
@@ -2759,7 +3026,9 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
 
         # Split each screenshot into tiles
         all_tile_paths = []
-        logger.info(f"Splitting {len(screenshot_paths)} unique screenshots into tiles (output: {self.tiles_dir})...")
+        logger.info(
+            f"Splitting {len(screenshot_paths)} unique screenshots into tiles (output: {self.tiles_dir})..."
+        )
         for screenshot_path in tqdm(screenshot_paths, desc="Splitting tiles"):
             if os.path.exists(screenshot_path) and os.path.getsize(screenshot_path) > 0:
                 tile_paths = split_image_to_tiles(
@@ -2769,8 +3038,10 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
 
         # Filter out tiles with extreme aspect ratios
         filtered_tile_paths = _filter_tiles_by_aspect_ratio(all_tile_paths)
-        logger.info(f"Prepared {len(filtered_tile_paths)} tiles from {len(screenshot_paths)} unique screenshots "
-                     f"(filtered {len(all_tile_paths) - len(filtered_tile_paths)} extreme aspect ratio tiles)")
+        logger.info(
+            f"Prepared {len(filtered_tile_paths)} tiles from {len(screenshot_paths)} unique screenshots "
+            f"(filtered {len(all_tile_paths) - len(filtered_tile_paths)} extreme aspect ratio tiles)"
+        )
         return filtered_tile_paths
 
     def _extract_urls_from_results(self, results: list) -> str:
@@ -2932,7 +3203,9 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
 
         example_id = example.get("id", "")
         loop = asyncio.get_event_loop()
-        logger.info(f"Multi-image retrieval for {example_id}: {len(all_image_paths)} query images")
+        logger.info(
+            f"Multi-image retrieval for {example_id}: {len(all_image_paths)} query images"
+        )
 
         try:
             # Score aggregation: for each tile, keep the max score across all query images
@@ -2946,14 +3219,21 @@ class TiledQwen3VLEmbeddingRetriever(BaseRetriever):
                     ),
                 )
                 for tile_path, score in results:
-                    if tile_path not in tile_best_score or score > tile_best_score[tile_path]:
+                    if (
+                        tile_path not in tile_best_score
+                        or score > tile_best_score[tile_path]
+                    ):
                         tile_best_score[tile_path] = score
 
             # Sort by score descending, take top_k
-            sorted_tiles = sorted(tile_best_score.items(), key=lambda x: x[1], reverse=True)
-            top_results = sorted_tiles[:self.top_k]
+            sorted_tiles = sorted(
+                tile_best_score.items(), key=lambda x: x[1], reverse=True
+            )
+            top_results = sorted_tiles[: self.top_k]
 
-            retrieval_type = f"tiled_qwen3vl_embedding_multiimage_{len(all_image_paths)}imgs"
+            retrieval_type = (
+                f"tiled_qwen3vl_embedding_multiimage_{len(all_image_paths)}imgs"
+            )
 
             if top_results:
                 source_url = self._extract_urls_from_results(top_results)
@@ -2988,11 +3268,16 @@ class TextAPIRetriever(BaseRetriever):
     Supports batch prefetch for efficient evaluation.
     """
 
-    def __init__(self, api_url: str = "http://localhost:30889/search", top_k: int = 3,
-                 batch_size: int = 32, nprobe: int | None = None,
-                 query_instruction: str | None = None,
-                 reader_top_k: int | None = None,
-                 query_image_fn=None):
+    def __init__(
+        self,
+        api_url: str = "http://localhost:30889/search",
+        top_k: int = 3,
+        batch_size: int = 32,
+        nprobe: int | None = None,
+        query_instruction: str | None = None,
+        reader_top_k: int | None = None,
+        query_image_fn=None,
+    ):
         self.api_url = api_url
         self.top_k = top_k
         # If reader_top_k is set and < top_k, only the first reader_top_k hits are
@@ -3020,6 +3305,7 @@ class TextAPIRetriever(BaseRetriever):
                 img_path = self.query_image_fn(ex)
                 if img_path and os.path.exists(img_path):
                     import base64
+
                     with open(img_path, "rb") as f:
                         query_dict["image"] = base64.b64encode(f.read()).decode()
             queries.append(query_dict)
@@ -3031,12 +3317,14 @@ class TextAPIRetriever(BaseRetriever):
 
         has_images = any("image" in q for q in queries)
         batch_size = min(self.batch_size, 16) if has_images else self.batch_size
-        logger.info(f"TextAPIRetriever: prefetching {len(queries)} queries in batches of {batch_size}"
-                    f"{' (multimodal)' if has_images else ''}")
+        logger.info(
+            f"TextAPIRetriever: prefetching {len(queries)} queries in batches of {batch_size}"
+            f"{' (multimodal)' if has_images else ''}"
+        )
 
         for batch_start in range(0, len(queries), batch_size):
-            batch_queries = queries[batch_start:batch_start + batch_size]
-            batch_ids = example_ids[batch_start:batch_start + batch_size]
+            batch_queries = queries[batch_start : batch_start + batch_size]
+            batch_ids = example_ids[batch_start : batch_start + batch_size]
 
             payload = {"queries": batch_queries, "n_docs": self.top_k}
             if self.nprobe is not None:
@@ -3052,7 +3340,9 @@ class TextAPIRetriever(BaseRetriever):
                     ) as response:
                         if response.status != 200:
                             error_text = await response.text()
-                            logger.error(f"TextAPI batch error {response.status}: {error_text[:200]}")
+                            logger.error(
+                                f"TextAPI batch error {response.status}: {error_text[:200]}"
+                            )
                             for eid in batch_ids:
                                 self._cache[eid] = []
                             continue
@@ -3070,14 +3360,18 @@ class TextAPIRetriever(BaseRetriever):
                 else:
                     self._cache[eid] = []
 
-            logger.info(f"  Batch {batch_start // self.batch_size + 1}/"
-                        f"{(len(queries) + self.batch_size - 1) // self.batch_size}: "
-                        f"{len(batch_queries)} queries done")
+            logger.info(
+                f"  Batch {batch_start // self.batch_size + 1}/"
+                f"{(len(queries) + self.batch_size - 1) // self.batch_size}: "
+                f"{len(batch_queries)} queries done"
+            )
 
         logger.info(f"TextAPIRetriever: prefetch complete, {len(self._cache)} cached")
 
     @staticmethod
-    def _hits_to_result(hits: list[dict], max_passages: int | None = None) -> RetrievalResult:
+    def _hits_to_result(
+        hits: list[dict], max_passages: int | None = None
+    ) -> RetrievalResult:
         """Convert text API hits to RetrievalResult.
 
         If max_passages is set, only the first max_passages hits are joined into
@@ -3117,10 +3411,13 @@ class TextAPIRetriever(BaseRetriever):
         eid = example.get("id", "unknown")
 
         if eid in self._cache:
-            return self._hits_to_result(self._cache[eid], max_passages=self.reader_top_k)
+            return self._hits_to_result(
+                self._cache[eid], max_passages=self.reader_top_k
+            )
 
         # Fallback: single query
         import aiohttp
+
         payload = {"queries": [{"text": query}], "n_docs": self.top_k}
         if self.nprobe is not None:
             payload["nprobe"] = self.nprobe
@@ -3196,6 +3493,7 @@ class OCRWrappedRetriever(BaseRetriever):
         if not os.path.isfile(self.cache_path):
             return
         import json
+
         loaded = 0
         try:
             with open(self.cache_path) as f:
@@ -3206,12 +3504,17 @@ class OCRWrappedRetriever(BaseRetriever):
                     entry = json.loads(line)
                     self._cache[entry["path"]] = entry["text"]
                     loaded += 1
-            logger.info(f"OCRWrappedRetriever: loaded {loaded} cached OCR entries from {self.cache_path}")
+            logger.info(
+                f"OCRWrappedRetriever: loaded {loaded} cached OCR entries from {self.cache_path}"
+            )
         except Exception as e:
-            logger.warning(f"OCRWrappedRetriever: cache load failed ({e}); starting fresh")
+            logger.warning(
+                f"OCRWrappedRetriever: cache load failed ({e}); starting fresh"
+            )
 
     def _append_cache(self, path: str, text: str):
         import json
+
         os.makedirs(os.path.dirname(self.cache_path) or ".", exist_ok=True)
         with open(self.cache_path, "a") as f:
             f.write(json.dumps({"path": path, "text": text}, ensure_ascii=False) + "\n")
@@ -3222,6 +3525,7 @@ class OCRWrappedRetriever(BaseRetriever):
             return self._cache[path]
         import aiohttp
         import base64
+
         try:
             with open(path, "rb") as f:
                 img_b64 = base64.b64encode(f.read()).decode("ascii")
@@ -3230,17 +3534,25 @@ class OCRWrappedRetriever(BaseRetriever):
             return ""
         payload = {
             "model": self.model,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}},
-                    {"type": "text", "text": self.prompt},
-                ],
-            }],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{img_b64}"},
+                        },
+                        {"type": "text", "text": self.prompt},
+                    ],
+                }
+            ],
             "max_tokens": self.max_tokens,
             "temperature": 0.0,
         }
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
         try:
             async with session.post(
                 f"{self.ocr_url}/chat/completions",
@@ -3262,14 +3574,17 @@ class OCRWrappedRetriever(BaseRetriever):
 
     async def _batch_ocr(self, paths: list[str]) -> dict[str, str]:
         import aiohttp
+
         to_fetch = [p for p in paths if p not in self._cache]
         if not to_fetch:
             return {p: self._cache[p] for p in paths}
         sem = asyncio.Semaphore(self.concurrency)
         async with aiohttp.ClientSession() as session:
+
             async def _one(p):
                 async with sem:
                     return await self._ocr_one(p, session)
+
             await asyncio.gather(*[_one(p) for p in to_fetch])
         return {p: self._cache.get(p, "") for p in paths}
 
@@ -3280,7 +3595,11 @@ class OCRWrappedRetriever(BaseRetriever):
         all_paths: set[str] = set()
         for ex in examples:
             r = await self.base.retrieve(ex.get("problem", ""), ex)
-            images = r.images[: self.reader_top_k] if self.reader_top_k is not None else r.images
+            images = (
+                r.images[: self.reader_top_k]
+                if self.reader_top_k is not None
+                else r.images
+            )
             for p, _ in images:
                 all_paths.add(os.path.abspath(p))
         uncached = [p for p in all_paths if p not in self._cache]
@@ -3295,7 +3614,9 @@ class OCRWrappedRetriever(BaseRetriever):
         r = await self.base.retrieve(query, example)
         if not r.images:
             return r
-        images = r.images[: self.reader_top_k] if self.reader_top_k is not None else r.images
+        images = (
+            r.images[: self.reader_top_k] if self.reader_top_k is not None else r.images
+        )
         image_urls = (
             r.image_urls[: self.reader_top_k]
             if self.reader_top_k is not None and r.image_urls
@@ -3356,6 +3677,7 @@ class RenderedTextWrapper(BaseRetriever):
 
     def _render(self, hit: dict) -> str:
         from .text_renderer import render_text_chunk
+
         article_id = hit.get("article_id", "unknown")
         chunk_index = hit.get("chunk_index", 0)
         out_path = os.path.join(self.render_dir, f"{article_id}_{chunk_index}.png")
@@ -3514,6 +3836,7 @@ class HTMLDOMLookupRetriever(BaseRetriever):
         llm_verify_model: str = "gpt-4.1-mini",
     ):
         import json as _json
+
         self._text_retriever = TextAPIRetriever(
             api_url=text_api_url,
             top_k=top_k,
@@ -3548,6 +3871,7 @@ class HTMLDOMLookupRetriever(BaseRetriever):
 
         import requests
         from urllib.parse import quote
+
         slug = self._articles[article_id]
         url = f"{self.KIWIX_BASE}/{quote(slug, safe='/:@!$&()*+,;=')}"
         try:
@@ -3565,11 +3889,12 @@ class HTMLDOMLookupRetriever(BaseRetriever):
         """Normalize text for fuzzy DOM matching."""
         import re
         import unicodedata
-        text = re.sub(r'[\xa0    ]', ' ', text)
-        text = re.sub(r'[‐-―−﹘﹣－—–]', '-', text)
-        text = re.sub(r' +', ' ', text)
-        text = unicodedata.normalize('NFKD', text)
-        text = ''.join(c for c in text if not unicodedata.combining(c))
+
+        text = re.sub(r"[\xa0    ]", " ", text)
+        text = re.sub(r"[‐-―−﹘﹣－—–]", "-", text)
+        text = re.sub(r" +", " ", text)
+        text = unicodedata.normalize("NFKD", text)
+        text = "".join(c for c in text if not unicodedata.combining(c))
         return text.lower()
 
     def _dom_lookup(self, html: str, chunk_text: str) -> str | None:
@@ -3602,8 +3927,9 @@ class HTMLDOMLookupRetriever(BaseRetriever):
         # For each key, find the tightest match and resolve to a
         # direct-child index of mw-parser-output
         matched_child_indices = set()
-        SKIP_TAGS = frozenset(('script', 'style', 'title', 'meta', 'link',
-                               'nav', 'header', 'footer'))
+        SKIP_TAGS = frozenset(
+            ("script", "style", "title", "meta", "link", "nav", "header", "footer")
+        )
 
         for key in keys:
             key_norm = self._normalize(key)
@@ -3611,7 +3937,7 @@ class HTMLDOMLookupRetriever(BaseRetriever):
                 continue
 
             best_elem = None
-            best_len = float('inf')
+            best_len = float("inf")
 
             for elem in content_root.iter():
                 if not isinstance(elem, lxml_html.HtmlElement):
@@ -3654,35 +3980,38 @@ class HTMLDOMLookupRetriever(BaseRetriever):
         first = min(matched_child_indices)
         last = max(matched_child_indices)
 
-        span_elems = children[first:last + 1]
+        span_elems = children[first : last + 1]
 
         # Build result: serialize all elements in the span
         parts = []
         for el in span_elems:
             # Strip style/script/navbox noise
-            for tag in ('style', 'script'):
+            for tag in ("style", "script"):
                 for junk in list(el.iter(tag)):
                     if junk.getparent() is not None:
                         junk.getparent().remove(junk)
-            if hasattr(el, 'xpath'):
+            if hasattr(el, "xpath"):
                 for nav in el.xpath('.//*[contains(@class, "navbox")]'):
                     if nav.getparent() is not None:
                         nav.getparent().remove(nav)
             try:
-                parts.append(etree.tostring(el, encoding='unicode', method='html'))
+                parts.append(etree.tostring(el, encoding="unicode", method="html"))
             except Exception:
                 continue
 
         if not parts:
             return None
 
-        html_str = '\n'.join(parts)
+        html_str = "\n".join(parts)
 
         # Log oversized results but still return them (caller decides)
         if len(html_str) > self.MAX_CONTAINER_CHARS * 2:
             logger.warning(
                 "DOM lookup oversized: %d chars (max %d) for chunk starting with %r",
-                len(html_str), self.MAX_CONTAINER_CHARS * 2, chunk_text[:50])
+                len(html_str),
+                self.MAX_CONTAINER_CHARS * 2,
+                chunk_text[:50],
+            )
 
         # Minimum useful size
         if len(html_str) < 100 and len(chunk_text) > 200:
@@ -3692,16 +4021,22 @@ class HTMLDOMLookupRetriever(BaseRetriever):
 
     MAX_CONTAINER_CHARS = 8000
 
-    def _find_semantic_container(self, elem) -> "lxml_html.HtmlElement":
+    def _find_semantic_container(self, elem) -> "lxml_html.HtmlElement":  # noqa: F821
         """Walk up from matched element to find a meaningful semantic container.
 
         Hard cap: never return a container with text_content > MAX_CONTAINER_CHARS.
         Stops at mw-parser-output boundary (never returns the whole article).
         """
-        from lxml import html as lxml_html
 
-        SEMANTIC_TAGS = {'section', 'article', 'table', 'blockquote', 'details', 'figure'}
-        STOP_CLASSES = {'mw-parser-output', 'mw-body-content', 'mw-body'}
+        SEMANTIC_TAGS = {
+            "section",
+            "article",
+            "table",
+            "blockquote",
+            "details",
+            "figure",
+        }
+        STOP_CLASSES = {"mw-parser-output", "mw-body-content", "mw-body"}
         MIN_CONTEXT_LEN = 200
 
         if elem.tag in SEMANTIC_TAGS:
@@ -3715,7 +4050,7 @@ class HTMLDOMLookupRetriever(BaseRetriever):
             if parent is None:
                 break
             # Hard stop: never go past the article content container
-            parent_classes = parent.get('class', '')
+            parent_classes = parent.get("class", "")
             if any(sc in parent_classes for sc in STOP_CLASSES):
                 # We've reached the article root — use section gathering instead
                 if self.context_mode == "section":
@@ -3751,9 +4086,9 @@ class HTMLDOMLookupRetriever(BaseRetriever):
 
         return best
 
-    def _gather_section_context(self, elem) -> "lxml_html.HtmlElement":
+    def _gather_section_context(self, elem) -> "lxml_html.HtmlElement":  # noqa: F821
         """Gather all sibling elements within the same h2/h3 section."""
-        from lxml import html as lxml_html, etree
+        from lxml import etree
 
         # Walk up to find direct child of mw-parser-output
         current = elem
@@ -3761,8 +4096,8 @@ class HTMLDOMLookupRetriever(BaseRetriever):
         while current is not None:
             parent = current.getparent()
             if parent is not None:
-                classes = parent.get('class', '')
-                if 'mw-parser-output' in classes:
+                classes = parent.get("class", "")
+                if "mw-parser-output" in classes:
                     mw_output = parent
                     break
             current = parent
@@ -3783,7 +4118,7 @@ class HTMLDOMLookupRetriever(BaseRetriever):
         # Backward
         for i in range(idx - 1, max(idx - 10, -1), -1):
             child = children[i]
-            if hasattr(child, 'tag') and child.tag in ('h1', 'h2', 'h3'):
+            if hasattr(child, "tag") and child.tag in ("h1", "h2", "h3"):
                 section_elems.insert(0, child)
                 break
             section_elems.insert(0, child)
@@ -3791,12 +4126,12 @@ class HTMLDOMLookupRetriever(BaseRetriever):
         # Forward
         for i in range(idx + 1, min(idx + 10, len(children))):
             child = children[i]
-            if hasattr(child, 'tag') and child.tag in ('h1', 'h2', 'h3'):
+            if hasattr(child, "tag") and child.tag in ("h1", "h2", "h3"):
                 break
             section_elems.append(child)
 
         # Build a container div with these elements
-        container = etree.Element('div')
+        container = etree.Element("div")
         for el in section_elems:
             try:
                 container.append(el)
@@ -3814,16 +4149,22 @@ class HTMLDOMLookupRetriever(BaseRetriever):
         """
         import re
 
-        lines = chunk_text.split('\n')
+        lines = chunk_text.split("\n")
         # Skip first line if it looks like an article title (short, no pipes, no punctuation)
         # These match <h1> in DOM and cause Bug 1
-        if lines and len(lines[0]) < 80 and '|' not in lines[0] and '.' not in lines[0]:
+        if lines and len(lines[0]) < 80 and "|" not in lines[0] and "." not in lines[0]:
             content_lines = lines[1:]
         else:
             content_lines = lines
-        table_lines = [l for l in content_lines if '|' in l and '---' not in l]
-        prose_lines = [l for l in content_lines if len(l) > 30 and '|' not in l and not l.startswith('- ^')]
-        is_table_heavy = len(table_lines) > len(content_lines) * 0.4 if content_lines else False
+        table_lines = [l for l in content_lines if "|" in l and "---" not in l]
+        prose_lines = [
+            l
+            for l in content_lines
+            if len(l) > 30 and "|" not in l and not l.startswith("- ^")
+        ]
+        is_table_heavy = (
+            len(table_lines) > len(content_lines) * 0.4 if content_lines else False
+        )
 
         keys = []
 
@@ -3832,15 +4173,15 @@ class HTMLDOMLookupRetriever(BaseRetriever):
             # so coverage scorer can find a container spanning both parts.
             cell_candidates = []
             for tl in table_lines:
-                cells = [c.strip() for c in tl.split('|') if c.strip()]
+                cells = [c.strip() for c in tl.split("|") if c.strip()]
                 for cell in cells:
                     if len(cell) < 5 or len(cell) > 80:
                         continue
-                    if cell.lower() in ('yes', 'no', 'n/a', 'none', ''):
+                    if cell.lower() in ("yes", "no", "n/a", "none", ""):
                         continue
-                    has_code = bool(re.search(r'[A-Z]\d|[a-z]\d{4,}', cell))
-                    has_mixed = bool(re.search(r'\d.*[a-zA-Z]|[a-zA-Z].*\d', cell))
-                    has_proper = bool(re.search(r'[A-Z][a-z]+\s+[A-Z]', cell))
+                    has_code = bool(re.search(r"[A-Z]\d|[a-z]\d{4,}", cell))
+                    has_mixed = bool(re.search(r"\d.*[a-zA-Z]|[a-zA-Z].*\d", cell))
+                    has_proper = bool(re.search(r"[A-Z][a-z]+\s+[A-Z]", cell))
                     if has_code or has_mixed or has_proper:
                         cell_candidates.insert(0, cell)
                     elif len(cell) > 12:
@@ -3854,32 +4195,40 @@ class HTMLDOMLookupRetriever(BaseRetriever):
             # Then prose keys (these anchor to body paragraphs)
             for line in prose_lines[:3]:
                 mid = len(line) // 2
-                candidate = line[mid - 15:mid + 15].strip()
-                if len(candidate) >= 10 and re.search(r'[a-zA-Z]{4,}', candidate):
+                candidate = line[mid - 15 : mid + 15].strip()
+                if len(candidate) >= 10 and re.search(r"[a-zA-Z]{4,}", candidate):
                     keys.append(candidate)
 
         else:
             # Prose-dominant chunk: use prose fragments as primary keys
             for line in prose_lines[:4]:
                 mid = len(line) // 2
-                candidate = line[mid - 15:mid + 15].strip()
-                if len(candidate) >= 10 and re.search(r'[a-zA-Z]{4,}', candidate):
+                candidate = line[mid - 15 : mid + 15].strip()
+                if len(candidate) >= 10 and re.search(r"[a-zA-Z]{4,}", candidate):
                     keys.append(candidate)
 
             # Add table cell values as secondary
             if table_lines:
                 for tl in table_lines[:5]:
-                    cells = [c.strip() for c in tl.split('|') if c.strip() and len(c.strip()) > 8]
+                    cells = [
+                        c.strip()
+                        for c in tl.split("|")
+                        if c.strip() and len(c.strip()) > 8
+                    ]
                     for cell in cells[:1]:
                         if cell not in keys:
                             keys.append(cell)
 
         # List item content
         if not keys:
-            list_lines = [l[2:] for l in lines if l.startswith('- ') and len(l) > 20 and not l.startswith('- ^')]
+            list_lines = [
+                l[2:]
+                for l in lines
+                if l.startswith("- ") and len(l) > 20 and not l.startswith("- ^")
+            ]
             for ll in list_lines[:3]:
                 mid = len(ll) // 2
-                candidate = ll[mid - 15:mid + 15].strip()
+                candidate = ll[mid - 15 : mid + 15].strip()
                 if len(candidate) >= 10:
                     keys.append(candidate)
 
@@ -3927,16 +4276,18 @@ Return the minimal HTML subtree containing all the information from the text chu
             result = response.choices[0].message.content.strip()
             # Strip markdown fences if present
             if result.startswith("```"):
-                lines = result.split('\n')
-                result = '\n'.join(lines[1:-1] if lines[-1].startswith('```') else lines[1:])
-            return result if '<' in result else None
+                lines = result.split("\n")
+                result = "\n".join(
+                    lines[1:-1] if lines[-1].startswith("```") else lines[1:]
+                )
+            return result if "<" in result else None
         except Exception as e:
             logger.warning(f"LLM DOM closure failed: {e}")
             return None
 
     async def retrieve(self, query: str, example: dict) -> RetrievalResult:
         """Retrieve text chunks, then do DOM lookup for HTML context."""
-        eid = example.get("id", "unknown")
+        example.get("id", "unknown")
 
         # Get raw hits from text retriever
         hits = await self._text_retriever.get_hits(query, example)
@@ -3963,7 +4314,9 @@ Return the minimal HTML subtree containing all the information from the text chu
                     html_context = self._dom_lookup(raw_html, chunk_text)
 
                     # LLM verification/fallback
-                    if self.llm_verify and (html_context is None or len(chunk_text) > 500):
+                    if self.llm_verify and (
+                        html_context is None or len(chunk_text) > 500
+                    ):
                         llm_result = await self._llm_dom_closure(raw_html, chunk_text)
                         if llm_result:
                             html_context = llm_result
@@ -3988,8 +4341,12 @@ Return the minimal HTML subtree containing all the information from the text chu
         if total > MAX_TOTAL_CHARS:
             per_passage = MAX_TOTAL_CHARS // max(len(passages), 1)
             passages = [p[:per_passage] for p in passages]
-            logger.warning("Truncated %d passages from %d to %d total chars",
-                           len(passages), total, sum(len(p) for p in passages))
+            logger.warning(
+                "Truncated %d passages from %d to %d total chars",
+                len(passages),
+                total,
+                sum(len(p) for p in passages),
+            )
 
         combined = "\n\n---\n\n".join(passages) if passages else None
         return RetrievalResult(

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -31,7 +30,9 @@ def main():
     print(f"v8 golden_mapping: {len(golden_mapping)} example IDs")
 
     # Load SimpleQA CSV
-    csv_path = Path("/home/user/Vis-RAG/agent/evaluation/simple_qa_eval/data/simple_qa_test_set.csv")
+    csv_path = Path(
+        "/home/user/Vis-RAG/agent/evaluation/simple_qa_eval/data/simple_qa_test_set.csv"
+    )
     if not csv_path.exists():
         print(f"SimpleQA CSV not found at {csv_path}, trying download...")
         url = "https://openaipublic.blob.core.windows.net/simple-evals/simple_qa_test_set.csv"
@@ -46,11 +47,13 @@ def main():
     questions = []
     for _, row in df.iterrows():
         if row["id"] in golden_mapping:
-            questions.append({
-                "id": row["id"],
-                "problem": row["problem"],
-                "answer": row["answer"],
-            })
+            questions.append(
+                {
+                    "id": row["id"],
+                    "problem": row["problem"],
+                    "answer": row["answer"],
+                }
+            )
 
     print(f"Matched {len(questions)} questions out of {len(golden_mapping)} golden IDs")
 
@@ -58,7 +61,9 @@ def main():
     found_ids = {q["id"] for q in questions}
     missing = set(golden_mapping.keys()) - found_ids
     if missing:
-        print(f"WARNING: {len(missing)} golden IDs not found in SimpleQA CSV: {list(missing)[:5]}...")
+        print(
+            f"WARNING: {len(missing)} golden IDs not found in SimpleQA CSV: {list(missing)[:5]}..."
+        )
 
     # Build output
     output = {
@@ -72,7 +77,9 @@ def main():
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
-    print(f"Written {output_path} ({len(questions)} questions, {len(golden_mapping)} golden mappings)")
+    print(
+        f"Written {output_path} ({len(questions)} questions, {len(golden_mapping)} golden mappings)"
+    )
     return 0
 
 

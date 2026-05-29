@@ -19,7 +19,10 @@ from pathlib import Path
 
 from huggingface_hub import create_repo, upload_folder
 
-TOKEN = os.environ.get("HF_TOKEN") or open(os.path.expanduser("~/.cache/huggingface/token")).read().strip()
+TOKEN = (
+    os.environ.get("HF_TOKEN")
+    or open(os.path.expanduser("~/.cache/huggingface/token")).read().strip()
+)
 USER = "Chrisyichuan"
 
 # Each entry: (comp label, adapter dir, cutoff, k=1/k=2/k=3/k=4 LLM-judge)
@@ -28,12 +31,24 @@ USER = "Chrisyichuan"
 #     — exceeds base@0x at k=2/3/4 and beats v1's k=3 ceiling (0.900) by +0.032.
 # 4x: v2 vark-only (r=256, 2ep) — mixed-data regressed at 4x (tight pixel budget can't absorb dual signals).
 BEST = [
-    ("2x", "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_2x_v3",
-     10240, (0.946, 0.950, 0.954, 0.936)),
-    ("3x", "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_3x_v5/checkpoint-16000",
-     8192,  (0.904, 0.918, 0.932, 0.884)),
-    ("4x", "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_4x_v2",
-     6144,  (0.834, 0.828, 0.814, 0.810)),
+    (
+        "2x",
+        "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_2x_v3",
+        10240,
+        (0.946, 0.950, 0.954, 0.936),
+    ),
+    (
+        "3x",
+        "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_3x_v5/checkpoint-16000",
+        8192,
+        (0.904, 0.918, 0.932, 0.884),
+    ),
+    (
+        "4x",
+        "/scratch/users/zwcolin/cxr_embeds/sft_output/qwen3vl_top6_4x_v2",
+        6144,
+        (0.834, 0.828, 0.814, 0.810),
+    ),
 ]
 
 # Base Qwen3-VL-4B reference (uncompressed, no SFT), same 500-example test set
@@ -65,14 +80,13 @@ def build_readme(comp, adapter_dir, cutoff, scores):
         base = BASE_0X[k]
         this = scores[k - 1]
         delta = this - base
-        rows.append(
-            f"| {k} | {base:.3f} | **{this:.3f}** | {delta:+.3f} |"
-        )
+        rows.append(f"| {k} | {base:.3f} | **{this:.3f}** | {delta:+.3f} |")
     table = "\n".join(rows)
 
     siblings = ", ".join(
         f"`{USER}/qwen3vl-4b-wiki-screenshot-multik-{x}x-lora`"
-        for x in ("2", "3", "4") if x != comp.rstrip("x")
+        for x in ("2", "3", "4")
+        if x != comp.rstrip("x")
     )
 
     return f"""---
@@ -104,9 +118,9 @@ Unlike the earlier fixed-3-image adapters, this v2 reads **any number of screens
 |---|---|---|---|
 {table}
 
-Base@0x degrades sharply as the number of images grows (distractor confusion: 0.958 → 0.856 from k=1 to k=4). The {comp} adapter is nearly **k-invariant**: {('0.946 → 0.936 from k=1 to k=4 — only 0.010 drop.' if comp == '2x' else '0.904 → 0.884 from k=1 to k=4 — only 0.020 drop.' if comp == '3x' else '0.834 → 0.810 from k=1 to k=4.')}
+Base@0x degrades sharply as the number of images grows (distractor confusion: 0.958 → 0.856 from k=1 to k=4). The {comp} adapter is nearly **k-invariant**: {("0.946 → 0.936 from k=1 to k=4 — only 0.010 drop." if comp == "2x" else "0.904 → 0.884 from k=1 to k=4 — only 0.020 drop." if comp == "3x" else "0.834 → 0.810 from k=1 to k=4.")}
 
-{'At **2x compression**, this adapter exceeds the uncompressed no-SFT baseline at k≥2 and nearly matches it at k=1 (0.946 vs 0.958), demonstrating that reader SFT fully compensates for both 2x compression *and* multi-image distractor confusion.' if comp == '2x' else 'At **3x compression**, this adapter exceeds the uncompressed no-SFT baseline at k=2/3/4 (0.918/0.932/0.884 vs 0.912/0.892/0.856) and trails it only at k=1. The k=3 score (0.932) also beats the prior fixed-k=3 specialist ceiling (0.900) by +0.032 — a heavier 2× top3 oversample during training pushed multi-k flexibility past the single-k specialist.' if comp == '3x' else 'At **4x compression**, the per-image pixel budget is ~¼ the original. Even with variable-k SFT, this adapter trails the 2x and 3x variants. Use only under a hard pixel budget.'}
+{"At **2x compression**, this adapter exceeds the uncompressed no-SFT baseline at k≥2 and nearly matches it at k=1 (0.946 vs 0.958), demonstrating that reader SFT fully compensates for both 2x compression *and* multi-image distractor confusion." if comp == "2x" else "At **3x compression**, this adapter exceeds the uncompressed no-SFT baseline at k=2/3/4 (0.918/0.932/0.884 vs 0.912/0.892/0.856) and trails it only at k=1. The k=3 score (0.932) also beats the prior fixed-k=3 specialist ceiling (0.900) by +0.032 — a heavier 2× top3 oversample during training pushed multi-k flexibility past the single-k specialist." if comp == "3x" else "At **4x compression**, the per-image pixel budget is ~¼ the original. Even with variable-k SFT, this adapter trails the 2x and 3x variants. Use only under a hard pixel budget."}
 
 ## Training setup
 
@@ -117,7 +131,7 @@ Base@0x degrades sharply as the number of images grows (distractor confusion: 0.
 - Effective batch: 32 (per_device=1 × 8 GPUs × grad_accum=4)
 - `cutoff_len`: **{cutoff}** (scaled per compression — larger for smaller compression where each image takes more tokens)
 - Hardware: 8× H100 80GB, DeepSpeed ZeRO-2, bf16
-- {('Training data: mixed top3 (fixed k=3, 104k) + vark (k=1..6, 104k) at 1:1 ratio, 2 epochs over 208k samples (final adapter at step 13004).' if comp == '2x' else 'Training data: mixed **2× top3 (fixed k=3, 208k oversampled) + vark (k=1..6, 104k)** at 2:1 ratio, 2 epochs over 312k samples per epoch. The released adapter is the **best intermediate checkpoint at step 16000** (~1.64 epochs / 0.82 of total training) selected by peak eval exact-match — full 2 epochs slightly overfit on the eval split.' if comp == '3x' else 'Training data: vark-only (k=1..6, 104k), 2 epochs over 104k samples (final adapter at step 6502). Mixed-data and longer-epoch recipes both regressed at this compression — token-level eval improved but LLM-judge dropped, indicating the 4x pixel budget cannot absorb additional training signal.')}
+- {("Training data: mixed top3 (fixed k=3, 104k) + vark (k=1..6, 104k) at 1:1 ratio, 2 epochs over 208k samples (final adapter at step 13004)." if comp == "2x" else "Training data: mixed **2× top3 (fixed k=3, 208k oversampled) + vark (k=1..6, 104k)** at 2:1 ratio, 2 epochs over 312k samples per epoch. The released adapter is the **best intermediate checkpoint at step 16000** (~1.64 epochs / 0.82 of total training) selected by peak eval exact-match — full 2 epochs slightly overfit on the eval split." if comp == "3x" else "Training data: vark-only (k=1..6, 104k), 2 epochs over 104k samples (final adapter at step 6502). Mixed-data and longer-epoch recipes both regressed at this compression — token-level eval improved but LLM-judge dropped, indicating the 4x pixel budget cannot absorb additional training signal.")}
 
 ## Data — variable-k retrieval-augmented multi-image
 
@@ -162,7 +176,7 @@ messages = [{{"role": "user", "content": [
 - **Pixel budget is fixed at {comp}**. If your deployment can afford less compression, use the 2x sibling; if more, use the 4x sibling. Mixing compression at inference is untested.
 - **Training always included gold in the image set**. If your retriever misses the gold at inference, this adapter has not seen that distribution — expect degradation on those queries.
 - For **k ∈ {{1, 2, 3, 4}}** this adapter was evaluated with GPT-4.1 LLM-judge. k=5/6 were trained on but not explicitly benchmarked.
-- {('v1 of this adapter (trained on fixed k=3 only) achieved slightly higher k=3 score but collapses at other k. This v2 trades ~0.02 at k=3 for flexibility across k=1..6.' if comp != '3x' else 'The 2× top3 oversample is asymmetric on purpose: at 3x compression the per-image budget is tight enough that purely uniform-k training under-specializes for the most common deployment k=3. Doubling top3 (104k extra fixed-k=3 samples) lifts k=3 from 0.892 to 0.932 (+0.040) while still gaining vs the uniform-k baseline at all other k. The same recipe regressed at 4x — see the 4x sibling adapter card.')}
+- {("v1 of this adapter (trained on fixed k=3 only) achieved slightly higher k=3 score but collapses at other k. This v2 trades ~0.02 at k=3 for flexibility across k=1..6." if comp != "3x" else "The 2× top3 oversample is asymmetric on purpose: at 3x compression the per-image budget is tight enough that purely uniform-k training under-specializes for the most common deployment k=3. Doubling top3 (104k extra fixed-k=3 samples) lifts k=3 from 0.892 to 0.932 (+0.040) while still gaining vs the uniform-k baseline at all other k. The same recipe regressed at 4x — see the 4x sibling adapter card.")}
 - Sister adapters at other compression levels: {siblings}.
 """
 
@@ -187,7 +201,7 @@ def push_one(comp, adapter_dir, cutoff, scores):
                 print(f"  - {name} (not present, skipped)")
 
         (tmp / "README.md").write_text(build_readme(comp, adapter_dir, cutoff, scores))
-        print(f"  + README.md")
+        print("  + README.md")
 
         create_repo(repo_id, token=TOKEN, exist_ok=True, private=False)
         upload_folder(
