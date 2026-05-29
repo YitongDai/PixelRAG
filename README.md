@@ -8,13 +8,13 @@ PixelRAG renders documents (web pages, PDFs, images) as screenshots, embeds them
 
 Five packages, each independently installable:
 
-| Package | What it does | Install |
-|---------|-------------|---------|
-| **pixelrag-render** | Document → image tiles (Playwright CDP, PDF) | `uv sync --package pixelrag-render` |
-| **pixelrag-embed** | Tiles → vectors → FAISS index (three independent tools) | `uv sync --package pixelrag-embed` |
-| **pixelrag-index** | Orchestrates the full pipeline: source → ingest → embed → index | `uv sync --package pixelrag-index` |
-| **pixelrag-serve** | FAISS search API (FastAPI, CPU or GPU) | `uv sync --package pixelrag-serve` |
-| **pixelrag-train** | LoRA/DoRA fine-tuning for Qwen3-VL-Embedding | `uv sync --package pixelrag-train` |
+| Package             | What it does                                                    | Install                             |
+| ------------------- | --------------------------------------------------------------- | ----------------------------------- |
+| **pixelrag-render** | Document → image tiles (Playwright CDP, PDF)                    | `uv sync --package pixelrag-render` |
+| **pixelrag-embed**  | Tiles → vectors → FAISS index (three independent tools)         | `uv sync --package pixelrag-embed`  |
+| **pixelrag-index**  | Orchestrates the full pipeline: source → ingest → embed → index | `uv sync --package pixelrag-index`  |
+| **pixelrag-serve**  | FAISS search API (FastAPI, CPU or GPU)                          | `uv sync --package pixelrag-serve`  |
+| **pixelrag-train**  | LoRA/DoRA fine-tuning for Qwen3-VL-Embedding                    | `uv sync --package pixelrag-train`  |
 
 ```
 render ←── index ──→ embed       serve (independent)       train → serve (HTTP)
