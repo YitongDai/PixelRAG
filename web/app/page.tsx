@@ -10,6 +10,7 @@ import type { Hit, ArticleGroup } from "@/lib/types"
 import { SearchBar } from "@/components/SearchBar"
 import { SearchControls, type SearchOptions } from "@/components/SearchControls"
 import { ModeToggle, type QueryMode } from "@/components/ModeToggle"
+import { AboutSection } from "@/components/AboutSection"
 import { ResultGroup } from "@/components/ResultGroup"
 import { ComparePanel } from "@/components/ComparePanel"
 import { Lightbox } from "@/components/Lightbox"
@@ -172,6 +173,13 @@ function SearchPageContent() {
         </div>
         {mode === "search" && !(hasSearched && groups.length > 0) && <SearchControls options={searchOptions} onChange={setSearchOptions} />}
       </div>
+
+      {/* Narrative landing — only on the initial (pre-search) state */}
+      {!hasSearched && !isLoading && (
+        <div className="reveal" style={{ animationDelay: "360ms" }}>
+          <AboutSection />
+        </div>
+      )}
 
       {/* Status bar */}
       {resultMeta && (

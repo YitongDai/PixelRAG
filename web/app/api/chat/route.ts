@@ -157,8 +157,39 @@ function createTools(onEvent: (event: string, data: unknown) => void) {
   return [searchTool, tileTool]
 }
 
+const AGENT_BACKEND_URL = process.env.AGENT_BACKEND_URL
+
 export async function POST(req: Request) {
-  const { messages: clientMessages } = await req.json()
+  const rawBody = await req.text()
+
+  // Serverless (e.g. Vercel) can't run the Agent SDK — it needs the native
+  // claude CLI binary + logged-in subscription credentials. When a self-hosted
+  // agent backend is configured (running on a machine where claude is logged
+  // in), proxy the SSE stream to it. Otherwise run the SDK inline (local dev).
+  if (AGENT_BACKEND_URL) {
+    try {
+      const upstream = await fetch(`${AGENT_BACKEND_URL.replace(/\/$/, "")}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: rawBody,
+      })
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      })
+    } catch (err) {
+      return new Response(
+        JSON.stringify({ error: `Agent backend unreachable: ${err}` }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      )
+    }
+  }
+
+  const { messages: clientMessages } = JSON.parse(rawBody)
   if (!Array.isArray(clientMessages) || clientMessages.length === 0) {
     return new Response(
       JSON.stringify({ error: "messages required" }),
