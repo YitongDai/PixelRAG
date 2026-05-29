@@ -1,5 +1,5 @@
-const REPO_OWNER = "yichuan"
-const REPO_NAME = "pixelrag"
+const REPO_OWNER = "StarTrail-org"
+const REPO_NAME = "PixelRAG"
 const BRANCH = "main"
 
 interface UptimeSite {
