@@ -128,7 +128,7 @@ function SearchPageContent() {
         {!(hasSearched && (groups.length > 0 || error)) && (
           <div className="relative text-center">
             {/* Radial gradient spotlight behind logo */}
-            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-64 w-96 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(99,102,241,0.12)_0%,rgba(139,92,246,0.06)_40%,transparent_70%)] blur-2xl" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-64 w-96 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(139,105,67,0.08)_0%,rgba(160,122,74,0.04)_40%,transparent_70%)] blur-2xl" />
             <h1 className="relative font-display text-4xl font-bold tracking-tight sm:text-5xl">
               Pixel<span className="text-primary">RAG</span>
             </h1>

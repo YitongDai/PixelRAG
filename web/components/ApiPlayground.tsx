@@ -80,9 +80,9 @@ export function ApiPlayground({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-xl border border-border/60 bg-[#111]">
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
         {/* Toolbar */}
-        <div className="flex items-center justify-between bg-[#0a0a0a] px-3 py-1.5">
+        <div className="flex items-center justify-between bg-secondary px-3 py-1.5">
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Terminal className="h-3 w-3" />
             curl
@@ -123,7 +123,7 @@ export function ApiPlayground({
               value={params}
               onChange={(e) => setParams(e.target.value)}
               spellCheck={false}
-              className="mt-1 block w-full rounded-lg border-2 border-primary/30 bg-[#1a1a2e] px-3 py-2 font-mono text-xs text-foreground/90 shadow-[0_0_8px_rgba(99,102,241,0.08)] transition-colors focus:border-primary/60 focus:shadow-[0_0_12px_rgba(99,102,241,0.15)] focus:outline-none"
+              className="mt-1 block w-full rounded-lg border-2 border-primary/30 bg-secondary px-3 py-2 font-mono text-xs text-foreground/90 shadow-[0_0_8px_rgba(139,105,67,0.08)] transition-colors focus:border-primary/60 focus:shadow-[0_0_12px_rgba(139,105,67,0.15)] focus:outline-none"
             />
           )}
         </div>
@@ -138,8 +138,8 @@ export function ApiPlayground({
 
       {/* Response */}
       {(response || responseImage) && (
-        <div className="overflow-hidden rounded-xl border border-border/60 bg-[#111]">
-          <div className="flex items-center gap-1.5 bg-[#0a0a0a] px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+          <div className="flex items-center gap-1.5 bg-secondary px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             <span className={error ? "text-red-400" : "text-green-400"}>●</span>
             Response
           </div>
@@ -237,7 +237,7 @@ function JsonEditor({ value, onChange }: { value: string; onChange: (v: string) 
   }, [value])
 
   return (
-    <div className="relative mt-1 rounded-lg border-2 border-primary/30 bg-[#1a1a2e] shadow-[0_0_8px_rgba(99,102,241,0.08)] transition-colors focus-within:border-primary/60 focus-within:shadow-[0_0_12px_rgba(99,102,241,0.15)] hover:border-primary/40">
+    <div className="relative mt-1 rounded-lg border-2 border-primary/30 bg-secondary shadow-[0_0_8px_rgba(139,105,67,0.08)] transition-colors focus-within:border-primary/60 focus-within:shadow-[0_0_12px_rgba(139,105,67,0.15)] hover:border-primary/40">
       <pre
         ref={preRef}
         aria-hidden

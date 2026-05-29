@@ -318,7 +318,7 @@ function FieldRow({ field, depth = 0 }: { field: Field; depth?: number }) {
 
 function FieldTable({ fields }: { fields: Field[] }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-[#111]">
+    <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
       {fields.map((field) => (
         <FieldRow key={field.name} field={field} />
       ))}
