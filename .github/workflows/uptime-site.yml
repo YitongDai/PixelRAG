@@ -14,7 +14,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.head_ref }}
           token: ${{ github.token }}
       - name: Build site
         uses: upptime/uptime-monitor@v1.41.8
@@ -23,3 +22,9 @@ jobs:
         env:
           GH_PAT: ${{ github.token }}
           SECRETS_CONTEXT: ${{ toJson(secrets) }}
+      - name: Deploy to gh-pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: ./api/__sapper__/export
+          clean: true
