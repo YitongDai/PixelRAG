@@ -52,5 +52,41 @@
     "timeMonth": 124,
     "timeYear": 124,
     "dailyMinutesDown": {}
+  },
+  {
+    "name": "Agent",
+    "url": "http://api.pixelrag.ai:30010/health",
+    "icon": "https://icons.duckduckgo.com/ip3/api.pixelrag.ai.ico",
+    "slug": "agent",
+    "status": "up",
+    "uptime": "100.00%",
+    "uptimeDay": "100.00%",
+    "uptimeWeek": "100.00%",
+    "uptimeMonth": "100.00%",
+    "uptimeYear": "100.00%",
+    "time": 152,
+    "timeDay": 152,
+    "timeWeek": 152,
+    "timeMonth": 152,
+    "timeYear": 152,
+    "dailyMinutesDown": {}
+  },
+  {
+    "name": "Website",
+    "url": "https://pixelrag.ai",
+    "icon": "https://icons.duckduckgo.com/ip3/pixelrag.ai.ico",
+    "slug": "website",
+    "status": "up",
+    "uptime": "100.00%",
+    "uptimeDay": "100.00%",
+    "uptimeWeek": "100.00%",
+    "uptimeMonth": "100.00%",
+    "uptimeYear": "100.00%",
+    "time": 131,
+    "timeDay": 131,
+    "timeWeek": 131,
+    "timeMonth": 131,
+    "timeYear": 131,
+    "dailyMinutesDown": {}
   }
 ]
