@@ -11,8 +11,3 @@ sites:
     expectedStatusCodes:
       - 200
       - 404
-
-status-website:
-  cname: status.pixelrag.ai
-  name: PixelRAG Status
-  theme: dark

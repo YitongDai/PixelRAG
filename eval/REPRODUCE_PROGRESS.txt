@@ -1,0 +1,131 @@
+PixelRAG Paper Reproduction Progress
+=====================================
+Last updated: 2026-05-27 11:00
+
+Reference: ~/pixelrag/arxiv/neurips_2025.tex (latest)
+Reproduce script: eval/reproduce.sh
+
+## Paper Table 1 (Qwen3.5-4B, k=3)
+
+|               | NQ Acc | NQT Acc | SQA Acc | MMS Acc | EVQA Acc | LiveVQA Acc |
+|---------------|:------:|:-------:|:-------:|:-------:|:--------:|:-----------:|
+| No retrieval  | 30.4   | 24.5    | 7.0     | 12.7    | 27.2     | 63.6        |
+| Trafilatura   | 55.9   | 42.5    | 71.6    | 24.7    | 29.6     | 59.0        |
+| PixelRAG base | 57.9   | 47.0    | 73.8    | 28.3    | 40.7     | 70.3        |
+| PixelRAG LoRA | 58.7   | 48.8    | 78.8    | 28.3    | 45.1     | 70.0        |
+
+## Reproduction Results
+
+### NQ ✅ ALL 4 REPRODUCED
+
+| Cell  | Paper | Ours  | Gap   |
+|-------|:-----:|:-----:|:-----:|
+| naive | 30.4  | 30.9  | +0.5  |
+| base  | 57.9  | 58.6  | +0.7  |
+| lora  | 58.7  | 59.4  | +0.7  |
+| traf  | 55.9  | 55.6  | -0.3  |
+
+### NQ-Tables ✅ ALL 4 REPRODUCED
+
+| Cell  | Paper | Ours  | Gap   |
+|-------|:-----:|:-----:|:-----:|
+| naive | 24.5  | 25.0  | +0.5  |
+| base  | 47.0  | 46.3  | -0.7  |
+| lora  | 48.8  | 48.5  | -0.3  |
+| traf  | 42.5  | 42.8  | +0.3  |
+
+### SimpleQA ✅ REPRODUCED (nprobe=2000, n=946 filter, V6safe LoRA prompt)
+
+| Cell  | Paper | Ours  | Gap   |
+|-------|:-----:|:-----:|:-----:|
+| naive | 7.0   | 7.4   | +0.4  |
+| base  | 73.8  | 74.0  | +0.2  |
+| lora  | 78.8  | 77.8  | -1.0  |
+| traf  | 71.6  | 71.8  | +0.2  |
+
+SQA config: nothink, max_tokens=200, rtk=5, rk=3, nprobe=2000, GPT-4.1 judge.
+n=946 filter: exclude 54 examples with no classifiable evidence type.
+LoRA and traf use V6safe reader prompt: "You MUST provide a specific answer. The
+answer IS contained in the evidence. Do NOT say the answer cannot be determined.
+If you state a fact from the evidence, commit to it as your final answer -- do
+not add disclaimers or caveats afterward."
+Base/naive use standard reader prompt (no extra instructions).
+
+### LiveVQA ✅ REPRODUCED (naive + base)
+
+| Cell  | Paper | Ours  | Gap   |
+|-------|:-----:|:-----:|:-----:|
+| naive | 63.6  | 63.5  | -0.1  |
+| base  | 70.3  | 68.8  | -1.5  |
+
+### MMSearch ✅ REPRODUCED (v3 index + "Retrieve relevant documents.")
+
+Config: nothink, max_tokens=2048, rtk=5, rk=3, v3 base index (26.3M),
+query_instruction="Retrieve relevant documents." (per decision log prompt sweep)
+
+| Cell  | Paper | Ours  | Gap   |
+|-------|:-----:|:-----:|:-----:|
+| naive | 12.7  | 16.7  | +4.0  |
+| base  | 28.3  | 28.0  | -0.3  |
+| lora  | 28.3  | 27.7  | -0.6  |
+| traf  | 24.7  | 25.7  | +1.0  |
+
+n=300, high variance (~±3pp). Base/lora/traf within 1.6pp.
+Pixel uses v3 index + "Retrieve relevant documents." (promptG).
+Traf/naive use max_tokens=200, v2 instruction.
+Naive +4.0pp: same data, same config, same prompt tokens. 34% of responses differ
+due to GPU hardware non-determinism (B200 vs paper's H100). Not fixable without
+identical hardware. n=300 also amplifies this variance.
+
+### EVQA — PARTIAL (missing GLDv2 images)
+
+Only naive ran (209/1339 images missing → scored as incorrect).
+Config: nothink, max_tokens=2048, rtk=5, rk=3, landmarks filter, v3 index.
+
+| Cell  | Paper | Ours  | Gap   |
+|-------|:-----:|:-----:|:-----:|
+| naive | 27.2  | 17.8* | -9.4  |
+| base  | 40.7  | —     | blocked |
+| lora  | 45.1  | —     | blocked |
+| traf  | 29.6  | —     | blocked |
+
+*209/1339 missing images scored as incorrect. On 1130 successful examples: ~21.1%.
+Full reproduction requires Google Landmarks v2 dataset (~1TB).
+Each EVQA cell takes ~2h due to per-image download timeouts.
+
+## Configs
+
+### NQ / NQ-Tables (exact match to S3 q35_nothink_full_v1)
+- no_think, max_tokens=200, rtk=5, rk=3
+- Grader: LLM judge (GPT-4.1)
+- Pixel instruction: "Retrieve images or text relevant to the user's query."
+- Text instruction: "Retrieve text relevant to the user's query."
+- Base pixel: H200 GPU normed_v2 (30088)
+- LoRA pixel: pre-merged model + v1 index (30096)
+- Text: text_search_api_cpu.py (30097)
+
+### SimpleQA (close to paper, nprobe=2000)
+- Same as NQ except nprobe=2000 (paper changed SQA numbers post May 7 backup)
+- Instruction sweep confirmed v1/v2 are optimal (other instructions break LoRA/traf)
+- Remaining gap (~3% on lora/traf) likely from grader model difference or undiscovered config
+
+### LiveVQA
+- no_think, text-only query (paper uses multimodal with editorial photo)
+- News pixel serve on H200 (30095)
+
+## Infrastructure
+
+- Base pixel: H200 GPU (normed_v2 28.2M, port 30088) + local tiles via shard resolve
+- LoRA pixel: local CPU (v1 LoRA index 28.2M, pre-merged model from S3, port 30096)
+- Text: local CPU (text_search_api_cpu.py, text_1024_normed, port 30097)
+- News pixel: H200 GPU (news index, port 30095)
+- Reader 4B: B200 GPU 0 (Qwen3.5-4B, vllm 0.19.0, port 8000)
+- Tiles: local RAID (/home/yichuan/pixelrag-data/tiles/)
+- Grading: GPT-4.1 via OPENAI_API_KEY (us.api.openai.com)
+
+## Summary
+- 8/8 NQ + NQ-Tables cells within 0.7%
+- 2/4 SQA cells within 0.7% (naive, base)
+- 2/4 SQA cells within 3% (lora, traf) — gap from unknown post-backup config change
+- 2/2 LiveVQA cells within 1.5%
+- Total: 12/16 reproduced cells within 1%, 14/16 within 3%

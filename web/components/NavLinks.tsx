@@ -2,12 +2,12 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ExternalLink } from "lucide-react"
 
-const internalLinks = [
+const links = [
   { href: "/", label: "Search" },
   { href: "/chat", label: "Agent" },
   { href: "/docs", label: "API Docs" },
+  { href: "/status", label: "Status" },
 ]
 
 export function NavLinks() {
@@ -15,7 +15,7 @@ export function NavLinks() {
 
   return (
     <div className="flex items-center gap-6">
-      {internalLinks.map(({ href, label }) => {
+      {links.map(({ href, label }) => {
         const isActive =
           href === "/" ? pathname === "/" : pathname.startsWith(href)
         return (
@@ -32,15 +32,6 @@ export function NavLinks() {
           </Link>
         )
       })}
-      <a
-        href="https://status.pixelrag.ai"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        Status
-        <ExternalLink className="h-3 w-3" />
-      </a>
     </div>
   )
 }
