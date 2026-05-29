@@ -1,0 +1,11 @@
+"""pixelrag-render benchmark harness.
+
+Usage:
+    from pixelrag_render.strategies import CDPSequentialStrategy
+    from pixelrag_render.bench import Bench
+
+    bench = Bench(zim_path="...", chrome_path="...", output_dir="./results")
+    result = await bench.run(CDPSequentialStrategy(chrome_path=..., n_workers=32, fmt="raw"))
+"""
+
+from .bench_throughput import Bench, prepare_articles, generate_ground_truth, run_and_verify

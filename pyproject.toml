@@ -1,0 +1,40 @@
+[project]
+name = "pixelrag"
+version = "0.1.0"
+description = "Visual Retrieval-Augmented Generation — render, embed, index, search, train"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.102.0",
+    "cef-capi-py>=131.3.5",
+    "pymupdf>=1.27.2.3",
+    "pyturbojpeg>=2.2.0",
+]
+
+[project.optional-dependencies]
+eval = [
+    "pandas>=2.0",
+    "Pillow>=10.0",
+    "tqdm>=4.60",
+    "trafilatura>=1.6",
+    "openai>=1.0",
+    "aiohttp>=3.9",
+    "datasets>=2.14",
+    "huggingface-hub>=0.20",
+]
+
+[tool.uv.workspace]
+members = ["render", "embed", "index", "serve", "train"]
+
+[tool.uv]
+override-dependencies = ["nvidia-cudnn-cu12==9.20.0.48"]
+environments = ["sys_platform == 'linux'"]
+
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
+
+[tool.pyright]
+extraPaths = ["render/src", "embed/src", "index/src", "serve/src", "train/src"]
+venvPath = "."
+venv = ".venv"

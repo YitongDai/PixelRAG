@@ -1,0 +1,18 @@
+owner: yichuan
+repo: pixelrag
+
+sites:
+  - name: API Health
+    url: http://api.pixelrag.ai:30001/health
+  - name: Search API
+    url: http://api.pixelrag.ai:30001/status
+  - name: Tile Serving
+    url: http://api.pixelrag.ai:30001/tile/0/0/0
+    expectedStatusCodes:
+      - 200
+      - 404
+
+status-website:
+  cname: status.pixelrag.ai
+  name: PixelRAG Status
+  theme: dark

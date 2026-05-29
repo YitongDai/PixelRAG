@@ -1,0 +1,41 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Data / scratch (too large for git)
+*.npy
+*.faiss
+*.npz
+*.bak
+data/
+tiles/
+compressed_tiles_*/
+neurips/
+tmp/*/
+tmp/*.png
+tmp/*.txt
+tmp/*.jsonl
+tmp/*.json
+tmp/*.pid
+
+# IDE / tooling
+.claude/
+.env
+.envrc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+arxiv
+demos/e2e/output/
+eval/eval_output/
+.superpowers/

@@ -1,0 +1,5 @@
+{
+  "name": "web-vision",
+  "version": "0.1.0",
+  "description": "Give Claude eyes — screenshot any URL using pixelrag-render and read it visually"
+}
