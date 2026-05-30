@@ -1,5 +1,5 @@
 ---
-name: web-vision
+name: pixelbrowse
 description: |
   Screenshot and visually read any web page or document using pixelrag-render.
   Use instead of fetching raw HTML when you need to see what a page looks like,
@@ -9,7 +9,7 @@ description: |
 allowed-tools: "Bash, Read"
 ---
 
-# Web Vision — Screenshot-based Web Reading
+# PixelBrowse — Screenshot-based Web Reading
 
 Use `pixelrag-render` to capture any URL or document as tiled JPEG images, then read the images visually.
 
