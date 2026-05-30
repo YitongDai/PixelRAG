@@ -12,6 +12,8 @@ import {
   Maximize2,
   Brain,
   ChevronRight,
+  ImagePlus,
+  X,
 } from "lucide-react"
 import { tileUrl } from "@/lib/api"
 import { motion, AnimatePresence } from "framer-motion"
@@ -43,6 +45,7 @@ interface ChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
+  image?: string
   thinking?: string
   searches?: SearchResult[]
   searching?: string
@@ -62,9 +65,11 @@ function ChatPageInner() {
   const searchParams = useSearchParams()
   const [messages, setMessages] = React.useState<ChatMessage[]>([])
   const [input, setInput] = React.useState("")
+  const [image, setImage] = React.useState<string | undefined>()
   const [isStreaming, setIsStreaming] = React.useState(false)
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
   const abortRef = React.useRef<AbortController | null>(null)
   const handleSendRef = React.useRef<((text?: string) => void) | null>(null)
   const didInitRef = React.useRef(false)
@@ -95,15 +100,17 @@ function ChatPageInner() {
 
   async function handleSend(text?: string) {
     const query = (text ?? input).trim()
-    if (!query || isStreaming) return
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: query }
+    const img = image
+    if ((!query && !img) || isStreaming) return
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: query, image: img }
     const assistantMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "", searches: [] }
     setMessages((prev) => [...prev, userMsg, assistantMsg])
     setInput("")
+    setImage(undefined)
     setIsStreaming(true)
     const allMessages = [
       ...messages.filter((m) => m.content).map((m) => ({ role: m.role, content: m.content })),
-      { role: "user" as const, content: query },
+      { role: "user" as const, content: query, ...(img ? { image: img } : {}) },
     ]
     const abort = new AbortController()
     abortRef.current = abort
@@ -159,7 +166,27 @@ function ChatPageInner() {
 
   function handleReset() {
     if (abortRef.current) abortRef.current.abort()
-    setMessages([]); setIsStreaming(false); setInput(""); inputRef.current?.focus()
+    setMessages([]); setIsStreaming(false); setInput(""); setImage(undefined); inputRef.current?.focus()
+  }
+
+  function handleFile(file: File) {
+    if (!file.type.startsWith("image/")) return
+    const reader = new FileReader()
+    reader.onload = (e) => setImage(e.target?.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    const file = Array.from(e.clipboardData.items)
+      .find((it) => it.type.startsWith("image/"))
+      ?.getAsFile()
+    if (file) { e.preventDefault(); handleFile(file) }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
   }
 
   const isEmpty = messages.length === 0
@@ -174,7 +201,7 @@ function ChatPageInner() {
             <AnimatePresence initial={false}>
               {messages.map((msg) => (
                 <motion.div key={msg.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-                  {msg.role === "user" ? <UserMessage content={msg.content} /> : <AssistantMessage message={msg} isStreaming={isStreaming && msg.id === messages[messages.length - 1]?.id} />}
+                  {msg.role === "user" ? <UserMessage content={msg.content} image={msg.image} /> : <AssistantMessage message={msg} isStreaming={isStreaming && msg.id === messages[messages.length - 1]?.id} />}
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -191,24 +218,59 @@ function ChatPageInner() {
               <RotateCcw className="h-4 w-4" />
             </button>
           )}
-          <div className="chat-input flex min-h-[50px] flex-1 items-end rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-input-bg)] px-4 py-1.5 transition-all focus-within:border-[var(--chat-accent)] focus-within:shadow-[0_0_0_3px_var(--chat-accent-glow)]">
+          <div
+            className="chat-input flex min-h-[50px] flex-1 flex-col rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-input-bg)] px-4 py-1.5 transition-all focus-within:border-[var(--chat-accent)] focus-within:shadow-[0_0_0_3px_var(--chat-accent-glow)]"
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+          >
+            {image && (
+              <div className="relative mt-1.5 w-fit">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image} alt="attachment" className="max-h-24 rounded-lg border border-[var(--chat-border)] object-contain" />
+                <button
+                  onClick={() => setImage(undefined)}
+                  className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--chat-fg)] text-[var(--chat-bg)] shadow"
+                  title="Remove image"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          <div className="flex items-end">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = "" }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isStreaming}
+              className="mb-1.5 mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[var(--chat-muted)] transition-colors hover:bg-[var(--chat-card-hover)] hover:text-[var(--chat-fg)] disabled:opacity-30"
+              title="Attach image"
+            >
+              <ImagePlus className="h-4 w-4" />
+            </button>
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px" }}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything..."
+              onPaste={handlePaste}
+              placeholder="Ask anything, or paste an image…"
               rows={1}
               className="flex-1 resize-none bg-transparent py-2 text-[14px] leading-relaxed text-[var(--chat-fg)] outline-none placeholder:text-[var(--chat-muted)]"
               disabled={isStreaming}
             />
             <button
               onClick={() => handleSend()}
-              disabled={!input.trim() || isStreaming}
+              disabled={(!input.trim() && !image) || isStreaming}
               className="mb-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--chat-accent)] text-white transition-all hover:brightness-110 disabled:opacity-20"
             >
               {isStreaming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             </button>
+          </div>
           </div>
         </div>
       </div>
@@ -286,12 +348,18 @@ function EmptyState({ onExample, onSearchMode }: { onExample: (q: string) => voi
 
 /* ─── Messages ─── */
 
-function UserMessage({ content }: { content: string }) {
+function UserMessage({ content, image }: { content: string; image?: string }) {
   return (
-    <div className="mb-5 flex justify-end">
-      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-[var(--chat-accent)] px-4 py-2.5 text-[14px] leading-relaxed text-white shadow-lg shadow-[var(--chat-accent-glow)]">
-        {content}
-      </div>
+    <div className="mb-5 flex flex-col items-end gap-1.5">
+      {image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image} alt="attached" className="max-h-48 max-w-[80%] rounded-2xl rounded-br-md border border-[var(--chat-border)] object-contain" />
+      )}
+      {content && (
+        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-[var(--chat-accent)] px-4 py-2.5 text-[14px] leading-relaxed text-white shadow-lg shadow-[var(--chat-accent-glow)]">
+          {content}
+        </div>
+      )}
     </div>
   )
 }

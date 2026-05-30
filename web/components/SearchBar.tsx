@@ -91,6 +91,16 @@ export function SearchBar({ onSearch, onReset, isLoading, hasResults, defaultVal
     setIsDragOver(false)
   }
 
+  function handlePaste(e: React.ClipboardEvent) {
+    const file = Array.from(e.clipboardData.items)
+      .find((it) => it.type.startsWith("image/"))
+      ?.getAsFile()
+    if (file) {
+      e.preventDefault()
+      handleFile(file)
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-2xl space-y-3">
       <div
@@ -102,6 +112,7 @@ export function SearchBar({ onSearch, onReset, isLoading, hasResults, defaultVal
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
+        onPaste={handlePaste}
       >
         {hasResults && onReset && (
           <button

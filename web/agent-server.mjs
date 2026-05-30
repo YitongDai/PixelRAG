@@ -181,13 +181,37 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    const history = clientMessages.filter((m) => m.content).map((m) => `${m.role}: ${m.content}`).join("\n\n")
-    const prompt = clientMessages.length === 1
-      ? clientMessages[0].content
-      : `Previous conversation:\n${history}\n\nRespond to the last user message.`
+    // Build the prompt. Text history is flattened into a string; if the last
+    // user message carries an image, send a streaming prompt with an image
+    // content block so Claude can see it (e.g. "what is this? find related").
+    const last = clientMessages[clientMessages.length - 1]
+    const textHistory = clientMessages
+      .filter((m) => m.content)
+      .map((m) => `${m.role}: ${m.content}`)
+      .join("\n\n")
+    const textPrompt = clientMessages.length === 1
+      ? (last.content || "")
+      : `Previous conversation:\n${textHistory}\n\nRespond to the last user message.`
+
+    let prompt
+    if (last?.image && typeof last.image === "string") {
+      const m = last.image.match(/^data:(image\/[a-z.+-]+);base64,(.+)$/i)
+      const mediaType = m ? m[1] : "image/png"
+      const data = m ? m[2] : last.image
+      const content = [
+        ...(textPrompt ? [{ type: "text", text: textPrompt }] : []),
+        { type: "image", source: { type: "base64", media_type: mediaType, data } },
+      ]
+      // eslint-disable-next-line require-yield
+      prompt = (async function* () {
+        yield { type: "user", message: { role: "user", content } }
+      })()
+    } else {
+      prompt = textPrompt
+    }
 
     const t0 = Date.now()
-    log(`chat: ${clientMessages.length} msgs, last="${clientMessages[clientMessages.length - 1]?.content?.slice(0, 60)}"`)
+    log(`chat: ${clientMessages.length} msgs${last?.image ? " +image" : ""}, last="${(last?.content || "").slice(0, 60)}"`)
 
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
