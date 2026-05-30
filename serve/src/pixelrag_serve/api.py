@@ -320,6 +320,7 @@ async def search(req: SearchRequest):
     chunk_indices = meta["chunk_indices"]
     y_offsets = meta["y_offsets"]
     tile_heights = meta["tile_heights"]
+    tiles_dir = _state.get("tiles_dir", "")
 
     results = []
     for qi in range(len(req.queries)):
@@ -339,6 +340,14 @@ async def search(req: SearchRequest):
             if req.include_images and tile_path and os.path.exists(tile_path):
                 with open(tile_path, "rb") as fp:
                     img_b64 = base64.b64encode(fp.read()).decode()
+            # Expose a relative tile path, not the absolute server filesystem
+            # path (avoids leaking the host's directory layout; clients fetch
+            # tiles via /tile/{article_id}/{tile_index}/{chunk_index}).
+            rel_path = tile_path
+            if tiles_dir:
+                candidate = os.path.relpath(tile_path, tiles_dir)
+                if not candidate.startswith(".."):
+                    rel_path = candidate
             hits.append(
                 Hit(
                     score=float(distances[qi, j]),
@@ -348,7 +357,7 @@ async def search(req: SearchRequest):
                     chunk_index=ci,
                     y_offset=int(y_offsets[vid]),
                     tile_height=th,
-                    path=tile_path,
+                    path=rel_path,
                     url=_resolve_url(aid),
                     image_base64=img_b64,
                 )

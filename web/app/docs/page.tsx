@@ -120,23 +120,6 @@ const endpoints: Endpoint[] = [
     ],
     curlPrefix: `curl http://localhost:3000/api/health`,
   },
-  {
-    id: "reconstruct",
-    method: "POST",
-    path: "/reconstruct",
-    summary: "Reconstruct embeddings from vector IDs",
-    description:
-      "Given vector IDs, returns the corresponding embedding vectors from the FAISS index.",
-    requestFields: [
-      { name: "vector_ids", type: "number[]", required: true, description: "List of FAISS vector indices" },
-    ],
-    responseFields: [
-      { name: "embeddings", type: "number[][]", required: true, description: "Reconstructed embedding vectors" },
-    ],
-    curlPrefix: `curl -X POST http://localhost:3000/api/reconstruct \\
-  -H "Content-Type: application/json"`,
-    defaultBody: JSON.stringify({ vector_ids: [0, 1, 2] }, null, 2),
-  },
 ]
 
 export default function DocsPage() {

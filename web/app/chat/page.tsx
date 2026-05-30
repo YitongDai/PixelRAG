@@ -314,8 +314,13 @@ function AssistantMessage({ message, isStreaming }: { message: ChatMessage; isSt
       )}
 
       {isStreaming && !message.content && !message.searching && (
-        <div className="flex gap-1.5 py-3">
-          {[0, 1, 2].map((i) => (<motion.span key={i} className="h-1.5 w-1.5 rounded-full bg-[var(--chat-accent)]" animate={{ opacity: [0.2, 0.8, 0.2] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.15 }} />))}
+        <div className="flex items-center gap-2.5 py-3">
+          <div className="flex gap-1.5">
+            {[0, 1, 2].map((i) => (<motion.span key={i} className="h-1.5 w-1.5 rounded-full bg-[var(--chat-accent)]" animate={{ opacity: [0.2, 0.8, 0.2] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.15 }} />))}
+          </div>
+          {message.tiles && message.tiles.length > 0 && !message.viewingTile && (
+            <span className="text-[12px] text-[var(--chat-muted)]">Reading the screenshots and writing your answer…</span>
+          )}
         </div>
       )}
     </div>
@@ -374,15 +379,20 @@ function TileGallery({ tiles, loading }: { tiles: TileView[]; loading?: boolean 
       </div>
       <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
         {tiles.map((t, i) => (
-          <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.08 }}
-            className="shrink-0 overflow-hidden rounded-xl border-2 border-[var(--chat-warm)] border-opacity-20 shadow-lg shadow-[var(--chat-warm)]/5">
+          <motion.a key={i} href={tileUrl(t)} target="_blank" rel="noopener noreferrer"
+            title="Open full-size tile (right-click to copy or save)"
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.08 }}
+            className="group/tile relative block shrink-0 overflow-hidden rounded-xl border-2 border-[var(--chat-warm)] border-opacity-20 shadow-lg shadow-[var(--chat-warm)]/5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={tileUrl(t)} alt={`Tile ${t.article_id}/${t.tile_index}/${t.chunk_index}`} className="h-48 w-80 object-cover object-top" loading="lazy" />
+            <img src={tileUrl(t)} alt={`Tile ${t.article_id}/${t.tile_index}/${t.chunk_index}`} className="h-48 w-80 object-cover object-top transition-transform duration-300 group-hover/tile:scale-[1.02]" loading="lazy" />
+            <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/55 px-2 py-1 text-[10px] font-medium text-white opacity-0 backdrop-blur-sm transition-opacity group-hover/tile:opacity-100">
+              <Maximize2 className="h-2.5 w-2.5" /> Open
+            </div>
             <div className="flex items-center gap-2 bg-[var(--chat-card)] px-3 py-1.5">
               <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--chat-warm)] opacity-40" /><span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--chat-warm)]" /></span>
               <span className="font-mono text-[10px] tabular-nums text-[var(--chat-muted)]">{t.article_id}:{t.tile_index}:{t.chunk_index}</span>
             </div>
-          </motion.div>
+          </motion.a>
         ))}
       </div>
     </motion.div>
