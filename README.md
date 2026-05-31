@@ -19,6 +19,10 @@
 
 ---
 
+```bash
+pip install pixelrag  # TODO: not on PyPI yet — publish, then this is the one-line install
+```
+
 ## What it is
 
 PixelRAG renders documents — web pages, PDFs, images — as screenshots and retrieves over the
@@ -39,30 +43,6 @@ Wikipedia's 8.28M articles ship as a pre-built index; the pipeline itself is gen
 
 **Try it live** — hosted search and agent at **[pixelrag.ai](https://pixelrag.ai)**
 (uptime: [status.pixelrag.ai](https://status.pixelrag.ai)).
-
-Or self-host the search API over the pre-built Wikipedia index:
-
-```bash
-uv sync --package pixelrag-serve
-
-# Download a pre-built index (8.28M Wikipedia pages)
-aws s3 sync s3://wiki-screenshot-tiles-backup/kiwix_tiles/text_search_index_1024/ ./index/
-
-# Serve, then query
-pixelrag-serve --index-dir ./index --port 30001
-
-curl -X POST http://localhost:30001/search \
-  -H "Content-Type: application/json" \
-  -d '{"queries": [{"text": "What is the capital of France?"}], "n_docs": 5}'
-```
-
-Render a single page to tiles (e.g. for an agent to read):
-
-```python
-from pixelrag_render import render_url
-
-tiles = render_url("https://en.wikipedia.org/wiki/Python", "./tiles")
-```
 
 ## Give Claude eyes
 
@@ -108,6 +88,23 @@ render ←── index ──→ embed       serve (independent)       train →
 with its own pinned env (`torch==2.9.1+cu129`, `transformers==4.57.1`, cuDNN 9.20) — install it
 from inside `train/`, not from the root.
 
+### Search a pre-built index
+
+```bash
+uv sync --package pixelrag-serve
+
+# Download the pre-built Wikipedia index (8.28M pages) from Hugging Face
+# TODO: publish the index to Hugging Face, then replace <HF_REPO> below
+huggingface-cli download <HF_REPO> --repo-type dataset --local-dir ./index
+
+# Serve, then query
+pixelrag-serve --index-dir ./index --port 30001
+
+curl -X POST http://localhost:30001/search \
+  -H "Content-Type: application/json" \
+  -d '{"queries": [{"text": "What is the capital of France?"}], "n_docs": 5}'
+```
+
 ### Build an index from your own documents
 
 ```bash
@@ -130,6 +127,15 @@ EOF
 # Build, then serve
 pixelrag-index build
 pixelrag-serve --index-dir ./my_index --port 30001
+```
+
+### Render a page programmatically
+
+```python
+from pixelrag_render import render_url
+
+# render a single page to tiles — e.g. for an agent to read
+tiles = render_url("https://en.wikipedia.org/wiki/Python", "./tiles")
 ```
 
 ### Embed tools (standalone)
