@@ -1,7 +1,7 @@
 ---
 name: pixelbrowse
 description: |
-  Screenshot and visually read any web page or document using pixelrag-render.
+  Screenshot and visually read any web page or document using pixelshot.
   Use instead of fetching raw HTML when you need to see what a page looks like,
   read visual content (charts, diagrams, infographics), check layouts, or verify UI.
   Triggers: "look at this page", "screenshot", "what does this site look like",
@@ -11,22 +11,22 @@ allowed-tools: "Bash, Read"
 
 # PixelBrowse — Screenshot-based Web Reading
 
-Use `pixelrag-render` to capture any URL or document as tiled JPEG images, then read the images visually.
+Use `pixelshot` to capture any URL or document as tiled JPEG images, then read the images visually.
 
 ## How to use
 
 ```bash
 # Screenshot a URL (optimized for Claude's vision: 1568px tile height)
-pixelrag-render <url> --output /tmp/pixelbrowse --tile-height 1568
+pixelshot <url> --output /tmp/pixelbrowse --tile-height 1568
 
 # Screenshot multiple URLs in parallel
-pixelrag-render <url1> <url2> --output /tmp/pixelbrowse --tile-height 1568 --workers 4
+pixelshot <url1> <url2> --output /tmp/pixelbrowse --tile-height 1568 --workers 4
 
 # Wider viewport for desktop layouts
-pixelrag-render <url> --output /tmp/pixelbrowse --tile-height 1568 --viewport-width 1280
+pixelshot <url> --output /tmp/pixelbrowse --tile-height 1568 --viewport-width 1280
 
 # Render a PDF
-pixelrag-render document.pdf --output /tmp/pixelbrowse
+pixelshot document.pdf --output /tmp/pixelbrowse
 ```
 
 IMPORTANT: Always use `--tile-height 1568` for screenshots you will read visually.
@@ -37,7 +37,7 @@ After rendering, read the tile images from the output directory to visually unde
 
 ## Workflow
 
-1. Run `pixelrag-render <url> --output /tmp/pixelbrowse`
+1. Run `pixelshot <url> --output /tmp/pixelbrowse`
 2. Read `/tmp/pixelbrowse/<domain>.png.tiles/tile_0000.jpg` directly (no need to ls — the naming is deterministic)
 3. If the page is long, also read tile_0001.jpg, tile_0002.jpg, etc.
 
@@ -50,7 +50,7 @@ Do NOT run `ls` — just read tile_0000.jpg. If it doesn't exist, the page had n
 ## Crop & Zoom
 
 If text or details are too small to read, crop the region of interest and re-read at full resolution.
-Pillow is always available (it's a pixelrag-render dependency):
+Pillow is always available (it's a pixelshot dependency):
 
 ```bash
 python3 -c "from PIL import Image; Image.open('<tile_path>').crop((x1, y1, x2, y2)).save('/tmp/pixelbrowse/crop.png')"

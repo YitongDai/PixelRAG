@@ -1,4 +1,4 @@
-"""pixelrag-render: Document to image tiles.
+"""pixelshot: Document to image tiles.
 
 Renders web pages, PDFs, and local files as tiled screenshots.
 """

@@ -1,4 +1,4 @@
-"""Direct websocket CDP backend for pixelrag-render.
+"""Direct websocket CDP backend for pixelshot.
 
 No Playwright dependency — uses subprocess to launch Chrome and websockets
 to communicate via CDP directly. ~35% faster than the Playwright-based cdp.py

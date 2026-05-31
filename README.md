@@ -27,7 +27,7 @@ The two core operations — **render** a page to screenshots, **search** a visua
 
 ```bash
 # Render any page or document to screenshot tiles
-pixelrag-render https://en.wikipedia.org/wiki/Python --output ./tiles
+pixelshot https://en.wikipedia.org/wiki/Python --output ./tiles
 
 # Search a hosted index of 8.28M Wikipedia pages — no setup, runs against the live API
 curl -X POST http://api.pixelrag.ai:30001/search \
@@ -47,7 +47,7 @@ Wikipedia's 8.28M articles ship as a pre-built index; the pipeline itself is gen
 ## Give Claude eyes
 
 The renderer also ships as a Claude Code plugin — the **pixelbrowse** skill. Instead of fetching
-raw HTML, Claude screenshots a page with `pixelrag-render` and *reads the image*, so it sees
+raw HTML, Claude screenshots a page with `pixelshot` and *reads the image*, so it sees
 charts, diagrams, tables, and layout the way a person does.
 
 ```bash
@@ -61,7 +61,7 @@ claude --plugin-dir ./plugin -p "screenshot http://localhost:3000 and tell me if
 ```
 
 Or interactively — `claude --plugin-dir ./plugin`, then `/screenshot https://example.com`.
-No MCP server, no backend: the skill just calls `pixelrag-render` (Playwright/CDP) on your machine.
+No MCP server, no backend: the skill just calls `pixelshot` (Playwright/CDP) on your machine.
 
 ## How it works
 
@@ -83,7 +83,7 @@ Five packages, each independently installable:
 
 | Package             | What it does                                                    | Install                             |
 | ------------------- | --------------------------------------------------------------- | ----------------------------------- |
-| **pixelrag-render** | Document → image tiles (Playwright CDP, PDF)                    | `uv sync --package pixelrag-render` |
+| **pixelrag-render** | Document → image tiles — the `pixelshot` CLI (Playwright CDP, PDF) | `uv sync --package pixelrag-render` |
 | **pixelrag-embed**  | Tiles → vectors → FAISS index (three independent tools)         | `uv sync --package pixelrag-embed`  |
 | **pixelrag-index**  | Orchestrates the full pipeline: source → ingest → embed → index | `uv sync --package pixelrag-index`  |
 | **pixelrag-serve**  | FAISS search API (FastAPI, CPU or GPU)                          | `uv sync --package pixelrag-serve`  |

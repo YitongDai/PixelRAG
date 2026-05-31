@@ -18,7 +18,7 @@ Render any web page to tiled JPEG screenshots:
 
 ```bash
 cd ~/pixelrag
-uv run --package pixelrag-render pixelrag-render <URL> --output ./tiles
+uv run --package pixelrag-render pixelshot <URL> --output ./tiles
 ```
 
 Or from Python:

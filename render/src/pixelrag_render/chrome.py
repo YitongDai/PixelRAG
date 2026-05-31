@@ -1,11 +1,11 @@
-"""Chrome binary management for pixelrag-render.
+"""Chrome binary management for pixelshot.
 
 Downloads and manages a patched headless Chrome binary with rawFilePath
 support. Similar to `playwright install chromium`.
 
 Usage:
-    pixelrag-render install-chrome     # download patched headless_shell
-    pixelrag-render which-chrome       # print path to active binary
+    pixelrag-chrome install     # download patched headless_shell
+    pixelrag-chrome which       # print path to active binary
 
 Programmatic:
     from pixelrag_render.chrome import find_chrome, install_chrome
@@ -184,7 +184,7 @@ def main():
     """CLI entry point for chrome management."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Manage Chrome for pixelrag-render")
+    parser = argparse.ArgumentParser(description="Manage Chrome for pixelshot")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("install", help="Download patched headless_shell")

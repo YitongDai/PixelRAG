@@ -1,4 +1,4 @@
-"""PDF backend for pixelrag-render.
+"""PDF backend for pixelshot.
 
 Renders PDF pages to JPEG tiles using pdf2image (poppler).
 

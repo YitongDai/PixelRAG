@@ -1,6 +1,6 @@
 # pixelbrowse — Claude Code plugin
 
-Give Claude eyes: screenshot any URL or document with `pixelrag-render` and read it visually.
+Give Claude eyes: screenshot any URL or document with `pixelshot` and read it visually.
 
 ## Setup
 
@@ -22,4 +22,4 @@ Or use the slash command: `/screenshot <url>`.
 
 The skill lives in `skills/pixelbrowse/SKILL.md`; the command in `commands/screenshot.md`.
 
-No MCP server or backend — just `pixelrag-render` (Playwright/CDP) on your machine.
+No MCP server or backend — just `pixelshot` (Playwright/CDP) on your machine.

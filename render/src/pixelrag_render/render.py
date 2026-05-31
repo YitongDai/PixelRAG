@@ -1,9 +1,9 @@
-"""Public API for pixelrag-render.
+"""Public API for pixelshot.
 
 Renders documents (URLs, PDFs, local HTML/image files) to image tiles.
 
 Entry point:
-    pixelrag-render <inputs> --output ./tiles --backend cdp --workers 4
+    pixelshot <inputs> --output ./tiles --backend cdp --workers 4
 """
 
 import argparse
@@ -186,24 +186,24 @@ def render_file(
 
 
 def main() -> None:
-    """CLI entry point: pixelrag-render.
+    """CLI entry point: pixelshot.
 
     Usage examples::
 
         # Single URL, default CDP backend
-        pixelrag-render https://example.com --output ./tiles
+        pixelshot https://example.com --output ./tiles
 
         # Multiple inputs with 4 workers
-        pixelrag-render https://a.com https://b.com --output ./tiles --workers 4
+        pixelshot https://a.com https://b.com --output ./tiles --workers 4
 
         # PDF
-        pixelrag-render report.pdf --output ./tiles
+        pixelshot report.pdf --output ./tiles
 
         # Local HTML
-        pixelrag-render index.html --output ./tiles --backend playwright
+        pixelshot index.html --output ./tiles --backend playwright
 
         # Pipe URLs from a file
-        cat urls.txt | xargs pixelrag-render --output ./tiles --workers 8
+        cat urls.txt | xargs pixelshot --output ./tiles --workers 8
     """
     logging.basicConfig(
         level=logging.INFO,
@@ -211,7 +211,7 @@ def main() -> None:
     )
 
     parser = argparse.ArgumentParser(
-        prog="pixelrag-render",
+        prog="pixelshot",
         description="Render documents (URLs, PDFs, HTML files) to tiled JPEG images.",
     )
     parser.add_argument(

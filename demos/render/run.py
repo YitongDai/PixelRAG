@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ingest demo: capture heterogeneous documents as tiled screenshots.
 
-Demonstrates pixelrag-render rendering a mix of:
+Demonstrates pixelshot rendering a mix of:
 - Wikipedia article URLs (via CDP lean capture)
 - Local HTML files (auto-detected, rendered via file:// URL)
 - Could also handle PDFs (requires pdf2image)

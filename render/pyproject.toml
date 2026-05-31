@@ -14,7 +14,7 @@ pdf = ["pdf2image>=1.16.0"]
 dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0"]
 
 [project.scripts]
-pixelrag-render = "pixelrag_render.render:main"
+pixelshot = "pixelrag_render.render:main"
 pixelrag-chrome = "pixelrag_render.chrome:main"
 
 [build-system]

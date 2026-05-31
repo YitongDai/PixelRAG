@@ -1,4 +1,4 @@
-"""pixelrag-render benchmark harness.
+"""pixelshot benchmark harness.
 
 Usage:
     from pixelrag_render.strategies import CDPSequentialStrategy
