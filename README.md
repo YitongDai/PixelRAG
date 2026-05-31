@@ -1,5 +1,7 @@
-<h1 align="center">PixelRAG</h1>
-<p align="center">Visual Retrieval-Augmented Generation.<br>Search any document by how it <em>looks</em>, not just the text it contains.</p>
+<p align="center">
+  <img src="docs/assets/banner.png" alt="PixelRAG — Visual Retrieval-Augmented Generation" width="520">
+</p>
+<p align="center">Search any document by how it <em>looks</em>, not just the text it contains.</p>
 
 <p align="center">
   <a href="https://github.com/StarTrail-org/PixelRAG/actions/workflows/ci.yml"><img src="https://github.com/StarTrail-org/PixelRAG/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -14,8 +16,6 @@
   <a href="#claude-code-plugin">Claude plugin</a> &middot;
   <a href="#training">Training</a>
 </p>
-
-<!-- TODO(demo): add a hero GIF/screenshot of the search UI or pixelrag.ai here. -->
 
 ---
 
