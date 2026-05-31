@@ -71,7 +71,7 @@ function ChatPageInner() {
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const abortRef = React.useRef<AbortController | null>(null)
-  const handleSendRef = React.useRef<((text?: string) => void) | null>(null)
+  const handleSendRef = React.useRef<((text?: string, imageOverride?: string) => void) | null>(null)
   const didInitRef = React.useRef(false)
 
   function scrollToBottom() {
@@ -90,17 +90,28 @@ function ChatPageInner() {
   React.useEffect(() => {
     if (didInitRef.current) return
     const q = searchParams.get("q")
-    if (q) {
+    // The attached image (if any) is passed via sessionStorage, since a
+    // base64 image can't fit in a URL query param.
+    let pendingImage: string | undefined
+    if (searchParams.get("img")) {
+      try {
+        pendingImage = sessionStorage.getItem("pixelrag:pending-image") || undefined
+        sessionStorage.removeItem("pixelrag:pending-image")
+      } catch {
+        pendingImage = undefined
+      }
+    }
+    if (q || pendingImage) {
       didInitRef.current = true
       router.replace("/chat", { scroll: false })
-      handleSendRef.current?.(q)
+      handleSendRef.current?.(q || "", pendingImage)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function handleSend(text?: string) {
+  async function handleSend(text?: string, imageOverride?: string) {
     const query = (text ?? input).trim()
-    const img = image
+    const img = imageOverride ?? image
     if ((!query && !img) || isStreaming) return
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: query, image: img }
     const assistantMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "", searches: [] }

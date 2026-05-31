@@ -42,9 +42,22 @@ function SearchPageContent() {
   const handleSearchRef = React.useRef<((query: string, image?: string) => void) | null>(null)
 
   async function handleSearch(query: string, image?: string) {
-    // Ask mode → hand off to the agent conversation with the query
-    if (mode === "ask" && query) {
-      router.push(`/chat?q=${encodeURIComponent(query)}`)
+    // Ask mode → hand off to the agent conversation with the query (and image)
+    if (mode === "ask" && (query || image)) {
+      const params = new URLSearchParams()
+      if (query) params.set("q", query)
+      // A base64 image is far too large for a URL query param, so stash it in
+      // sessionStorage and let the chat page pick it up — otherwise an
+      // image-based question like "who is this man" loses its image entirely.
+      if (image) {
+        try {
+          sessionStorage.setItem("pixelrag:pending-image", image)
+          params.set("img", "1")
+        } catch {
+          // sessionStorage unavailable — text still goes through.
+        }
+      }
+      router.push(`/chat?${params.toString()}`)
       return
     }
 
