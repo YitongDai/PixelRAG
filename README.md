@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="PixelRAG — Visual Retrieval-Augmented Generation" width="520">
+  <img src="docs/assets/banner.png" alt="PixelRAG — Visual Retrieval-Augmented Generation" width="100%">
 </p>
 <p align="center">Search any document by how it <em>looks</em>, not just the text it contains.</p>
 
@@ -11,17 +11,36 @@
 </p>
 
 <p align="center">
-  <a href="#architecture">Architecture</a> &middot;
-  <a href="#build-an-index-from-your-own-documents">Build an index</a> &middot;
-  <a href="#claude-code-plugin">Claude plugin</a> &middot;
-  <a href="#training">Training</a>
+  <a href="#what-it-is">What it is</a> &middot;
+  <a href="#examples">Examples</a> &middot;
+  <a href="#give-claude-eyes">Give Claude eyes</a> &middot;
+  <a href="#pipelines">Pipelines</a>
 </p>
 
 ---
 
-PixelRAG renders documents — web pages, PDFs, images — as screenshots, embeds them with a
-vision-language model, builds FAISS indexes, and serves a search API. Wikipedia's 8.28M
-articles ship as a pre-built index; the pipeline itself is general-purpose.
+## What it is
+
+PixelRAG renders documents — web pages, PDFs, images — as screenshots and retrieves over the
+images directly. Visual structure that HTML parsing throws away — tables, charts, layout,
+infographics — stays intact, so the reader model can actually answer questions about it.
+
+<p align="center">
+  <img src="docs/assets/pipeline.png" alt="Text-based RAG parses to text and loses the table; PixelRAG renders to screenshot tiles and keeps it" width="100%">
+</p>
+
+Text-based RAG parses the page to text chunks and **loses the table** — the reader can't find the
+answer. PixelRAG renders the page to **screenshot tiles**, retrieves the right tile, and the reader
+reads the number straight off the image.
+
+Wikipedia's 8.28M articles ship as a pre-built index; the pipeline itself is general-purpose.
+
+## Examples
+
+**Try it live** — hosted search and agent at **[pixelrag.ai](https://pixelrag.ai)**
+(uptime: [status.pixelrag.ai](https://status.pixelrag.ai)).
+
+Or self-host the search API over the pre-built Wikipedia index:
 
 ```bash
 uv sync --package pixelrag-serve
@@ -29,18 +48,47 @@ uv sync --package pixelrag-serve
 # Download a pre-built index (8.28M Wikipedia pages)
 aws s3 sync s3://wiki-screenshot-tiles-backup/kiwix_tiles/text_search_index_1024/ ./index/
 
-# Serve it
+# Serve, then query
 pixelrag-serve --index-dir ./index --port 30001
 
-# Query
 curl -X POST http://localhost:30001/search \
   -H "Content-Type: application/json" \
   -d '{"queries": [{"text": "What is the capital of France?"}], "n_docs": 5}'
 ```
 
-That's retrieval over 8.28M pages indexed as images. Try it live at [pixelrag.ai](https://pixelrag.ai).
+Render a single page to tiles (e.g. for an agent to read):
 
-## Architecture
+```python
+from pixelrag_render import render_url
+
+tiles = render_url("https://en.wikipedia.org/wiki/Python", "./tiles")
+```
+
+## Give Claude eyes
+
+The renderer also ships as a Claude Code plugin — the **pixelbrowse** skill. Instead of fetching
+raw HTML, Claude screenshots a page with `pixelrag-render` and *reads the image*, so it sees
+charts, diagrams, tables, and layout the way a person does.
+
+```bash
+# One-time setup
+./plugin/setup.sh
+
+# Then run it in one shot — claude -p with the plugin:
+claude --plugin-dir ./plugin -p "screenshot https://news.ycombinator.com and summarize the top stories"
+claude --plugin-dir ./plugin -p "screenshot https://arxiv.org/abs/2404.12387 and explain the key findings"
+claude --plugin-dir ./plugin -p "screenshot http://localhost:3000 and tell me if anything looks broken"
+```
+
+Or interactively — `claude --plugin-dir ./plugin`, then `/screenshot https://example.com`.
+No MCP server, no backend: the skill just calls `pixelrag-render` (Playwright/CDP) on your machine.
+
+**Where the capability comes from.** Two pieces. (1) Rendering documents to images instead of
+parsing them to text. (2) A `Qwen3-VL-Embedding` model, LoRA-fine-tuned on screenshot data, that
+embeds page images into a space where visual content is retrievable. The figure above *is* that
+difference: parsing drops the table; the screenshot keeps it.
+
+## Pipelines
 
 Five packages, each independently installable:
 
@@ -56,11 +104,11 @@ Five packages, each independently installable:
 render ←── index ──→ embed       serve (independent)       train → serve (HTTP)
 ```
 
-`render`/`embed`/`index`/`serve` share the root workspace. **`train` is a separate
-uv project** with its own pinned env (`torch==2.9.1+cu129`, `transformers==4.57.1`,
-cuDNN 9.20) — install it from inside `train/`, not from the root.
+`render`/`embed`/`index`/`serve` share the root workspace. **`train` is a separate uv project**
+with its own pinned env (`torch==2.9.1+cu129`, `transformers==4.57.1`, cuDNN 9.20) — install it
+from inside `train/`, not from the root.
 
-## Build an index from your own documents
+### Build an index from your own documents
 
 ```bash
 uv sync --package pixelrag-index
@@ -84,37 +132,7 @@ pixelrag-index build
 pixelrag-serve --index-dir ./my_index --port 30001
 ```
 
-Render a single URL (for agent use):
-
-```python
-from pixelrag_render import render_url
-
-tiles = render_url("https://en.wikipedia.org/wiki/Python", "./tiles")
-```
-
-## Claude Code plugin
-
-Give Claude eyes — no MCP server, no backend. The plugin teaches Claude to call
-`pixelrag-render` directly via Bash and read the resulting tile images.
-
-```bash
-# One-time setup
-./plugin/setup.sh
-
-# Then copy-paste any of these:
-claude --plugin-dir ./plugin -p "screenshot https://news.ycombinator.com and summarize the top stories"
-claude --plugin-dir ./plugin -p "screenshot https://arxiv.org/abs/2404.12387 and explain the key findings"
-claude --plugin-dir ./plugin -p "screenshot http://localhost:3000 and tell me if anything looks broken"
-```
-
-Or start an interactive session and use the slash command:
-
-```bash
-claude --plugin-dir ./plugin
-# then type: /screenshot https://example.com
-```
-
-## Embed tools (standalone)
+### Embed tools (standalone)
 
 Each tool runs independently, without the orchestrator:
 
@@ -124,7 +142,7 @@ pixelrag-embed --shard-dir ./tiles --output-dir ./embeddings --gpu-ids 0,1
 pixelrag-build-index --embeddings-dir ./embeddings --output-dir ./index
 ```
 
-## Training
+### Training
 
 `pixelrag-train` LoRA fine-tunes `Qwen/Qwen3-VL-Embedding-2B` for webpage retrieval.
 See [`train/README.md`](train/README.md) for the full recipe.
