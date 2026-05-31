@@ -12,8 +12,8 @@
 
 <p align="center">
   <a href="#what-it-is">What it is</a> &middot;
-  <a href="#examples">Examples</a> &middot;
   <a href="#give-claude-eyes">Give Claude eyes</a> &middot;
+  <a href="#how-it-works">How it works</a> &middot;
   <a href="#pipelines">Pipelines</a>
 </p>
 
@@ -23,26 +23,26 @@
 pip install pixelrag  # TODO: not on PyPI yet — publish, then this is the one-line install
 ```
 
+The two core operations — **render** a page to screenshots, **search** a visual index:
+
+```bash
+# Render any page or document to screenshot tiles
+pixelrag-render https://en.wikipedia.org/wiki/Python --output ./tiles
+
+# Search a hosted index of 8.28M Wikipedia pages — no setup, runs against the live API
+curl -X POST http://api.pixelrag.ai:30001/search \
+  -H "Content-Type: application/json" \
+  -d '{"queries": [{"text": "What is the capital of France?"}], "n_docs": 5}'
+```
+
+Or try it in the browser at **[pixelrag.ai](https://pixelrag.ai)**.
+
 ## What it is
 
 PixelRAG renders documents — web pages, PDFs, images — as screenshots and retrieves over the
 images directly. Visual structure that HTML parsing throws away — tables, charts, layout,
 infographics — stays intact, so the reader model can actually answer questions about it.
-
-<p align="center">
-  <img src="docs/assets/pipeline.png" alt="Text-based RAG parses to text and loses the table; PixelRAG renders to screenshot tiles and keeps it" width="100%">
-</p>
-
-Text-based RAG parses the page to text chunks and **loses the table** — the reader can't find the
-answer. PixelRAG renders the page to **screenshot tiles**, retrieves the right tile, and the reader
-reads the number straight off the image.
-
 Wikipedia's 8.28M articles ship as a pre-built index; the pipeline itself is general-purpose.
-
-## Examples
-
-**Try it live** — hosted search and agent at **[pixelrag.ai](https://pixelrag.ai)**
-(uptime: [status.pixelrag.ai](https://status.pixelrag.ai)).
 
 ## Give Claude eyes
 
@@ -63,10 +63,19 @@ claude --plugin-dir ./plugin -p "screenshot http://localhost:3000 and tell me if
 Or interactively — `claude --plugin-dir ./plugin`, then `/screenshot https://example.com`.
 No MCP server, no backend: the skill just calls `pixelrag-render` (Playwright/CDP) on your machine.
 
-**Where the capability comes from.** Two pieces. (1) Rendering documents to images instead of
-parsing them to text. (2) A `Qwen3-VL-Embedding` model, LoRA-fine-tuned on screenshot data, that
-embeds page images into a space where visual content is retrievable. The figure above *is* that
-difference: parsing drops the table; the screenshot keeps it.
+## How it works
+
+<p align="center">
+  <img src="docs/assets/pipeline.png" alt="Text-based RAG parses to text and loses the table; PixelRAG renders to screenshot tiles and keeps it" width="100%">
+</p>
+
+Text-based RAG parses the page to text chunks and **loses the table** — the reader can't find the
+answer. PixelRAG renders the page to **screenshot tiles**, retrieves the right tile, and the reader
+reads the number straight off the image.
+
+Two pieces make this work: (1) rendering documents to images instead of parsing them to text, and
+(2) a `Qwen3-VL-Embedding` model, LoRA-fine-tuned on screenshot data, that embeds page images into
+a space where visual content is retrievable.
 
 ## Pipelines
 
