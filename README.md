@@ -171,13 +171,14 @@ so you can adapt other backbones yourself — a larger Qwen, or any other embedd
 
 ## Acknowledgments
 
-This work is done by the [Berkeley Sky Computing Lab](https://sky.cs.berkeley.edu/),
-[BAIR](https://bair.berkeley.edu/), and the [Berkeley NLP Group](https://nlp.cs.berkeley.edu/).
-
 Thanks to [Rulin Shao](https://rulinshao.github.io/) for support.
+
 Thanks also to [Claude Code](https://github.com/anthropics/claude-code) and
 [OpenAI Codex](https://github.com/openai/codex) for supporting open-source contributors with credits and plans,
 which we earned by working on [LEANN](https://github.com/StarTrail-org/LEANN).
+
+This work is done by the [Berkeley Sky Computing Lab](https://sky.cs.berkeley.edu/),
+[BAIR](https://bair.berkeley.edu/), and the [Berkeley NLP Group](https://nlp.cs.berkeley.edu/).
 
 ## License
 
