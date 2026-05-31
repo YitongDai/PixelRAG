@@ -3,6 +3,8 @@ name = "pixelrag-embed"
 version = "0.1.0"
 description = "Image tiles to vectors to FAISS index. Three independent CLI tools."
 requires-python = ">=3.12"
+authors = [{ name = "Zhifei Li", email = "andylizf@outlook.com" }]
+license = "Apache-2.0"
 dependencies = [
     "torch>=2.9.0",
     "torchvision>=0.24.0",

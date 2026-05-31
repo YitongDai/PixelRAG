@@ -3,6 +3,8 @@ name = "pixelrag-index"
 version = "0.1.0"
 description = "Build searchable FAISS indexes from any document source"
 requires-python = ">=3.12"
+authors = [{ name = "Zhifei Li", email = "andylizf@outlook.com" }]
+license = "Apache-2.0"
 dependencies = [
     "pixelrag-render",
     "pixelrag-embed",

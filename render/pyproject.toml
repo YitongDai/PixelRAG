@@ -3,6 +3,8 @@ name = "pixelrag-render"
 version = "0.1.0"
 description = "Document to image tiles. Renders web pages, PDFs, and local files as tiled screenshots."
 requires-python = ">=3.12"
+authors = [{ name = "Zhifei Li", email = "andylizf@outlook.com" }]
+license = "Apache-2.0"
 dependencies = [
     "pillow>=10.0.0",
     "websockets>=12.0",
