@@ -8,7 +8,7 @@ Demonstrates pixelshot rendering a mix of:
 
 Run:
     cd pixelrag
-    uv run --package pixelrag-render python demos/render/run.py
+    uv run python demos/render/run.py
 """
 
 import shutil

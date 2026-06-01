@@ -6,7 +6,7 @@ Builds a visual search index from Wikipedia articles and queries it.
 
 ```bash
 cd pixelrag
-uv run --package pixelrag-index python demos/e2e/run.py
+uv run python demos/e2e/run.py
 ```
 
 This will:

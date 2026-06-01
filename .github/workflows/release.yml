@@ -1,12 +1,11 @@
 name: Release to PyPI
 
-# Publishes every PixelRAG package to PyPI. Auth is a single account-scoped API token
-# stored as the `PYPI_API_TOKEN` repo secret (see RELEASING.md). Triggered by publishing
-# a GitHub Release (tag like `v0.1.0`), or run manually:
+# Publishes the `pixelrag` package to PyPI. Auth is an account-scoped API token stored as
+# the `PYPI_API_TOKEN` repo secret (see RELEASING.md). Triggered by publishing a GitHub
+# Release (tag like `v0.2.0`), or run manually:
 #   - dry_run = true  → build only (no upload)
 #   - dry_run = false → build + publish
-# `--check-url` makes publishing idempotent: files already on PyPI are skipped, so a
-# partial release can be safely re-run.
+# `--check-url` makes publishing idempotent: files already on PyPI are skipped.
 
 on:
   release:
@@ -24,17 +23,8 @@ concurrency:
 
 jobs:
   release:
-    name: ${{ matrix.package }}
+    name: pixelrag
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package:
-          - pixelrag
-          - pixelrag-render
-          - pixelrag-embed
-          - pixelrag-index
-          - pixelrag-serve
     steps:
       - uses: actions/checkout@v4
 
@@ -42,13 +32,13 @@ jobs:
         with:
           version: "latest"
 
-      - name: Build ${{ matrix.package }}
-        run: uv build --package ${{ matrix.package }} --out-dir dist
+      - name: Build
+        run: uv build --out-dir dist
 
       - name: List artifacts
         run: ls -l dist
 
-      - name: Publish ${{ matrix.package }} to PyPI
+      - name: Publish to PyPI
         if: ${{ github.event_name == 'release' || !inputs.dry_run }}
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}

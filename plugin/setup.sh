@@ -1,14 +1,14 @@
 #!/bin/bash
-# One-liner setup: install pixelrag-render + register plugin with Claude Code
+# One-liner setup: install pixelrag + register plugin with Claude Code
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Install pixelrag-render into an isolated env via uv
-echo "Installing pixelrag-render..."
-uv tool install --from "$REPO_DIR/render" pixelrag-render 2>/dev/null || \
-    uv tool upgrade --from "$REPO_DIR/render" pixelrag-render
+# Install pixelrag into an isolated env via uv
+echo "Installing pixelrag..."
+uv tool install --from "$REPO_DIR" pixelrag 2>/dev/null || \
+    uv tool upgrade --from "$REPO_DIR" pixelrag
 
 # Install playwright browser
 echo "Installing Chromium..."

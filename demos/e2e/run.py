@@ -6,9 +6,9 @@ Demonstrates the full PixelRAG pipeline via pixelrag index:
 
 Run:
     cd pixelrag
-    uv run --package pixelrag-index python demos/e2e/run.py
-    uv run --package pixelrag-index python demos/e2e/run.py --limit 50
-    uv run --package pixelrag-index python demos/e2e/run.py --skip-build  # just serve existing index
+    uv run python demos/e2e/run.py
+    uv run python demos/e2e/run.py --limit 50
+    uv run python demos/e2e/run.py --skip-build  # just serve existing index
 """
 
 import argparse

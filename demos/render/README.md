@@ -6,7 +6,7 @@ Captures screenshots from a mix of URLs, PDFs, and HTML files in one call.
 
 ```bash
 cd pixelrag
-uv run --package pixelrag-render python demos/render/run.py
+uv run python demos/render/run.py
 ```
 
 ## What it does
