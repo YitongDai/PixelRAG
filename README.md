@@ -15,7 +15,7 @@
   <a href="https://people.eecs.berkeley.edu/~jegonzal/">Joseph E. Gonzalez</a>†,
   <a href="https://www.sewonmin.com/">Sewon Min</a>†
 </p>
-<p align="center"><sub>* Equal contribution &nbsp; † Equal advising</sub></p>
+<p align="center"><sub>* Equal contribution &nbsp; † Equal advising</sub><br><sub>Work done at <a href="https://sky.cs.berkeley.edu/">Berkeley SkyLab</a> &amp; <a href="https://bair.berkeley.edu/">BAIR</a> &amp; <a href="https://nlp.cs.berkeley.edu/">Berkeley NLP</a></sub></p>
 <p align="center">Search any document by how it <em>looks</em>, not just the text it contains.</p>
 
 <p align="center">
