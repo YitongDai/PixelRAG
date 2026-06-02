@@ -327,7 +327,7 @@ function EmptyState({ onExample, onSearchMode }: { onExample: (q: string) => voi
         </motion.h1>
 
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mx-auto mt-5 max-w-md text-[14px] leading-relaxed text-[var(--chat-secondary)]">
-          Ask a question. I&apos;ll search 15.7M Wikipedia screenshot tiles,
+          Ask a question. I&apos;ll search 28.1M Wikipedia screenshot tiles,
           read the visual results, and synthesize an answer.
         </motion.p>
       </div>
