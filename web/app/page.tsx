@@ -157,7 +157,7 @@ function SearchPageContent() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
               </span>
-              15.7M screenshot tiles · indexed
+              28.1M screenshot tiles · indexed
             </div>
             <h1
               className="reveal relative font-display text-5xl font-light leading-[1.05] tracking-tight sm:text-7xl"
