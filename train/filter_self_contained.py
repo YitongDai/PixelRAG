@@ -203,7 +203,7 @@ async def main():
         print(f"  [{r.get('source_type','?'):7s}] {r['query']}")
 
     if args.test_first:
-        print(f"\n[TEST MODE] Not writing output.")
+        print("\n[TEST MODE] Not writing output.")
         return
 
     with open(args.output, "w") as f:

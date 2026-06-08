@@ -594,7 +594,7 @@ async def main() -> None:
     print(f"Few-shot examples: {len(fewshot_examples)} ({'from file' if args.fewshot_file else 'built-in'})")
     has_openai_fallback = bool(os.environ.get("OPENAI_API_KEY"))
     print(
-        f"OpenAI fallback: "
+        "OpenAI fallback: "
         + (f"enabled ({args.openai_fallback_model})" if has_openai_fallback else "disabled")
     )
 
