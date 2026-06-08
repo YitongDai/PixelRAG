@@ -51,12 +51,12 @@ os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "true")
 os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "global")
 
 MODEL_PRICING = {
-    "gemini-3.1-pro-preview":          (1.25, 10.00),
-    "gemini-2.5-pro-preview-03-25":    (1.25, 10.00),
-    "gemini-2.5-pro":                  (1.25, 10.00),
-    "gemini-3.1-flash-lite-preview":   (1.00,  4.00),
-    "gemini-2.0-flash-001":            (0.10,  0.40),
-    "gemini-2.0-flash":                (0.10,  0.40),
+    "gemini-3.1-pro-preview": (1.25, 10.00),
+    "gemini-2.5-pro-preview-03-25": (1.25, 10.00),
+    "gemini-2.5-pro": (1.25, 10.00),
+    "gemini-3.1-flash-lite-preview": (1.00, 4.00),
+    "gemini-2.0-flash-001": (0.10, 0.40),
+    "gemini-2.0-flash": (0.10, 0.40),
 }
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
 MAX_CONCURRENT = 40
@@ -65,23 +65,47 @@ IMG_JPEG_QUALITY = 85
 # ── Page filtering ───────────────────────────────────────────────────
 SKIP_PATTERNS = [
     r"disambiguation",
-    r"category:", r"template:", r"wikipedia:", r"portal:",
-    r"file:", r"help:", r"talk:", r"module:", r"draft:",
-    r"_deaths$", r"_births$",
+    r"category:",
+    r"template:",
+    r"wikipedia:",
+    r"portal:",
+    r"file:",
+    r"help:",
+    r"talk:",
+    r"module:",
+    r"draft:",
+    r"_deaths$",
+    r"_births$",
 ]
 
 SKIP_CONTENT_PATTERNS = [
-    r"\belection\b", r"\belections\b", r"\breferendum\b", r"\bprimary\b",
-    r"\bby-election\b", r"\bcouncil election\b",
-    r"^list of ", r"^lists of ",
-    r"\bdiscography\b", r"\bfilmography\b", r"\btrack listing\b",
-    r"_discography$", r"_filmography$",
-    r"\bseason\b.*\bleague\b", r"\bleague season\b",
-    r"\bfootball league\b", r"\bnba season\b", r"\bnfl season\b",
-    r"\bcensus\b", r"\bdemographic\b",
-    r"^list of .* episodes", r"\bepisodes of\b",
-    r"\bgovernors? of\b", r"\bmayors? of\b", r"\bprime ministers? of\b",
-    r"\bcareer statistics\b", r"\bplayer statistics\b",
+    r"\belection\b",
+    r"\belections\b",
+    r"\breferendum\b",
+    r"\bprimary\b",
+    r"\bby-election\b",
+    r"\bcouncil election\b",
+    r"^list of ",
+    r"^lists of ",
+    r"\bdiscography\b",
+    r"\bfilmography\b",
+    r"\btrack listing\b",
+    r"_discography$",
+    r"_filmography$",
+    r"\bseason\b.*\bleague\b",
+    r"\bleague season\b",
+    r"\bfootball league\b",
+    r"\bnba season\b",
+    r"\bnfl season\b",
+    r"\bcensus\b",
+    r"\bdemographic\b",
+    r"^list of .* episodes",
+    r"\bepisodes of\b",
+    r"\bgovernors? of\b",
+    r"\bmayors? of\b",
+    r"\bprime ministers? of\b",
+    r"\bcareer statistics\b",
+    r"\bplayer statistics\b",
 ]
 
 SKIP_RE = [re.compile(p, re.IGNORECASE) for p in SKIP_PATTERNS]
@@ -182,7 +206,10 @@ def is_natural_question(qa: dict) -> bool:
 
 
 def load_and_sample_pages(
-    index_path: Path, n: int, batch_index: int = 0, total_batches: int = 1,
+    index_path: Path,
+    n: int,
+    batch_index: int = 0,
+    total_batches: int = 1,
 ) -> list:
     MASTER_SEED = 0
     print(f"Loading index from {index_path}...")
@@ -204,7 +231,9 @@ def load_and_sample_pages(
     end = start + slice_size if batch_index < total_batches - 1 else len(candidates)
     pool = candidates[start:end]
 
-    print(f"Batch {batch_index}/{total_batches}: pages [{start}:{end}] ({len(pool):,} in pool)")
+    print(
+        f"Batch {batch_index}/{total_batches}: pages [{start}:{end}] ({len(pool):,} in pool)"
+    )
     selected = pool[:n] if n <= len(pool) else pool
     return selected
 
@@ -342,10 +371,13 @@ async def generate_qa(
         b64 = encode_image(chunk_path)
 
         contents = [
-            {"role": "user", "parts": [
-                {"text": QUERY_PROMPT},
-                {"inline_data": {"mime_type": "image/jpeg", "data": b64}},
-            ]}
+            {
+                "role": "user",
+                "parts": [
+                    {"text": QUERY_PROMPT},
+                    {"inline_data": {"mime_type": "image/jpeg", "data": b64}},
+                ],
+            }
         ]
         config = GenerateContentConfig(temperature=0.7, max_output_tokens=1024)
 
@@ -358,15 +390,17 @@ async def generate_qa(
                         model=model,
                         contents=contents,
                         config=config,
-                    )
+                    ),
                 )
                 elapsed = time.time() - t0
 
                 usage = resp.usage_metadata
                 if usage:
-                    token_counter["input"]  += getattr(usage, "prompt_token_count", 0)
-                    token_counter["output"] += getattr(usage, "candidates_token_count", 0)
-                    token_counter["calls"]  += 1
+                    token_counter["input"] += getattr(usage, "prompt_token_count", 0)
+                    token_counter["output"] += getattr(
+                        usage, "candidates_token_count", 0
+                    )
+                    token_counter["calls"] += 1
                     token_counter["total_time"] += elapsed
 
                 text = ""
@@ -389,7 +423,7 @@ async def generate_qa(
                         ("C:", "subject"),
                     ]:
                         if line.startswith(prefix):
-                            fields[key] = line[len(prefix):].strip()
+                            fields[key] = line[len(prefix) :].strip()
                             break
 
                 q = fields.get("query")
@@ -413,7 +447,7 @@ async def generate_qa(
             except Exception as e:
                 err = str(e)
                 if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                    wait = 2 ** attempt * 15 + random.uniform(1, 5)
+                    wait = 2**attempt * 15 + random.uniform(1, 5)
                     print(f"  Rate limited, waiting {wait:.0f}s...")
                     await asyncio.sleep(wait)
                 elif attempt < 4:
@@ -429,17 +463,33 @@ async def main():
     parser = argparse.ArgumentParser(
         description="Generate synthetic query-chunk pairs from Wikipedia screenshot tiles"
     )
-    parser.add_argument("--tiles-dir", type=Path, required=True,
-                        help="Root directory of kiwix_tiles (containing index.jsonl)")
+    parser.add_argument(
+        "--tiles-dir",
+        type=Path,
+        required=True,
+        help="Root directory of kiwix_tiles (containing index.jsonl)",
+    )
     parser.add_argument("--num-pages", type=int, default=10)
     parser.add_argument("--output", type=str, default="query_pairs.jsonl")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--model", type=str, default=DEFAULT_MODEL,
-                        help="Gemini model (e.g. gemini-3.1-pro-preview, gemini-2.0-flash-001)")
-    parser.add_argument("--batch-index", type=int, default=0,
-                        help="Which non-overlapping batch to process (0-based)")
-    parser.add_argument("--total-batches", type=int, default=1,
-                        help="Total number of batches the candidate pool is divided into")
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=DEFAULT_MODEL,
+        help="Gemini model (e.g. gemini-3.1-pro-preview, gemini-2.0-flash-001)",
+    )
+    parser.add_argument(
+        "--batch-index",
+        type=int,
+        default=0,
+        help="Which non-overlapping batch to process (0-based)",
+    )
+    parser.add_argument(
+        "--total-batches",
+        type=int,
+        default=1,
+        help="Total number of batches the candidate pool is divided into",
+    )
     parser.add_argument("--max-concurrent", type=int, default=MAX_CONCURRENT)
     parser.add_argument("--postfilter-min-page-chunks", type=int, default=None)
     parser.add_argument("--postfilter-max-page-chunks", type=int, default=None)
@@ -456,16 +506,24 @@ async def main():
     model = args.model
     price_input, price_output = MODEL_PRICING.get(model, (1.25, 10.00))
 
-    print(f"Model: {model} via Vertex AI (project={os.environ.get('GOOGLE_CLOUD_PROJECT', 'N/A')})")
+    print(
+        f"Model: {model} via Vertex AI (project={os.environ.get('GOOGLE_CLOUD_PROJECT', 'N/A')})"
+    )
 
-    pages = load_and_sample_pages(index_path, args.num_pages, args.batch_index, args.total_batches)
+    pages = load_and_sample_pages(
+        index_path, args.num_pages, args.batch_index, args.total_batches
+    )
     pages_before_postfilter = len(pages)
     pages = filter_selected_pages_by_chunk_count(
-        pages, tiles_root,
+        pages,
+        tiles_root,
         min_page_chunks=args.postfilter_min_page_chunks,
         max_page_chunks=args.postfilter_max_page_chunks,
     )
-    if args.postfilter_min_page_chunks is not None or args.postfilter_max_page_chunks is not None:
+    if (
+        args.postfilter_min_page_chunks is not None
+        or args.postfilter_max_page_chunks is not None
+    ):
         chunk_filter = []
         if args.postfilter_min_page_chunks is not None:
             chunk_filter.append(f"chunks>={args.postfilter_min_page_chunks}")
@@ -529,25 +587,25 @@ async def main():
     type_dist = Counter(r["source_type"] for r in results)
     subj_dist = Counter(r["subject"] for r in results)
 
-    in_tok  = token_counter["input"]
+    in_tok = token_counter["input"]
     out_tok = token_counter["output"]
-    calls   = token_counter["calls"]
-    cost    = (in_tok / 1e6 * price_input) + (out_tok / 1e6 * price_output)
+    calls = token_counter["calls"]
+    cost = (in_tok / 1e6 * price_input) + (out_tok / 1e6 * price_output)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Wrote {len(results)} Q&A pairs to {args.output}")
     print(f"Source types: {dict(type_dist)}")
     print(f"Subjects:     {dict(subj_dist)}")
     print(f"\n--- Throughput & Cost ({model}) ---")
     print(f"  Calls:        {calls}")
-    print(f"  Input tokens: {in_tok:,}  ({in_tok/max(calls,1):.0f} avg/call)")
-    print(f"  Output tokens:{out_tok:,}  ({out_tok/max(calls,1):.0f} avg/call)")
-    print(f"  Wall time:    {wall_time:.1f}s  ({wall_time/max(calls,1):.1f}s/call)")
+    print(f"  Input tokens: {in_tok:,}  ({in_tok / max(calls, 1):.0f} avg/call)")
+    print(f"  Output tokens:{out_tok:,}  ({out_tok / max(calls, 1):.0f} avg/call)")
+    print(f"  Wall time:    {wall_time:.1f}s  ({wall_time / max(calls, 1):.1f}s/call)")
     print(f"  Est. cost:    ${cost:.4f} for {calls} calls")
-    print(f"  Per 10 pairs: ${cost/max(calls,1)*10:.4f}")
-    print(f"  Per 1K pairs: ${cost/max(calls,1)*1000:.2f}")
-    print(f"  Per 50K pairs:${cost/max(calls,1)*50000:.0f}")
-    print(f"{'='*60}")
+    print(f"  Per 10 pairs: ${cost / max(calls, 1) * 10:.4f}")
+    print(f"  Per 1K pairs: ${cost / max(calls, 1) * 1000:.2f}")
+    print(f"  Per 50K pairs:${cost / max(calls, 1) * 50000:.0f}")
+    print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

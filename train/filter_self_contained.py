@@ -36,11 +36,11 @@ import openai
 
 MODEL_PRICING = {
     "gpt-4o-mini": (0.15 / 1e6, 0.60 / 1e6),
-    "gpt-4o":      (2.50 / 1e6, 10.0 / 1e6),
-    "gpt-4.1":     (2.00 / 1e6, 8.00 / 1e6),
+    "gpt-4o": (2.50 / 1e6, 10.0 / 1e6),
+    "gpt-4.1": (2.00 / 1e6, 8.00 / 1e6),
 }
 
-BATCH_SIZE     = 50
+BATCH_SIZE = 50
 MAX_CONCURRENT = 50
 
 FILTER_PROMPT = """\
@@ -86,12 +86,12 @@ def parse_batch_response(text: str, n: int) -> list[bool]:
         line = line.strip()
         if not line:
             continue
-        m = re.match(r'^(\d+)[:.)\s]+(?:N:\s*)?(YES|NO)', line, re.IGNORECASE)
+        m = re.match(r"^(\d+)[:.)\s]+(?:N:\s*)?(YES|NO)", line, re.IGNORECASE)
         if m:
             idx = int(m.group(1)) - 1
             verdict = m.group(2).upper()
             if 0 <= idx < n:
-                results[idx] = (verdict == "YES")
+                results[idx] = verdict == "YES"
     return results
 
 
@@ -103,7 +103,7 @@ async def classify_batch(
     model: str,
 ) -> list[tuple[dict, bool]]:
     queries = [r["query"] for r in records]
-    numbered = "\n".join(f"{i+1}. {q}" for i, q in enumerate(queries))
+    numbered = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(queries))
     prompt = FILTER_PROMPT.format(questions=numbered)
 
     async with semaphore:
@@ -116,9 +116,9 @@ async def classify_batch(
                     max_tokens=BATCH_SIZE * 8,
                 )
                 text = resp.choices[0].message.content or ""
-                token_counter["input"]  += resp.usage.prompt_tokens
+                token_counter["input"] += resp.usage.prompt_tokens
                 token_counter["output"] += resp.usage.completion_tokens
-                token_counter["calls"]  += 1
+                token_counter["calls"] += 1
 
                 verdicts = parse_batch_response(text, len(records))
                 return list(zip(records, verdicts))
@@ -128,7 +128,7 @@ async def classify_batch(
                 print(f"  Rate limited, waiting {wait}s...")
                 await asyncio.sleep(wait)
             except Exception as e:
-                print(f"  Error (attempt {attempt+1}): {str(e)[:100]}")
+                print(f"  Error (attempt {attempt + 1}): {str(e)[:100]}")
                 await asyncio.sleep(3)
 
     return [(r, True) for r in records]
@@ -138,14 +138,21 @@ async def main():
     parser = argparse.ArgumentParser(
         description="Filter non-self-contained queries using LLM classification"
     )
-    parser.add_argument("--input",      required=True,
-                        help="Input JSONL with generated query pairs")
-    parser.add_argument("--output",     required=True,
-                        help="Output JSONL with only self-contained queries")
-    parser.add_argument("--test-first", type=int, default=None,
-                        help="Only process first N records (dry run)")
-    parser.add_argument("--model",      default="gpt-4o",
-                        help="OpenAI model for classification")
+    parser.add_argument(
+        "--input", required=True, help="Input JSONL with generated query pairs"
+    )
+    parser.add_argument(
+        "--output", required=True, help="Output JSONL with only self-contained queries"
+    )
+    parser.add_argument(
+        "--test-first",
+        type=int,
+        default=None,
+        help="Only process first N records (dry run)",
+    )
+    parser.add_argument(
+        "--model", default="gpt-4o", help="OpenAI model for classification"
+    )
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
     parser.add_argument("--concurrency", type=int, default=MAX_CONCURRENT)
     args = parser.parse_args()
@@ -162,9 +169,11 @@ async def main():
                 pass
 
     if args.test_first:
-        data = data[:args.test_first]
+        data = data[: args.test_first]
 
-    batches = [data[i:i+args.batch_size] for i in range(0, len(data), args.batch_size)]
+    batches = [
+        data[i : i + args.batch_size] for i in range(0, len(data), args.batch_size)
+    ]
 
     print(f"Loaded {len(data)} records → {len(batches)} batches of {args.batch_size}")
     print(f"Model: {args.model}  |  Concurrency: {args.concurrency}")
@@ -177,30 +186,34 @@ async def main():
     client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
 
     semaphore = asyncio.Semaphore(args.concurrency)
-    price_in, price_out = MODEL_PRICING.get(args.model, (2.50/1e6, 10.0/1e6))
+    price_in, price_out = MODEL_PRICING.get(args.model, (2.50 / 1e6, 10.0 / 1e6))
     token_counter = {"input": 0, "output": 0, "calls": 0}
 
     t0 = time.time()
-    tasks = [classify_batch(client, b, semaphore, token_counter, args.model) for b in batches]
+    tasks = [
+        classify_batch(client, b, semaphore, token_counter, args.model) for b in batches
+    ]
     batch_results = await asyncio.gather(*tasks)
 
     all_results = [item for batch in batch_results for item in batch]
-    kept    = [r for r, ok in all_results if ok]
+    kept = [r for r, ok in all_results if ok]
     dropped = [r for r, ok in all_results if not ok]
 
     elapsed = time.time() - t0
     cost = token_counter["input"] * price_in + token_counter["output"] * price_out
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Total:   {len(data)}")
-    print(f"Kept:    {len(kept)}  ({len(kept)/len(data)*100:.1f}%)")
-    print(f"Dropped: {len(dropped)}  ({len(dropped)/len(data)*100:.1f}%)")
-    print(f"Calls:   {token_counter['calls']}  |  Time: {elapsed:.1f}s  |  Cost: ${cost:.4f}")
-    print(f"{'='*60}")
+    print(f"Kept:    {len(kept)}  ({len(kept) / len(data) * 100:.1f}%)")
+    print(f"Dropped: {len(dropped)}  ({len(dropped) / len(data) * 100:.1f}%)")
+    print(
+        f"Calls:   {token_counter['calls']}  |  Time: {elapsed:.1f}s  |  Cost: ${cost:.4f}"
+    )
+    print(f"{'=' * 60}")
 
     print(f"\n--- Sample dropped queries ({min(30, len(dropped))}) ---")
     for r in dropped[:30]:
-        print(f"  [{r.get('source_type','?'):7s}] {r['query']}")
+        print(f"  [{r.get('source_type', '?'):7s}] {r['query']}")
 
     if args.test_first:
         print("\n[TEST MODE] Not writing output.")

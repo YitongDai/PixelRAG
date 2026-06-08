@@ -56,33 +56,60 @@ MASTER_SEED = 0
 
 SKIP_PATTERNS = [
     r"disambiguation",
-    r"^portal:", r"^category:", r"^template:", r"^wikipedia:",
-    r"^file:", r"^help:", r"^talk:", r"^module:", r"^draft:",
-    r"^list of ", r"^lists of ",
+    r"^portal:",
+    r"^category:",
+    r"^template:",
+    r"^wikipedia:",
+    r"^file:",
+    r"^help:",
+    r"^talk:",
+    r"^module:",
+    r"^draft:",
+    r"^list of ",
+    r"^lists of ",
 ]
 SKIP_CONTENT_PATTERNS = [
-    r"\belection\b", r"\belections\b", r"\breferendum\b",
-    r"\bdiscography\b", r"\bfilmography\b", r"\btrack listing\b",
-    r"\bcensus\b", r"\bdemographic\b",
-    r"^list of .* episodes", r"\bepisodes of\b",
+    r"\belection\b",
+    r"\belections\b",
+    r"\breferendum\b",
+    r"\bdiscography\b",
+    r"\bfilmography\b",
+    r"\btrack listing\b",
+    r"\bcensus\b",
+    r"\bdemographic\b",
+    r"^list of .* episodes",
+    r"\bepisodes of\b",
 ]
 SKIP_RE = [re.compile(p, re.IGNORECASE) for p in SKIP_PATTERNS]
 SKIP_CONTENT_RE = [re.compile(p, re.IGNORECASE) for p in SKIP_CONTENT_PATTERNS]
 
 BAD_QUESTION_PATTERNS = [
-    r"\baccording to the\b", r"\baccording to this\b", r"\bvisible\b",
+    r"\baccording to the\b",
+    r"\baccording to this\b",
+    r"\bvisible\b",
     r"\blisted (here|above|below|in the table)\b",
     r"\bthe table (shows|lists|above|below)\b",
-    r"\bin the (following|above) table\b", r"\bshown in\b",
-    r"\bthis passage\b", r"\bthe passage\b", r"\bthe article\b",
-    r"^what is (the )?listed", r"^what (are|is) listed",
-    r"\bthe film\b(?!\s+[A-Z\"])", r"\bthe song\b(?!\s+[A-Z\"])",
-    r"\bthe album\b(?!\s+[A-Z\"])", r"\bthe book\b(?!\s+[A-Z\"])",
-    r"\bthe team\b(?!\s+[A-Z\"])", r"\bthe show\b(?!\s+[A-Z\"])",
-    r"\bthe series\b(?!\s+[A-Z\"])", r"\bthe station\b(?!\s+[A-Z\"])",
-    r"\bthe school\b(?!\s+[A-Z\"])", r"\bthe match\b(?!\s+[A-Z\"])",
-    r"\bthe game\b(?!\s+[A-Z\"])", r"\bthe competition\b(?!\s+[A-Z\"])",
-    r"\bthe episode\b(?!\s+[A-Z\"\d])", r"\bthe production\b(?!\s+[A-Z\"])",
+    r"\bin the (following|above) table\b",
+    r"\bshown in\b",
+    r"\bthis passage\b",
+    r"\bthe passage\b",
+    r"\bthe article\b",
+    r"^what is (the )?listed",
+    r"^what (are|is) listed",
+    r"\bthe film\b(?!\s+[A-Z\"])",
+    r"\bthe song\b(?!\s+[A-Z\"])",
+    r"\bthe album\b(?!\s+[A-Z\"])",
+    r"\bthe book\b(?!\s+[A-Z\"])",
+    r"\bthe team\b(?!\s+[A-Z\"])",
+    r"\bthe show\b(?!\s+[A-Z\"])",
+    r"\bthe series\b(?!\s+[A-Z\"])",
+    r"\bthe station\b(?!\s+[A-Z\"])",
+    r"\bthe school\b(?!\s+[A-Z\"])",
+    r"\bthe match\b(?!\s+[A-Z\"])",
+    r"\bthe game\b(?!\s+[A-Z\"])",
+    r"\bthe competition\b(?!\s+[A-Z\"])",
+    r"\bthe episode\b(?!\s+[A-Z\"\d])",
+    r"\bthe production\b(?!\s+[A-Z\"])",
     r"\bthe tournament\b(?!\s+[A-Z\d\"])",
     r"^(when|where|who|what|how|why) (was|is|were|did|does|has|have) (it|they|this|that|he|she)\b",
 ]
@@ -127,11 +154,19 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate synthetic text query-passage pairs from a text chunk database"
     )
-    parser.add_argument("--db-path", type=Path, required=True,
-                        help="Path to SQLite database with articles/chunks tables")
-    parser.add_argument("--fewshot-file", type=Path, default=None,
-                        help="JSONL with few-shot seed examples (question/answer/text/supporting_span). "
-                             "If not provided, built-in examples are used.")
+    parser.add_argument(
+        "--db-path",
+        type=Path,
+        required=True,
+        help="Path to SQLite database with articles/chunks tables",
+    )
+    parser.add_argument(
+        "--fewshot-file",
+        type=Path,
+        default=None,
+        help="JSONL with few-shot seed examples (question/answer/text/supporting_span). "
+        "If not provided, built-in examples are used.",
+    )
     parser.add_argument("--output", type=Path, default=Path("text_query_pairs.jsonl"))
     parser.add_argument("--num-articles", type=int, default=100)
     parser.add_argument("--seed", type=int, default=42)
@@ -227,7 +262,9 @@ def extract_best_long_paragraph(text: str, min_paragraph_words: int) -> str | No
             continue
         if "|" in paragraph:
             continue
-        if normalized.startswith(("references", "external links", "see also", "bibliography", "notes")):
+        if normalized.startswith(
+            ("references", "external links", "see also", "bibliography", "notes")
+        ):
             continue
         score = (word_count, sentence_count, len(paragraph))
         if best_score is None or score > best_score:
@@ -250,12 +287,12 @@ def format_fewshot_block(examples: list[dict]) -> str:
             f"""Example {idx}
 Passage:
 \"\"\"
-{ex['text']}
+{ex["text"]}
 \"\"\"
 Good output:
-Q: {ex['question']}
-A: {ex['answer']}
-S: {ex['supporting_span']}
+Q: {ex["question"]}
+A: {ex["answer"]}
+S: {ex["supporting_span"]}
 T: prose"""
         )
     return "\n\n".join(blocks)
@@ -326,9 +363,13 @@ def parse_model_output(text: str) -> dict | None:
             ("T:", "source_type"),
         ]:
             if line.startswith(prefix):
-                fields[key] = line[len(prefix):].strip()
+                fields[key] = line[len(prefix) :].strip()
                 break
-    if not fields.get("query") or not fields.get("answer") or not fields.get("source_sentence"):
+    if (
+        not fields.get("query")
+        or not fields.get("answer")
+        or not fields.get("source_sentence")
+    ):
         return None
     return {
         "query": fields["query"],
@@ -339,14 +380,19 @@ def parse_model_output(text: str) -> dict | None:
 
 
 async def call_gemini(
-    client: genai.Client, model: str, prompt: str, token_counter: dict,
+    client: genai.Client,
+    model: str,
+    prompt: str,
+    token_counter: dict,
 ) -> str:
     config = GenerateContentConfig(temperature=0.7, max_output_tokens=512)
     t0 = time.time()
     resp = await asyncio.get_event_loop().run_in_executor(
         None,
         lambda: client.models.generate_content(
-            model=model, contents=prompt, config=config,
+            model=model,
+            contents=prompt,
+            config=config,
         ),
     )
     elapsed = time.time() - t0
@@ -366,7 +412,10 @@ async def call_gemini(
 
 
 async def call_openai_fallback(
-    client: openai.AsyncOpenAI, model: str, prompt: str, token_counter: dict,
+    client: openai.AsyncOpenAI,
+    model: str,
+    prompt: str,
+    token_counter: dict,
 ) -> str:
     t0 = time.time()
     resp = await client.chat.completions.create(
@@ -443,14 +492,19 @@ def load_candidate_articles(
     start = batch_index * slice_size
     end = start + slice_size if batch_index < total_batches - 1 else len(candidates)
     pool = candidates[start:end]
-    print(f"Batch {batch_index}/{total_batches}: articles [{start}:{end}] ({len(pool):,} in pool)")
+    print(
+        f"Batch {batch_index}/{total_batches}: articles [{start}:{end}] ({len(pool):,} in pool)"
+    )
 
     selected = pool[:num_articles] if num_articles <= len(pool) else pool
     return selected
 
 
 def select_chunk_rows(
-    db_path: Path, articles: list[dict], seed: int, min_paragraph_words: int,
+    db_path: Path,
+    articles: list[dict],
+    seed: int,
+    min_paragraph_words: int,
 ) -> list[dict]:
     rng = random.Random(seed)
     conn = sqlite3.connect(str(db_path))
@@ -477,7 +531,9 @@ def select_chunk_rows(
             text, char_offset, n_tokens = row
             if not is_candidate_passage(text, n_tokens):
                 continue
-            focus_paragraph = extract_best_long_paragraph(text, min_paragraph_words=min_paragraph_words)
+            focus_paragraph = extract_best_long_paragraph(
+                text, min_paragraph_words=min_paragraph_words
+            )
             if not focus_paragraph:
                 continue
             title = infer_title(text)
@@ -511,7 +567,9 @@ async def generate_qa(
     fewshot_block: str,
     work_item: dict,
 ) -> dict | None:
-    prompt = build_prompt(fewshot_block, work_item["passage"], work_item["focus_paragraph"])
+    prompt = build_prompt(
+        fewshot_block, work_item["passage"], work_item["focus_paragraph"]
+    )
 
     async with semaphore:
         for attempt in range(5):
@@ -546,7 +604,10 @@ async def generate_qa(
                                 f"falling back to {openai_fallback_model}"
                             )
                             text = await call_openai_fallback(
-                                openai_client, openai_fallback_model, prompt, token_counter,
+                                openai_client,
+                                openai_fallback_model,
+                                prompt,
+                                token_counter,
                             )
                             qa = parse_model_output(text)
                             if not qa:
@@ -571,13 +632,15 @@ async def generate_qa(
                                 f"  OpenAI fallback failed for article {work_item['article_id']}: "
                                 f"{openai_error}"
                             )
-                    wait = 2 ** attempt * 10 + random.uniform(1, 3)
+                    wait = 2**attempt * 10 + random.uniform(1, 3)
                     print(f"  Rate limited, waiting {wait:.0f}s...")
                     await asyncio.sleep(wait)
                 elif attempt < 4:
                     await asyncio.sleep(2)
                 else:
-                    print(f"  Failed after 5 attempts for article {work_item['article_id']}: {e}")
+                    print(
+                        f"  Failed after 5 attempts for article {work_item['article_id']}: {e}"
+                    )
                     return None
     return None
 
@@ -590,12 +653,20 @@ async def main() -> None:
     fewshot_examples = load_fewshot_examples(args.fewshot_file)
     fewshot_block = format_fewshot_block(fewshot_examples)
 
-    print(f"Model: {args.model} via Vertex AI (project={os.environ.get('GOOGLE_CLOUD_PROJECT', 'N/A')})")
-    print(f"Few-shot examples: {len(fewshot_examples)} ({'from file' if args.fewshot_file else 'built-in'})")
+    print(
+        f"Model: {args.model} via Vertex AI (project={os.environ.get('GOOGLE_CLOUD_PROJECT', 'N/A')})"
+    )
+    print(
+        f"Few-shot examples: {len(fewshot_examples)} ({'from file' if args.fewshot_file else 'built-in'})"
+    )
     has_openai_fallback = bool(os.environ.get("OPENAI_API_KEY"))
     print(
         "OpenAI fallback: "
-        + (f"enabled ({args.openai_fallback_model})" if has_openai_fallback else "disabled")
+        + (
+            f"enabled ({args.openai_fallback_model})"
+            if has_openai_fallback
+            else "disabled"
+        )
     )
 
     articles = load_candidate_articles(
@@ -606,13 +677,21 @@ async def main() -> None:
         min_article_chunks=args.min_article_chunks,
         max_article_chunks=args.max_article_chunks,
     )
-    work_items = select_chunk_rows(args.db_path, articles, args.seed, args.min_paragraph_words)
+    work_items = select_chunk_rows(
+        args.db_path, articles, args.seed, args.min_paragraph_words
+    )
     print(f"Selected {len(work_items)} candidate chunks from {len(articles)} articles")
 
     semaphore = asyncio.Semaphore(args.max_concurrent)
     token_counter = {
-        "gemini_input": 0, "gemini_output": 0, "gemini_calls": 0, "gemini_total_time": 0.0,
-        "openai_input": 0, "openai_output": 0, "openai_calls": 0, "openai_total_time": 0.0,
+        "gemini_input": 0,
+        "gemini_output": 0,
+        "gemini_calls": 0,
+        "gemini_total_time": 0.0,
+        "openai_input": 0,
+        "openai_output": 0,
+        "openai_calls": 0,
+        "openai_total_time": 0.0,
     }
     client = genai.Client(http_options=HttpOptions(api_version="v1"))
     openai_client = (
@@ -626,10 +705,14 @@ async def main() -> None:
     tasks = [
         asyncio.ensure_future(
             generate_qa(
-                client=client, openai_client=openai_client, semaphore=semaphore,
-                token_counter=token_counter, model=args.model,
+                client=client,
+                openai_client=openai_client,
+                semaphore=semaphore,
+                token_counter=token_counter,
+                model=args.model,
                 openai_fallback_model=args.openai_fallback_model,
-                fewshot_block=fewshot_block, work_item=item,
+                fewshot_block=fewshot_block,
+                work_item=item,
             )
         )
         for item in work_items
@@ -644,7 +727,9 @@ async def main() -> None:
                 results.append(result)
                 outf.write(json.dumps(result, ensure_ascii=False) + "\n")
                 outf.flush()
-                print(f"  [{result['source_type']:7s}] article={result['article_id']} chunk={result['chunk_index']}")
+                print(
+                    f"  [{result['source_type']:7s}] article={result['article_id']} chunk={result['chunk_index']}"
+                )
                 print(f"    Q: {result['query'][:100]}")
                 print(f"    A: {result['answer'][:80]}")
 
@@ -652,7 +737,9 @@ async def main() -> None:
     type_dist = Counter(r["source_type"] for r in results)
     model_dist = Counter(r["generator_model"] for r in results)
     gemini_in_price, gemini_out_price = MODEL_PRICING.get(args.model, (1.0, 4.0))
-    openai_in_price, openai_out_price = MODEL_PRICING.get(args.openai_fallback_model, (0.15, 0.60))
+    openai_in_price, openai_out_price = MODEL_PRICING.get(
+        args.openai_fallback_model, (0.15, 0.60)
+    )
     gemini_cost = (
         token_counter["gemini_input"] / 1e6 * gemini_in_price
         + token_counter["gemini_output"] / 1e6 * gemini_out_price
